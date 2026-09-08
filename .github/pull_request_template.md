@@ -1,16 +1,17 @@
-## 🔗 Linked Issue (Mandatory)
+## 🔗 Issue Linking (Mandatory)
 
 > [!IMPORTANT]
-> **Every Pull Request must correspond to an existing open issue in `darkaengl/fiosra` (e.g. Epic #7, #8, #9, #10).**
-> Pull Requests opened without an associated issue will be closed automatically.
+> **Every Pull Request must close a specific, scoped sub-issue and reference its parent Epic.**
+> PRs without an associated sub-issue will be closed automatically. If no sub-issue exists for the task you completed, please open one first!
 
-Closes # <!-- Specify issue number here, e.g., #7 -->
+- **Closes Sub-Issue**: Closes # <!-- Enter sub-issue number e.g. #11 -->
+- **Parent Epic / Milestone**: Part of # <!-- Enter parent Epic number e.g. #7 -->
 
 ---
 
 ## 📝 Description
 
-Briefly describe the purpose of this Pull Request, what was changed, and how it addresses the linked issue.
+Briefly describe the purpose of this Pull Request, what specific changes were made, and how it addresses the linked sub-issue.
 
 ---
 
@@ -18,14 +19,15 @@ Briefly describe the purpose of this Pull Request, what was changed, and how it 
 
 Before proceeding, please verify that you adhered to the [Contributing Guidelines](CONTRIBUTING.md):
 
-- [ ] **No Direct Push**: This PR is submitted from a feature branch on a **forked repository** (not directly pushed to upstream `darkaengl/fiosra`).
-- [ ] **Tracked Issue Alignment**: This PR directly addresses an existing, open issue in `darkaengl/fiosra` specified above.
+- [ ] **Fork-and-PR**: This PR is submitted from a feature branch on a **forked repository** (no direct pushes to upstream `darkaengl/fiosra`).
+- [ ] **Scoped Task**: This PR addresses a single, focused sub-issue (< 300 LOC) rather than a giant catch-all implementation of an entire Epic.
+- [ ] **Tracked Sub-Issue**: The sub-issue linked above is explicitly assigned/created and rolls up into an open Epic.
 
 ---
 
 ## 🏷️ Type of Change
 
-- [ ] 🚀 New feature / Epic milestone deliverable
+- [ ] 🚀 New feature / scoped component implementation
 - [ ] 🐛 Bug fix (non-breaking fix for an existing issue)
 - [ ] 🛠️ Refactoring / Code quality (no functional change)
 - [ ] 📚 Documentation update / Specification
