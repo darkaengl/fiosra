@@ -10,6 +10,20 @@
 
 ---
 
+## 🎯 Active GitHub Milestone Epics
+
+| Epic # | Milestone Track | GitHub Issue | Scope Summary |
+|:---:|:---|:---|:---|
+| **Epic 1** | Dual-Database Foundation | [#7](https://github.com/darkaengl/fiosra/issues/7) | Neo4j async client, config, PostgreSQL courses/modules schema migration |
+| **Epic 2** | Knowledge Graph & Seeds | [#8](https://github.com/darkaengl/fiosra/issues/8) | Language & History KCs, misconception seeds, pgvector embeddings, GraphService |
+| **Epic 3** | Event Store & Socratic Dialogue | [#9](https://github.com/darkaengl/fiosra/issues/9) | High-throughput event store (<2ms), Answer-isolated Socratic dialogue engine |
+| **Epic 4** | AutoSCORE Verification Pipeline | [#10](https://github.com/darkaengl/fiosra/issues/10) | DeBERTa-v3 NLI text-claim verifier, Packet Z synthesis, 1-click grade approval |
+| **Epic 5** | Assignment Designer Co-Pilot | [#11](https://github.com/darkaengl/fiosra/issues/11) | Scope De-Ambiguator co-pilot ($A_i > 30\%$), 4-rung hint ladder builder, Answer Vault |
+| **Epic 6** | Course & Module LMS Backend | [#12](https://github.com/darkaengl/fiosra/issues/12) | FastAPI course & module CRUD, syllabus grounding ingestion, cohort rosters |
+| **Epic 7** | End-to-End Verification Suite | [#13](https://github.com/darkaengl/fiosra/issues/13) | Adversarial guardrail tests, hint ceiling tests, full-loop integration test |
+
+---
+
 ## 📦 What Already Exists
 
 | File / Directory | Status | Notes |
