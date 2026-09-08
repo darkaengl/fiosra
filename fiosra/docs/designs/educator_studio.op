@@ -1,0 +1,2105 @@
+{
+  "version": "0.8.4",
+  "name": "OpenPencil CLI Session",
+  "pages": [
+    {
+      "id": "n1",
+      "name": "Page 1",
+      "children": []
+    },
+    {
+      "id": "n2",
+      "name": "AutoSCORE Review",
+      "children": [
+        {
+          "type": "frame",
+          "id": "n8",
+          "name": "Educator Studio Frame",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1440.0,
+          "height": 900.0,
+          "fill": [
+            {
+              "type": "solid",
+              "color": "#0f172a"
+            }
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "n9",
+              "name": "Top Navigation Bar",
+              "x": 0.0,
+              "y": 0.0,
+              "width": 1440.0,
+              "height": 64.0,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#0f172a"
+                }
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "n10",
+                  "name": "Logo Title",
+                  "x": 24.0,
+                  "y": 22.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "FIOSRA",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#38bdf8"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "n11",
+                  "name": "Badge Studio",
+                  "x": 104.0,
+                  "y": 20.0,
+                  "width": 130.0,
+                  "height": 24.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#1e3a8a"
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "type": "text",
+                  "id": "n12",
+                  "name": "Badge Text",
+                  "x": 114.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "EDUCATOR STUDIO",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#93c5fd"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n13",
+                  "name": "Course Breadcrumb",
+                  "x": 250.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "HIST-201 • French Revolution > Assignment 4 Submissions",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#94a3b8"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "n14",
+                  "name": "Active Tab Bar",
+                  "x": 612.0,
+                  "y": 60.0,
+                  "width": 136.0,
+                  "height": 4.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#2563eb"
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "type": "text",
+                  "id": "n15",
+                  "name": "Tab Active",
+                  "x": 620.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "AutoSCORE Review",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n16",
+                  "name": "Tab Inactive 1",
+                  "x": 770.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Assignment Designer",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#94a3b8"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n17",
+                  "name": "Tab Inactive 2",
+                  "x": 930.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Cohort Diagnostics",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#94a3b8"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n18",
+                  "name": "Tab Inactive 3",
+                  "x": 1080.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Knowledge Graph",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#94a3b8"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n19",
+                  "name": "Neo4j Pill",
+                  "x": 1240.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "🟢 Neo4j Connected",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#10b981"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n20",
+                  "name": "Teacher Profile",
+                  "x": 1366.0,
+                  "y": 24.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Dr. Vance",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "n21",
+              "name": "Submissions Sidebar",
+              "x": 0.0,
+              "y": 64.0,
+              "width": 300.0,
+              "height": 836.0,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#1e293b"
+                }
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "n22",
+                  "name": "Sidebar Title",
+                  "x": 18.0,
+                  "y": 20.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Session Submissions (24)",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "n23",
+                  "name": "Chip All BG",
+                  "x": 18.0,
+                  "y": 48.0,
+                  "width": 60.0,
+                  "height": 22.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#334155"
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "type": "text",
+                  "id": "n24",
+                  "name": "Chip All Text",
+                  "x": 26.0,
+                  "y": 52.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "All (24)",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#cbd5e1"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "n25",
+                  "name": "Chip Review BG",
+                  "x": 84.0,
+                  "y": 48.0,
+                  "width": 104.0,
+                  "height": 22.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#b45309"
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "type": "text",
+                  "id": "n26",
+                  "name": "Chip Review Text",
+                  "x": 92.0,
+                  "y": 52.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Needs Review (4)",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#fef3c7"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "n27",
+                  "name": "Chip Approved BG",
+                  "x": 194.0,
+                  "y": 48.0,
+                  "width": 90.0,
+                  "height": 22.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#064e3b"
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "type": "text",
+                  "id": "n28",
+                  "name": "Chip Approved Text",
+                  "x": 202.0,
+                  "y": 52.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Approved (18)",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#a7f3d0"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n29",
+                  "name": "Student Card 0",
+                  "x": 16.0,
+                  "y": 84.0,
+                  "width": 268.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#0f172a"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n30",
+                      "name": "Student Name",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Julian Hayes",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n31",
+                      "name": "Session ID",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Session #FR-0891 • 8m ago",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "n32",
+                      "name": "Badge BG",
+                      "x": 14.0,
+                      "y": 46.0,
+                      "width": 88.0,
+                      "height": 18.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#d97706"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n33",
+                      "name": "Badge Label",
+                      "x": 20.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Needs Review",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n34",
+                      "name": "Autonomy Stat",
+                      "x": 112.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy: 82%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#cbd5e1"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n35",
+                  "name": "Student Card 1",
+                  "x": 16.0,
+                  "y": 164.0,
+                  "width": 268.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#334155"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n36",
+                      "name": "Student Name",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Sophia Chen",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n37",
+                      "name": "Session ID",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Session #FR-0892 • 22m ago",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "n38",
+                      "name": "Badge BG",
+                      "x": 14.0,
+                      "y": 46.0,
+                      "width": 74.0,
+                      "height": 18.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n39",
+                      "name": "Badge Label",
+                      "x": 20.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Approved",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n40",
+                      "name": "Autonomy Stat",
+                      "x": 98.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy: 94%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#cbd5e1"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n41",
+                  "name": "Student Card 2",
+                  "x": 16.0,
+                  "y": 244.0,
+                  "width": 268.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#334155"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n42",
+                      "name": "Student Name",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Marcus Vance",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n43",
+                      "name": "Session ID",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Session #FR-0893 • 45m ago",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "n44",
+                      "name": "Badge BG",
+                      "x": 14.0,
+                      "y": 46.0,
+                      "width": 96.0,
+                      "height": 18.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#dc2626"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n45",
+                      "name": "Badge Label",
+                      "x": 20.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Flagged (Hint+)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n46",
+                      "name": "Autonomy Stat",
+                      "x": 120.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy: 42%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#cbd5e1"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n47",
+                  "name": "Student Card 3",
+                  "x": 16.0,
+                  "y": 324.0,
+                  "width": 268.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#334155"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n48",
+                      "name": "Student Name",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Maya Patel",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n49",
+                      "name": "Session ID",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Session #FR-0894 • 1h ago",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "n50",
+                      "name": "Badge BG",
+                      "x": 14.0,
+                      "y": 46.0,
+                      "width": 74.0,
+                      "height": 18.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n51",
+                      "name": "Badge Label",
+                      "x": 20.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Approved",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n52",
+                      "name": "Autonomy Stat",
+                      "x": 98.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy: 88%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#cbd5e1"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n53",
+                  "name": "Student Card 4",
+                  "x": 16.0,
+                  "y": 404.0,
+                  "width": 268.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#334155"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n54",
+                      "name": "Student Name",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Liam O'Connor",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n55",
+                      "name": "Session ID",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Session #FR-0895 • 1h ago",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "n56",
+                      "name": "Badge BG",
+                      "x": 14.0,
+                      "y": 46.0,
+                      "width": 88.0,
+                      "height": 18.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#d97706"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n57",
+                      "name": "Badge Label",
+                      "x": 20.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Needs Review",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n58",
+                      "name": "Autonomy Stat",
+                      "x": 112.0,
+                      "y": 49.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy: 76%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#cbd5e1"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "n59",
+              "name": "AutoSCORE Dossier Center",
+              "x": 300.0,
+              "y": 64.0,
+              "width": 780.0,
+              "height": 836.0,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#f8fafc"
+                }
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "n60",
+                  "name": "Dossier Header Title",
+                  "x": 24.0,
+                  "y": 20.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "AutoSCORE Light Dossier • Julian Hayes",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#0f172a"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n61",
+                  "name": "Dossier Subtitle",
+                  "x": 24.0,
+                  "y": 44.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Assignment: Economic & Social Causes of the French Revolution (1789) • Replay Z Generated",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#64748b"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n62",
+                  "name": "Metric Frame 0",
+                  "x": 24.0,
+                  "y": 72.0,
+                  "width": 176.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n63",
+                      "name": "Metric Title",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Autonomy Rating",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n64",
+                      "name": "Metric Value",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "82%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n65",
+                      "name": "Metric Sub",
+                      "x": 14.0,
+                      "y": 52.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Target > 75%",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n66",
+                  "name": "Metric Frame 1",
+                  "x": 212.0,
+                  "y": 72.0,
+                  "width": 176.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n67",
+                      "name": "Metric Title",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Self-Corrections",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n68",
+                      "name": "Metric Value",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "1",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#2563eb"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n69",
+                      "name": "Metric Sub",
+                      "x": 14.0,
+                      "y": 52.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Turn 4 Validated",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n70",
+                  "name": "Metric Frame 2",
+                  "x": 400.0,
+                  "y": 72.0,
+                  "width": 176.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n71",
+                      "name": "Metric Title",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Hint Dependency",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n72",
+                      "name": "Metric Value",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "0.25 (Hd)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#d97706"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n73",
+                      "name": "Metric Sub",
+                      "x": 14.0,
+                      "y": 52.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "1 Hint / 4 Steps",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n74",
+                  "name": "Metric Frame 3",
+                  "x": 588.0,
+                  "y": 72.0,
+                  "width": 176.0,
+                  "height": 72.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n75",
+                      "name": "Metric Title",
+                      "x": 14.0,
+                      "y": 10.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Dwell Time",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n76",
+                      "name": "Metric Value",
+                      "x": 14.0,
+                      "y": 28.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "14m 32s",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#475569"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n77",
+                      "name": "Metric Sub",
+                      "x": 14.0,
+                      "y": 52.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Deep Reflection",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#94a3b8"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n78",
+                  "name": "Rubric Section Title",
+                  "x": 24.0,
+                  "y": 164.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Structured Evidence Packet (Z) — Rubric Alignment & Citations",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#0f172a"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n79",
+                  "name": "Crit Frame 1",
+                  "x": 24.0,
+                  "y": 190.0,
+                  "width": 732.0,
+                  "height": 128.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "n80",
+                      "name": "Crit Badge 1",
+                      "x": 16.0,
+                      "y": 14.0,
+                      "width": 76.0,
+                      "height": 20.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n81",
+                      "name": "Crit Badge 1 Text",
+                      "x": 22.0,
+                      "y": 18.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "MET (0.94)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n82",
+                      "name": "Crit Title 1",
+                      "x": 102.0,
+                      "y": 17.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criterion A: Fiscal Crisis & War Debts (KC_HIST_FRENCH_DEBT)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n83",
+                      "name": "Crit Rule 1",
+                      "x": 16.0,
+                      "y": 40.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Rubric Rule: Must identify Crown bankruptcy resulting from Seven Years' War and American Revolution funding.",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n84",
+                      "name": "Citation Quote Frame 1",
+                      "x": 16.0,
+                      "y": 62.0,
+                      "width": 700.0,
+                      "height": 52.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ecfdf5"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n85",
+                          "name": "Quote Text 1",
+                          "x": 14.0,
+                          "y": 10.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "\"The French Revolution erupted because the Crown was bankrupt after funding the American War of Independence...\"",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#065f46"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "n86",
+                          "name": "Quote Source 1",
+                          "x": 14.0,
+                          "y": 30.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "Source: Student Draft Revision (Turn 4 • 10:19:42) • NLI Entailment Verified",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#059669"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n87",
+                  "name": "Crit Frame 2",
+                  "x": 24.0,
+                  "y": 330.0,
+                  "width": 732.0,
+                  "height": 128.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "n88",
+                      "name": "Crit Badge 2",
+                      "x": 16.0,
+                      "y": 14.0,
+                      "width": 76.0,
+                      "height": 20.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n89",
+                      "name": "Crit Badge 2 Text",
+                      "x": 22.0,
+                      "y": 18.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "MET (0.96)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n90",
+                      "name": "Crit Title 2",
+                      "x": 102.0,
+                      "y": 17.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criterion B: Social Inequality of Three Estates (KC_HIST_THREE_ESTATES)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n91",
+                      "name": "Crit Rule 2",
+                      "x": 16.0,
+                      "y": 40.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Rubric Rule: Must cite tax exemptions of 1st/2nd Estates and disproportionate taille/tithe burdens on the Third Estate.",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n92",
+                      "name": "Citation Quote Frame 2",
+                      "x": 16.0,
+                      "y": 62.0,
+                      "width": 700.0,
+                      "height": 52.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ecfdf5"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n93",
+                          "name": "Quote Text 2",
+                          "x": 14.0,
+                          "y": 10.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "\"Under the Ancien Régime, the 1st and 2nd Estates paid no taxes, leaving the Third Estate (97% of people) to shoulder the taille...\"",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#065f46"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "n94",
+                          "name": "Quote Source 2",
+                          "x": 14.0,
+                          "y": 30.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "Source: Student Draft Revision (Turn 4 • 10:19:42) • Self-Correction from Informal Grievance",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#059669"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n95",
+                  "name": "Crit Frame 3",
+                  "x": 24.0,
+                  "y": 470.0,
+                  "width": 732.0,
+                  "height": 128.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "n96",
+                      "name": "Crit Badge 3",
+                      "x": 16.0,
+                      "y": 14.0,
+                      "width": 96.0,
+                      "height": 20.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#d97706"
+                        }
+                      ],
+                      "children": []
+                    },
+                    {
+                      "type": "text",
+                      "id": "n97",
+                      "name": "Crit Badge 3 Text",
+                      "x": 22.0,
+                      "y": 18.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "PARTIAL (0.88)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#ffffff"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n98",
+                      "name": "Crit Title 3",
+                      "x": 122.0,
+                      "y": 17.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criterion C: Enlightenment & Philosophical Challenge (KC_HIST_ENLIGHTENMENT)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n99",
+                      "name": "Crit Rule 3",
+                      "x": 16.0,
+                      "y": 40.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Rubric Rule: Connect philosophies (Rousseau / Social Contract) to challenging divine right monarchy.",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n100",
+                      "name": "Citation Quote Frame 3",
+                      "x": 16.0,
+                      "y": 62.0,
+                      "width": 700.0,
+                      "height": 52.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#fffbeb"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n101",
+                          "name": "Quote Text 3",
+                          "x": 14.0,
+                          "y": 10.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "\"Philosophers like Rousseau inspired people to want freedom from kings.\"",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#92400e"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "n102",
+                          "name": "Quote Source 3",
+                          "x": 14.0,
+                          "y": 30.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "Gap Analysis: Mentions Rousseau, but does not articulate Social Contract theory or institutional challenge.",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#b45309"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "n103",
+              "name": "Action and Replay Panel",
+              "x": 1080.0,
+              "y": 64.0,
+              "width": 360.0,
+              "height": 836.0,
+              "fill": [
+                {
+                  "type": "solid",
+                  "color": "#ffffff"
+                }
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "n104",
+                  "name": "Assessment Box",
+                  "x": 18.0,
+                  "y": 20.0,
+                  "width": 324.0,
+                  "height": 200.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n105",
+                      "name": "Assessment Title",
+                      "x": 16.0,
+                      "y": 14.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Teacher Sovereign Action",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n106",
+                      "name": "Suggested Grade",
+                      "x": 16.0,
+                      "y": 38.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Suggested Score: 85% (Grade B)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#2563eb"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n107",
+                      "name": "Suggested Reason 1",
+                      "x": 16.0,
+                      "y": 62.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criteria A & B Met with autonomous revision.",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n108",
+                      "name": "Suggested Reason 2",
+                      "x": 16.0,
+                      "y": 76.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criterion C is partially met (freedom mentioned).",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n109",
+                      "name": "Approve Button Frame",
+                      "x": 16.0,
+                      "y": 100.0,
+                      "width": 292.0,
+                      "height": 40.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n110",
+                          "name": "Approve Button Text",
+                          "x": 52.0,
+                          "y": 12.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "✓ 1-Click Approve Grade (85%)",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#ffffff"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n111",
+                      "name": "Override Button Frame",
+                      "x": 16.0,
+                      "y": 148.0,
+                      "width": 292.0,
+                      "height": 36.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#e2e8f0"
+                        }
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n112",
+                          "name": "Override Button Text",
+                          "x": 74.0,
+                          "y": 10.0,
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "content": "Adjust Grade / Override",
+                          "fill": [
+                            {
+                              "type": "solid",
+                              "color": "#334155"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "n113",
+                  "name": "Replay Section Title",
+                  "x": 18.0,
+                  "y": 242.0,
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "content": "Cognitive Trajectory Replay (Flight Recorder)",
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#0f172a"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n114",
+                  "name": "Event Item 0",
+                  "x": 18.0,
+                  "y": 276.0,
+                  "width": 324.0,
+                  "height": 44.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "n115",
+                      "name": "Dot",
+                      "x": 12.0,
+                      "y": 16.0,
+                      "width": 10.0,
+                      "height": 10.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n116",
+                      "name": "Time and Title",
+                      "x": 30.0,
+                      "y": 8.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "10:14:02 • Attempt 1 Submitted",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n117",
+                      "name": "Description",
+                      "x": 30.0,
+                      "y": 24.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Informal moral grievance text",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n118",
+                  "name": "Event Item 1",
+                  "x": 18.0,
+                  "y": 328.0,
+                  "width": 324.0,
+                  "height": 44.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "n119",
+                      "name": "Dot",
+                      "x": 12.0,
+                      "y": 16.0,
+                      "width": 10.0,
+                      "height": 10.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#dc2626"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n120",
+                      "name": "Time and Title",
+                      "x": 30.0,
+                      "y": 8.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "10:14:05 • Integrity NLI Check",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n121",
+                      "name": "Description",
+                      "x": 30.0,
+                      "y": 24.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Criteria A/B Partial, C Missing",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n122",
+                  "name": "Event Item 2",
+                  "x": 18.0,
+                  "y": 380.0,
+                  "width": 324.0,
+                  "height": 44.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "n123",
+                      "name": "Dot",
+                      "x": 12.0,
+                      "y": 16.0,
+                      "width": 10.0,
+                      "height": 10.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#2563eb"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n124",
+                      "name": "Time and Title",
+                      "x": 30.0,
+                      "y": 8.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "10:14:08 • Dialogue Agent Nudge",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n125",
+                      "name": "Description",
+                      "x": 30.0,
+                      "y": 24.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Level 1 Conceptual (Social Hierarchy)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n126",
+                  "name": "Event Item 3",
+                  "x": 18.0,
+                  "y": 432.0,
+                  "width": 324.0,
+                  "height": 44.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "n127",
+                      "name": "Dot",
+                      "x": 12.0,
+                      "y": 16.0,
+                      "width": 10.0,
+                      "height": 10.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#059669"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n128",
+                      "name": "Time and Title",
+                      "x": 30.0,
+                      "y": 8.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "10:19:42 • Attempt 2 (Self-Correction)",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n129",
+                      "name": "Description",
+                      "x": 30.0,
+                      "y": 24.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Formal Ancien Régime terms added",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "n130",
+                  "name": "Event Item 4",
+                  "x": 18.0,
+                  "y": 484.0,
+                  "width": 324.0,
+                  "height": 44.0,
+                  "fill": [
+                    {
+                      "type": "solid",
+                      "color": "#f8fafc"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "n131",
+                      "name": "Dot",
+                      "x": 12.0,
+                      "y": 16.0,
+                      "width": 10.0,
+                      "height": 10.0,
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#7c3aed"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n132",
+                      "name": "Time and Title",
+                      "x": 30.0,
+                      "y": 8.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "10:19:45 • AutoSCORE Light Z Ready",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#0f172a"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "n133",
+                      "name": "Description",
+                      "x": 30.0,
+                      "y": 24.0,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "content": "Packet Z synthesized in 28ms",
+                      "fill": [
+                        {
+                          "type": "solid",
+                          "color": "#64748b"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "n4",
+      "name": "Assignment Designer",
+      "children": [
+        {
+          "type": "frame",
+          "id": "n5",
+          "name": "Frame",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1200.0,
+          "height": 800.0,
+          "fill": [
+            {
+              "type": "solid",
+              "color": "#FFFFFF"
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n6",
+      "name": "Cohort Diagnostics",
+      "children": [
+        {
+          "type": "frame",
+          "id": "n7",
+          "name": "Frame",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1200.0,
+          "height": 800.0,
+          "fill": [
+            {
+              "type": "solid",
+              "color": "#FFFFFF"
+            }
+          ],
+          "children": []
+        }
+      ]
+    }
+  ],
+  "children": [],
+  "editorMeta": {
+    "activePageIndex": 1,
+    "preserveAuthoredGeometry": false
+  }
+}
