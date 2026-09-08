@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvidencePacket",
+  "description": "Structured Evidence Packet (Z) — the intermediate checkpoint between raw interaction traces and tutor evaluation. Adapted from AutoSCORE's Structured Component Representation.",
+  "type": "object",
+  "required": ["student_id", "assignment_id", "submission_timestamp", "per_question_evidence", "aggregate_metrics"],
+  "properties": {
+    "student_id": {
+      "type": "string",
+      "description": "Anonymized student identifier"
+    },
+    "assignment_id": {
+      "type": "string",
+      "description": "Reference to the assignment specification"
+    },
+    "submission_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the student completed (or last worked on) the assignment"
+    },
+    "per_question_evidence": {
+      "type": "array",
+      "description": "Evidence breakdown for each question in the assignment",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "knowledge_components", "final_answer_correct", "process_trace", "rubric_evidence"],
+        "properties": {
+          "question_id": {
+            "type": "string"
+          },
+          "knowledge_components": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "KCs targeted by this question"
+          },
+          "final_answer": {
+            "type": ["string", "null"],
+            "description": "The student's final submitted answer"
+          },
+          "final_answer_correct": {
+            "type": "boolean",
+            "description": "Whether the final answer is correct"
+          },
+          "process_trace": {
+            "type": "object",
+            "description": "Quantitative summary of the student's journey through this question",
+            "properties": {
+              "total_attempts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hints_consumed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_hint_level_reached": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4,
+                "description": "Highest hint level the student needed (0=none, 4=answer revealed)"
+              },
+              "time_spent_seconds": {
+                "type": "number",
+                "minimum": 0
+              },
+              "answer_seeking_attempts": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of times the student tried to get the agent to reveal the answer"
+              },
+              "misconceptions_triggered": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Misconception IDs encountered during this question"
+              },
+              "misconceptions_resolved": {
+                "type": "boolean",
+                "description": "Whether all triggered misconceptions were resolved by the end"
+              },
+              "self_corrections": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of times the student corrected an error without a hint"
+              }
+            }
+          },
+          "reasoning_snapshots": {
+            "type": "array",
+            "description": "Chronological snapshots of each significant student attempt",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attempt": { "type": "integer" },
+                "student_input": { "type": "string" },
+                "diagnosis": { "type": "string" },
+                "misconception": { "type": ["string", "null"] },
+                "hint_given": { "type": ["string", "null"] },
+                "hint_level": { "type": "integer" }
+              }
+            }
+          },
+          "affective_trajectory": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["positive", "neutral", "frustrated", "confused", "bored", "anxious", "confident"]
+            },
+            "description": "Sequence of detected affective states across attempts"
+          },
+          "rubric_evidence": {
+            "type": "object",
+            "description": "Per-criterion evidence aligned to the GSR rubric",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "met": {
+                  "type": ["boolean", "string"],
+                  "description": "Whether the criterion was met (true/false/'partial')"
+                },
+                "evidence": {
+                  "type": "string",
+                  "description": "Specific evidence supporting this assessment"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Agent's confidence in this criterion assessment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "aggregate_metrics": {
+      "type": "object",
+      "description": "Assignment-level summary metrics",
+      "properties": {
+        "overall_mastery_delta": {
+          "type": "string",
+          "description": "Human-readable summary of mastery change across the assignment"
+        },
+        "total_misconceptions_encountered": { "type": "integer" },
+        "total_misconceptions_resolved": { "type": "integer" },
+        "hint_dependency_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Proportion of correct answers that required hints"
+        },
+        "independent_success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Proportion of questions answered correctly on first attempt without hints"
+        },
+        "average_time_per_question_seconds": { "type": "number" },
+        "engagement_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Composite metric from time-on-task, interaction depth, and affective signals"
+        }
+      }
+    },
+    "pre_score": {
+      "type": "object",
+      "description": "Agent-suggested score (for tutor review, not final)",
+      "properties": {
+        "suggested_grade": {
+          "type": "string",
+          "description": "Suggested grade (e.g., 'B+', '85/100', '3/4')"
+        },
+        "justification": {
+          "type": "string",
+          "description": "Rubric-aligned justification for the suggested grade"
+        },
+        "areas_for_follow_up": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Knowledge areas the tutor should prioritize for this student"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeComponentNode",
+  "description": "Schema for nodes in the Curriculum Knowledge Graph. Embedded in hyperbolic space (Poincaré ball) per L-HAKT architecture.",
+  "type": "object",
+  "required": ["kc_id", "label", "domain", "bloom_level"],
+  "properties": {
+    "kc_id": {
+      "type": "string",
+      "description": "Unique knowledge component identifier (e.g., KC1a2)"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable name (e.g., 'Systems of Linear Equations')"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Subject domain (e.g., 'algebra')"
+    },
+    "bloom_level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6,
+      "description": "Bloom's taxonomy level: 1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create"
+    },
+    "prerequisite_edges": {
+      "type": "array",
+      "description": "Directed edges to prerequisite KCs (must be mastered before this KC)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_kc_id": {
+            "type": "string",
+            "description": "The prerequisite KC"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Strength of dependency (1.0 = hard prerequisite, <1.0 = soft/recommended)"
+          },
+          "observed_transition_probability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Empirically observed probability of mastering this KC given mastery of the prerequisite (updated by KTA)"
+          }
+        }
+      }
+    },
+    "estimated_difficulty": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Estimated difficulty (0.0=trivial, 1.0=extremely difficult). Initialized by LLM parsing, refined by student data."
+    },
+    "common_misconceptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Misconception IDs commonly associated with this KC"
+    },
+    "syllabus_references": {
+      "type": "array",
+      "description": "References to RAG Store documents covering this KC",
+      "items": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string" },
+          "title": { "type": "string" },
+          "chunk_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Specific chunk IDs in the RAG store"
+          }
+        }
+      }
+    },
+    "hyperbolic_embedding": {
+      "type": "object",
+      "description": "Poincaré ball coordinates for this KC (populated by the embedding layer)",
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "32-dimensional Poincaré ball coordinates"
+        },
+        "curvature": {
+          "type": "number",
+          "description": "Local curvature parameter optimized per subtree"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "grade_level": {
+          "type": "string",
+          "description": "Target grade/year level (e.g., 'Grade 8', 'Undergraduate Year 1')"
+        },
+        "curriculum_standard": {
+          "type": "string",
+          "description": "Alignment to curriculum standard (e.g., 'CCSS.MATH.CONTENT.8.EE.C.8')"
+        },
+        "created_by": {
+          "type": "string",
+          "enum": ["llm_parsed", "tutor_authored", "hybrid"],
+          "description": "How this KC was initially created"
+        },
+        "last_validated": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,212 @@
+[
+  {
+    "misconception_id": "MISC_LANG_001",
+    "domain": "language",
+    "knowledge_component": "KC_LANG_ARGUMENT_IDENTIFICATION",
+    "related_knowledge_components": ["KC_LANG_READING_COMPREHENSION"],
+    "label": "Conflating author's argument with factual truth",
+    "description": "Student treats the author's stated position or interpretation as an objective fact, failing to recognise that it is a constructed argument requiring evidence and potentially contestable by other perspectives.",
+    "common_trigger": "Analytical reading tasks where students are asked to evaluate an author's argument",
+    "example_student_error": "Shakespeare says women were not educated in the period, so they weren't.",
+    "example_correct_response": "Shakespeare's portrayal implies women had limited education, though this reflects his perspective and the social norms of his context rather than serving as a verified historical record.",
+    "flawed_rule": "What an author states is the same as what is objectively true.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Is the author making a claim, or reporting a verified fact? How might another reader challenge this?"},
+      {"level": 1, "hint_text": "An argument is a position that must be supported with evidence. A fact can be independently verified. Which is this?"},
+      {"level": 2, "hint_text": "Consider the author's purpose and context. Who wrote this, and what might have shaped their perspective?"},
+      {"level": 3, "hint_text": "For example: A historian arguing that the Roman Empire fell due to economic pressures is making an interpretive claim — other historians may attribute the fall to military overreach instead."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 88,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_LANG_002",
+    "domain": "language",
+    "knowledge_component": "KC_LANG_EVIDENCE_EVALUATION",
+    "related_knowledge_components": ["KC_LANG_ARGUMENT_IDENTIFICATION"],
+    "label": "Treating an anecdote as representative evidence",
+    "description": "Student uses a single personal story, example, or isolated case as if it proves a broader claim, without recognising that anecdotes are not generalisable evidence.",
+    "common_trigger": "Essay or source evaluation tasks requiring evidence-based claims",
+    "example_student_error": "My grandfather worked three jobs and became successful, so anyone can succeed if they work hard enough.",
+    "example_correct_response": "While individual stories of success exist, systemic studies of socioeconomic mobility suggest that broader structural factors also significantly influence outcomes.",
+    "flawed_rule": "One example proves that something is always or generally true.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Could there be other examples that show the opposite? What would that mean for your claim?"},
+      {"level": 1, "hint_text": "A single example is an anecdote. Strong evidence typically comes from patterns across many cases, data, or multiple sources."},
+      {"level": 2, "hint_text": "Ask: Is this one case typical, or is it an exception? What broader evidence supports the general claim you are making?"},
+      {"level": 3, "hint_text": "For example: One student scoring 100% does not prove the exam was easy for everyone. You would need to look at the distribution of results across the whole cohort."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 82,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_LANG_003",
+    "domain": "language",
+    "knowledge_component": "KC_LANG_CLAIM_CONSTRUCTION",
+    "related_knowledge_components": ["KC_LANG_EVIDENCE_EVALUATION", "KC_LANG_ARGUMENT_IDENTIFICATION"],
+    "label": "Conflating opinion and evidence-backed claim",
+    "description": "Student presents a personal opinion or preference as a reasoned, evidence-backed claim, without providing the supporting reasoning or textual evidence that distinguishes argument from assertion.",
+    "common_trigger": "Persuasive writing or analytical essay tasks",
+    "example_student_error": "I think this poem is about loneliness because it feels sad.",
+    "example_correct_response": "The poem conveys a sense of isolation through the speaker's repeated use of the first-person singular and the absence of dialogue or direct address, suggesting an inward withdrawal from others.",
+    "flawed_rule": "Stating what I feel or think is the same as making an argument.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What evidence from the text supports what you have said? Can you point to a specific word, phrase, or structural choice?"},
+      {"level": 1, "hint_text": "A claim is strengthened when it is backed by specific evidence and reasoning. 'I think' or 'I feel' signals opinion. What can you point to in the text?"},
+      {"level": 2, "hint_text": "Select a quotation or specific detail. Explain what it shows, and then connect it back to your central claim."},
+      {"level": 3, "hint_text": "For example: Instead of saying 'I think the character is afraid', try: The character's short, fragmented sentences mirror the rhythm of panic, conveying her fear without explicit statement."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 91,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_LANG_004",
+    "domain": "language",
+    "knowledge_component": "KC_LANG_EVIDENCE_EVALUATION",
+    "related_knowledge_components": ["KC_LANG_ARGUMENT_IDENTIFICATION"],
+    "label": "Paraphrasing a source without evaluating its reliability",
+    "description": "Student reproduces or paraphrases source content as supporting evidence without considering the provenance, bias, purpose, or limitations of the source itself.",
+    "common_trigger": "Research essays, source-based analysis tasks",
+    "example_student_error": "According to this website, climate change is not real, so it probably isn't.",
+    "example_correct_response": "While this source questions the scientific consensus on climate change, it is important to evaluate its provenance: the author has no stated scientific credentials and the site has no peer-review process, which limits its reliability compared to peer-reviewed research.",
+    "flawed_rule": "If a source says something, it must be credible enough to use as evidence without question.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Who created this source, and why? What might their purpose be in saying this?"},
+      {"level": 1, "hint_text": "Reliability depends on provenance (who wrote it), purpose (why it was written), and corroboration (do other credible sources agree?)."},
+      {"level": 2, "hint_text": "Check: Is the author an expert in this field? Is the source peer-reviewed or published by a recognised institution? Does other evidence support this claim?"},
+      {"level": 3, "hint_text": "For example: A pamphlet published by a political campaign supporting immigration restrictions is a primary source revealing the campaign's position, but it would not be a neutral or reliable guide to immigration statistics."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 79,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_LANG_005",
+    "domain": "language",
+    "knowledge_component": "KC_LANG_STRUCTURED_ESSAY",
+    "related_knowledge_components": ["KC_LANG_CLAIM_CONSTRUCTION", "KC_LANG_EVIDENCE_EVALUATION"],
+    "label": "Listing evidence without connecting it to the claim (evidence dump)",
+    "description": "Student provides multiple quotations or examples in sequence without explaining how each piece of evidence supports the argument, resulting in a list of facts rather than a structured analytical response.",
+    "common_trigger": "Extended analytical writing, essay questions requiring PEE/PEEL structure",
+    "example_student_error": "The poem uses the word 'dark'. There is also repetition. The tone is negative. The structure is irregular.",
+    "example_correct_response": "The poet's use of darkness as a recurring motif, combined with the deliberately fragmented stanza structure, reinforces the speaker's psychological disorientation — each visual image mirrors an internal state of confusion rather than external observation.",
+    "flawed_rule": "Identifying and listing features is the same as analysing them.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What does each example you have listed actually show or prove? Try adding 'this suggests that...' or 'this demonstrates...' after each point."},
+      {"level": 1, "hint_text": "Analysis means explaining the effect or significance of a feature, not just naming it. Ask: so what? Why does this matter to the argument?"},
+      {"level": 2, "hint_text": "For each piece of evidence, follow this structure: Point (your claim) → Evidence (the quotation or detail) → Explanation (what it shows and why it matters)."},
+      {"level": 3, "hint_text": "For example: Feature identified: 'The word dark appears three times.' Analysis: 'The repetition of dark functions as a motif that accumulates weight across the poem, transforming a simple adjective into a symbol of the speaker's unresolvable grief.'"}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 85,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_001",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_CAUSE_AND_EFFECT",
+    "related_knowledge_components": ["KC_HIST_TIMELINE_SEQUENCING"],
+    "label": "Attributing a complex historical event to a single cause",
+    "description": "Student identifies one factor as the complete explanation for a significant historical event, failing to recognise the interplay of multiple contributing causes across political, social, economic, and individual dimensions.",
+    "common_trigger": "Causation questions on major historical events (wars, revolutions, economic crises)",
+    "example_student_error": "World War One started because Archduke Franz Ferdinand was assassinated.",
+    "example_correct_response": "The assassination of Archduke Franz Ferdinand was the immediate trigger of World War One, but the underlying causes included decades of imperial rivalry, the entanglement of alliance systems, an arms race, and rising nationalist movements across Europe.",
+    "flawed_rule": "The event that immediately preceded the outcome must be its primary and complete cause.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Can you think of any other factors that might have made this event possible or likely, even before the one you have identified?"},
+      {"level": 1, "hint_text": "Historians distinguish between long-term causes (underlying conditions built over years) and short-term triggers (the immediate event). What long-term conditions existed?"},
+      {"level": 2, "hint_text": "Consider four categories: political, economic, social, and military. Which factors from each category contributed to the outcome?"},
+      {"level": 3, "hint_text": "For example: The Great Fire of London (1666) was triggered by a fire in a bakery, but the real causes included the densely packed timber buildings, dry summer conditions, inadequate firefighting capacity, and the lack of building regulations."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 93,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_002",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_PERSPECTIVE_AND_BIAS",
+    "related_knowledge_components": ["KC_HIST_PRIMARY_SOURCE_ANALYSIS"],
+    "label": "Applying present-day values to judge past actors (anachronism)",
+    "description": "Student evaluates the actions, beliefs, or decisions of historical figures using contemporary moral, social, or legal standards, without contextualising those figures within the norms, knowledge, and constraints of their own time.",
+    "common_trigger": "Evaluation of historical figures, moral judgement questions",
+    "example_student_error": "Christopher Columbus was terrible because he was racist and a colonialist.",
+    "example_correct_response": "Columbus's voyages resulted in devastating consequences for Indigenous populations. While these outcomes are judged harshly from a contemporary ethical standpoint, historical analysis requires understanding the European imperial frameworks and economic incentives that shaped his actions within the context of late 15th-century Iberian expansion.",
+    "flawed_rule": "Historical figures should be judged by the same standards we use today.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What was considered normal, legal, or even praiseworthy at the time this person lived? How might their contemporaries have viewed their actions?"},
+      {"level": 1, "hint_text": "Anachronism means placing something out of its correct historical time. A historical analysis asks: what did this person know, and what norms shaped their decisions in their own context?"},
+      {"level": 2, "hint_text": "Distinguish between two things: (1) explaining why a historical figure acted as they did in their context, and (2) evaluating the consequences of those actions from multiple perspectives, including today's."},
+      {"level": 3, "hint_text": "For example: Judging a medieval surgeon for not washing their hands before surgery applies a 19th-century discovery (germ theory) to a 12th-century practitioner who had no access to that knowledge."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 87,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_003",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_PRIMARY_SOURCE_ANALYSIS",
+    "related_knowledge_components": ["KC_HIST_PERSPECTIVE_AND_BIAS", "KC_HIST_TIMELINE_SEQUENCING"],
+    "label": "Accepting a primary source as objective fact without considering author bias",
+    "description": "Student uses a primary source (diary, speech, image, official record) as neutral evidence of what happened, without interrogating the author's position, purpose, intended audience, or the context in which the source was produced.",
+    "common_trigger": "Source analysis tasks, document-based questions",
+    "example_student_error": "The king's proclamation proves that the people were happy and prosperous under his rule.",
+    "example_correct_response": "The king's proclamation describes his people as content and prosperous; however, as an official royal document intended to project authority and legitimacy, it likely presents an idealised image rather than an accurate account of lived conditions. This source would need to be corroborated with evidence from other perspectives.",
+    "flawed_rule": "Primary sources are direct windows onto the past — they tell us what actually happened.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Who created this source, when, and for what audience? What might they have wanted to achieve by producing it?"},
+      {"level": 1, "hint_text": "All primary sources reflect the perspective of their creator. Even eyewitness accounts are shaped by what the observer chose to notice, their beliefs, and their purpose in recording the event."},
+      {"level": 2, "hint_text": "Apply PAPP: Provenance (who created it?), Audience (who was it for?), Purpose (why was it created?), and Perspective (what viewpoint does it reflect?)."},
+      {"level": 3, "hint_text": "For example: A wartime government poster saying 'Our soldiers are winning and morale is high' tells us what the government wanted citizens to believe — it does not tell us whether soldiers' morale was actually high."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 90,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_004",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_CAUSE_AND_EFFECT",
+    "related_knowledge_components": ["KC_HIST_TIMELINE_SEQUENCING"],
+    "label": "Treating sequence as causation (post hoc reasoning)",
+    "description": "Student assumes that because one event occurred before another, it must have caused the second event, without establishing a mechanism of causation or considering coincidence and correlation.",
+    "common_trigger": "Causation analysis, 'why did X happen' questions",
+    "example_student_error": "After women got the vote in 1920, crime rates rose — so women voting caused more crime.",
+    "example_correct_response": "The correlation between women's suffrage and rising crime rates in the 1920s is coincidental. Historians attribute the crime increase to Prohibition (1920–1933), not to the enfranchisement of women. Causation requires an established mechanism, not just chronological proximity.",
+    "flawed_rule": "If A happened before B, then A caused B.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Just because two things happened around the same time does not mean one caused the other. Can you find another factor that might explain both?"},
+      {"level": 1, "hint_text": "Causation requires a mechanism — a logical explanation of how and why one event led to the other. What is the actual connection between these events?"},
+      {"level": 2, "hint_text": "Ask: Is there direct evidence that X influenced Y? Were there other major events happening at the same time that might be the real cause?"},
+      {"level": 3, "hint_text": "For example: Ice cream sales and drowning rates both rise in summer. But ice cream does not cause drowning — both are caused by a third factor: hot weather, which increases both swimming and ice cream consumption."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 84,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_005",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_HISTORICAL_ARGUMENT",
+    "related_knowledge_components": ["KC_HIST_PRIMARY_SOURCE_ANALYSIS", "KC_HIST_PERSPECTIVE_AND_BIAS"],
+    "label": "Confusing a historical claim with a moral judgement",
+    "description": "Student makes evaluative moral judgements about historical events or actors and presents these as historical analysis, conflating the historian's role of explanation and interpretation with the role of moral verdict.",
+    "common_trigger": "Extended historical writing, 'to what extent was X responsible' questions",
+    "example_student_error": "The British Empire was evil because it enslaved millions of people.",
+    "example_correct_response": "The transatlantic slave trade, a central feature of British imperial expansion, caused the forced displacement and enslavement of millions of Africans, with devastating and long-lasting consequences. Historians analyse the economic systems, ideological frameworks, and political structures that made this possible, while also tracing the varied forms of resistance that emerged in response.",
+    "flawed_rule": "Saying something was wrong or evil is the same as historically explaining why it happened and what its consequences were.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Historical analysis explains causes, consequences, and significance. Moral judgements evaluate right and wrong. Which is your statement doing?"},
+      {"level": 1, "hint_text": "You can acknowledge that something had terrible consequences while still asking: how did it happen? What systems and beliefs made it possible? What were its effects over time?"},
+      {"level": 2, "hint_text": "Rewrite your statement to focus on: what happened, why it happened (causes), and what the consequences were — rather than a verdict of 'good' or 'evil'."},
+      {"level": 3, "hint_text": "For example: Instead of 'The Holocaust was evil', a historical analysis might read: 'The Holocaust resulted from a convergence of Nazi ideology, state apparatus, collaboration, and a broader failure of international institutions to intervene — with the systematic murder of six million Jews and millions of others."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 78,
+    "source": "literature"
+  }
+]

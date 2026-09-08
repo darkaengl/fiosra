@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiosra MVP — Comprehensive Engineering Architecture & Build Blueprint</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-light: #eff6ff;
+      --accent: #059669;
+      --accent-light: #ecfdf5;
+      --warning: #d97706;
+      --warning-light: #fffbeb;
+      --danger: #dc2626;
+      --danger-light: #fef2f2;
+      --purple: #7c3aed;
+      --purple-light: #f5f3ff;
+      --slate-900: #0f172a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --slate-50: #f8fafc;
+      --border: #cbd5e1;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--slate-800);
+      background-color: var(--slate-50);
+      line-height: 1.65;
+      font-size: 14.5px;
+    }
+
+    /* Layout */
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 320px;
+      background: #0f172a;
+      color: #94a3b8;
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      overflow-y: auto;
+      padding: 24px 18px;
+      border-right: 1px solid #1e293b;
+      z-index: 100;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .sidebar-brand h1 {
+      font-size: 19px;
+      color: #ffffff;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-brand span {
+      background: #2563eb;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-group-title {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin: 18px 0 6px 6px;
+    }
+
+    .sidebar nav a {
+      display: block;
+      color: #94a3b8;
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      margin-bottom: 2px;
+      line-height: 1.4;
+    }
+
+    .sidebar nav a:hover {
+      color: #ffffff;
+      background: #1e293b;
+    }
+
+    .sidebar nav a.active {
+      color: #ffffff;
+      background: #2563eb;
+    }
+
+    /* Main Content */
+    .main-content {
+      margin-left: 320px;
+      flex: 1;
+      padding: 36px 54px 80px 54px;
+      max-width: 1240px;
+    }
+
+    /* Hero Banner */
+    .hero-banner {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #1e3a8a 100%);
+      color: white;
+      padding: 36px 40px;
+      border-radius: 14px;
+      margin-bottom: 36px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
+    }
+
+    .hero-banner h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+
+    .hero-banner p.lead {
+      font-size: 16px;
+      color: #cbd5e1;
+      max-width: 900px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .meta-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .badge-primary { background: #1e40af; color: #bfdbfe; }
+    .badge-success { background: #065f46; color: #a7f3d0; }
+    .badge-dark { background: #334155; color: #f1f5f9; }
+    .badge-purple { background: #5b21b6; color: #ddd6fe; }
+    .badge-amber { background: #92400e; color: #fde68a; }
+
+    /* Sections */
+    section {
+      margin-bottom: 54px;
+      scroll-margin-top: 30px;
+    }
+
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--slate-900);
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--slate-900);
+      margin: 24px 0 10px 0;
+    }
+
+    h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--slate-700);
+      margin: 16px 0 6px 0;
+    }
+
+    p, ul, ol {
+      margin-bottom: 14px;
+      color: var(--slate-700);
+    }
+
+    ul, ol {
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 5px;
+    }
+
+    /* Cards */
+    .card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--slate-200);
+    }
+
+    .card-title {
+      font-size: 16.5px;
+      font-weight: 700;
+      color: var(--slate-900);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Grids */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    /* Callouts */
+    .callout {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-bottom: 18px;
+      border-left: 4px solid;
+      font-size: 14px;
+    }
+
+    .callout-info {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: #1e40af;
+    }
+
+    .callout-success {
+      background: var(--accent-light);
+      border-color: var(--accent);
+      color: #065f46;
+    }
+
+    .callout-warning {
+      background: var(--warning-light);
+      border-color: var(--warning);
+      color: #92400e;
+    }
+
+    .callout-danger {
+      background: var(--danger-light);
+      border-color: var(--danger);
+      color: #991b1b;
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 3px;
+      font-weight: 700;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 13.5px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--slate-200);
+    }
+
+    th {
+      background: var(--slate-100);
+      font-weight: 600;
+      color: var(--slate-700);
+      text-transform: uppercase;
+      font-size: 11.5px;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--slate-50);
+    }
+
+    /* Code Blocks */
+    pre, code {
+      font-family: var(--font-mono);
+    }
+
+    p code, li code, td code {
+      background: #e2e8f0;
+      color: #0f172a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12.5px;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12.5px;
+      line-height: 1.5;
+      margin-bottom: 18px;
+      border: 1px solid #1e293b;
+    }
+
+    .code-header {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 6px 14px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      border: 1px solid #1e293b;
+      border-bottom: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-header + pre {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    /* Diagram Canvas */
+    .diagram-container {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+      overflow-x: auto;
+    }
+
+    .diagram-svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 26px;
+      margin: 18px 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: var(--slate-200);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 22px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -26px;
+      top: 4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid var(--primary);
+    }
+
+    .timeline-dot.success { border-color: var(--accent); }
+    .timeline-dot.warning { border-color: var(--warning); }
+    .timeline-dot.danger { border-color: var(--danger); }
+
+    .timeline-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--slate-900);
+      margin-bottom: 3px;
+    }
+
+    .timeline-body {
+      font-size: 13.5px;
+      color: var(--slate-600);
+    }
+
+    /* Chat Bubbles */
+    .chat-bubble {
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 13.5px;
+      max-width: 90%;
+    }
+
+    .chat-student {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      margin-right: auto;
+    }
+
+    .chat-bot {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      margin-left: auto;
+    }
+
+    .chat-internal {
+      background: #fef3c7;
+      border: 1px solid #fde68a;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #78350f;
+      margin: 6px 0 6px auto;
+      max-width: 90%;
+    }
+
+    .step-box {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .step-number {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    /* Print Styles */
+    @media print {
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; padding: 15px; max-width: 100%; }
+      .hero-banner { background: #0f172a !important; color: white !important; }
+      section { page-break-inside: avoid; }
+      pre { white-space: pre-wrap; font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Fiosra</h1>
+      <span>Engineering Guide</span>
+    </div>
+
+    <nav>
+      <div class="nav-group-title">1. System Architecture</div>
+      <a href="#overview">Overview & Principles</a>
+      <a href="#system-map">System Interaction Map</a>
+      <a href="#build-order">Complete Build Sequence</a>
+
+      <div class="nav-group-title">2. How to Build Each Component</div>
+      <a href="#build-assignment-designer">Component 1: Assignment Designer (RAG + Traps)</a>
+      <a href="#build-policy-engine">Component 2: Policy Engine (Vault + Verifiers)</a>
+      <a href="#build-socratic-tutor">Component 3: Socratic Tutor (Prompt + Hints)</a>
+      <a href="#build-knowledge-layer">Component 4: Knowledge Layer (DAG + pgvector)</a>
+      <a href="#build-event-store">Component 5: JSON Event Store (Log + Sessions)</a>
+      <a href="#build-evidence-dossier">Component 6: Evidence Dossier (AutoSCORE Light)</a>
+
+      <div class="nav-group-title">3. End-to-End Walkthroughs</div>
+      <a href="#walkthrough-math">Walkthrough A: Linear Algebra (STEM)</a>
+      <a href="#walkthrough-humanities">Walkthrough B: French Revolution (Essay)</a>
+
+      <div class="nav-group-title">4. Integration & Testing</div>
+      <a href="#database-ddl">Complete PostgreSQL DDL</a>
+      <a href="#fastapi-app">FastAPI App & Router Mounts</a>
+      <a href="#unit-testing">PyTest Test Suite</a>
+
+      <div class="nav-group-title">5. References</div>
+      <a href="#scientific-references">Scientific Papers & Tech Specs</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    
+    <!-- Hero Banner -->
+    <header class="hero-banner">
+      <h1>Fiosra MVP Architecture & Component Build Guide</h1>
+      <p class="lead">
+        A definitive implementation manual for engineers. Explains how each of the 6 components functions internally, 
+        how they interconnect via typed schemas and database tables, and provides full runnable Python and SQL code to build the complete MVP backend.
+      </p>
+      <div class="meta-badges">
+        <span class="badge badge-primary">Version: 1.0.0-MVP</span>
+        <span class="badge badge-success">Multi-Domain: Math (SymPy) + Humanities (NLI)</span>
+        <span class="badge badge-purple">Data: PostgreSQL 16 + pgvector</span>
+        <span class="badge badge-dark">Framework: FastAPI + AsyncPG + SQLAlchemy</span>
+        <span class="badge badge-amber">Evaluation: AutoSCORE Light (AAAI 2026)</span>
+      </div>
+    </header>
+
+    <!-- SECTION 1: OVERVIEW & PRINCIPLES -->
+    <section id="overview">
+      <h2>1. Overview & Architectural Constraints</h2>
+      <p>
+        Fiosra is a reasoning infrastructure layer for education. Unlike traditional quiz apps that record only final letter grades, 
+        Fiosra monitors the entire cognitive trajectory of problem-solving.
+      </p>
+
+      <div class="grid-2">
+        <div class="callout callout-danger">
+          <strong>Non-Negotiable Rule 1: Strict Answer Isolation</strong>
+          The student-facing model (Component 3) <em>never</em> receives the reference solution in its generation context. 
+          Only Component 2 (Policy Engine) accesses answers in isolation. This eliminates prompt injection attacks where students attempt to extract solutions.
+        </div>
+        <div class="callout callout-info">
+          <strong>Non-Negotiable Rule 2: Deterministic Verification Outranks LLMs</strong>
+          Verifiable calculation engines (SymPy Computer Algebra System for math, sandboxed AST runners for code, and NLI semantic entailment for essays) 
+          always decide correctness—never an LLM's conversational judgment.
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: SYSTEM MAP -->
+    <section id="system-map">
+      <h2>2. System Architecture & Component Interaction Map</h2>
+      <p>
+        The system consists of 6 decoupled components running on FastAPI and a unified PostgreSQL 16 database:
+      </p>
+
+      <div class="diagram-container">
+        <svg class="diagram-svg" viewBox="0 0 940 460" xmlns="http://www.w3.org/2000/svg">
+          <rect width="940" height="460" fill="#f8fafc" rx="8" />
+
+          <!-- Top UI Layer -->
+          <rect x="20" y="20" width="900" height="60" rx="8" fill="#e2e8f0" stroke="#94a3b8" stroke-dasharray="4" />
+          <text x="35" y="42" font-weight="700" font-size="11" fill="#475569">USER INTERFACES (NEXT.JS)</text>
+          <rect x="120" y="38" width="300" height="32" rx="6" fill="#1e293b" />
+          <text x="270" y="58" text-anchor="middle" font-weight="600" font-size="12" fill="#ffffff">Educator Studio (Author & Review)</text>
+          <rect x="520" y="38" width="300" height="32" rx="6" fill="#2563eb" />
+          <text x="670" y="58" text-anchor="middle" font-weight="600" font-size="12" fill="#ffffff">Student Reasoning Canvas (Socratic)</text>
+
+          <!-- Core Services Layer -->
+          <!-- 1. Designer -->
+          <g transform="translate(30, 110)">
+            <rect width="180" height="90" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="2" />
+            <text x="90" y="28" text-anchor="middle" font-weight="700" font-size="12" fill="#1e3a8a">1. Assignment Designer</text>
+            <text x="90" y="48" text-anchor="middle" font-size="10.5" fill="#64748b">Prerequisite Grounding</text>
+            <text x="90" y="64" text-anchor="middle" font-size="10.5" fill="#64748b">Misconception Trapping</text>
+          </g>
+
+          <!-- 2. Policy Engine -->
+          <g transform="translate(250, 110)">
+            <rect width="210" height="90" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2" />
+            <text x="105" y="26" text-anchor="middle" font-weight="700" font-size="12" fill="#991b1b">2. Policy Engine & Vault</text>
+            <text x="105" y="44" text-anchor="middle" font-weight="600" font-size="10.5" fill="#b91c1c">🔒 Isolated Answer Vault</text>
+            <text x="105" y="60" text-anchor="middle" font-size="10" fill="#64748b">SymPy Math / NLI Verifiers</text>
+            <text x="105" y="76" text-anchor="middle" font-size="10" fill="#64748b">Hint Ceiling Algorithm</text>
+          </g>
+
+          <!-- 3. Socratic Tutor -->
+          <g transform="translate(500, 110)">
+            <rect width="180" height="90" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2" />
+            <text x="90" y="28" text-anchor="middle" font-weight="700" font-size="12" fill="#1e40af">3. Socratic Tutorbot</text>
+            <text x="90" y="48" text-anchor="middle" font-size="10.5" fill="#64748b">Answer-Blind Prompts</text>
+            <text x="90" y="64" text-anchor="middle" font-size="10.5" fill="#64748b">4-Rung Hint Ladder</text>
+            <text x="90" y="78" text-anchor="middle" font-size="10" fill="#059669">CLASS Thoughts of Tutorbot</text>
+          </g>
+
+          <!-- 6. Evidence Dossier -->
+          <g transform="translate(720, 110)">
+            <rect width="190" height="90" rx="8" fill="#ffffff" stroke="#059669" stroke-width="2" />
+            <text x="95" y="28" text-anchor="middle" font-weight="700" font-size="12" fill="#065f46">6. Evidence Dossier</text>
+            <text x="95" y="48" text-anchor="middle" font-size="10.5" fill="#64748b">AutoSCORE Light Engine</text>
+            <text x="95" y="64" text-anchor="middle" font-size="10.5" fill="#64748b">Replay → Packet Z</text>
+            <text x="95" y="78" text-anchor="middle" font-size="10" fill="#64748b">1-Click Teacher Review</text>
+          </g>
+
+          <!-- Middle Layer -->
+          <!-- 4. Knowledge Layer -->
+          <g transform="translate(130, 240)">
+            <rect width="320" height="80" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="2" />
+            <text x="160" y="28" text-anchor="middle" font-weight="700" font-size="12" fill="#5b21b6">4. Curriculum Knowledge Layer</text>
+            <text x="160" y="48" text-anchor="middle" font-size="10.5" fill="#64748b">NetworkX Prerequisite DAG (In-Memory O(1))</text>
+            <text x="160" y="64" text-anchor="middle" font-size="10.5" fill="#64748b">pgvector Misconception Taxonomy Store</text>
+          </g>
+
+          <!-- 5. Event Store -->
+          <g transform="translate(490, 240)">
+            <rect width="320" height="80" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="2" />
+            <text x="160" y="28" text-anchor="middle" font-weight="700" font-size="12" fill="#92400e">5. JSON Event Store & Sessions</text>
+            <text x="160" y="48" text-anchor="middle" font-size="10.5" fill="#64748b">Append-Only Flight Recorder</text>
+            <text x="160" y="64" text-anchor="middle" font-size="10.5" fill="#64748b">PostgreSQL jsonb + GIN Indexing</text>
+          </g>
+
+          <!-- Database -->
+          <g transform="translate(130, 360)">
+            <rect width="680" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="2" />
+            <text x="340" y="32" text-anchor="middle" font-weight="700" font-size="13" fill="#ffffff">PostgreSQL 16 Unified Database</text>
+            <text x="340" y="48" text-anchor="middle" font-size="10.5" fill="#94a3b8">knowledge_components | misconceptions (vector) | session_events (jsonb) | student_sessions</text>
+          </g>
+
+          <!-- Connectors -->
+          <line x1="670" y1="70" x2="670" y2="90" stroke="#2563eb" stroke-width="2" />
+          <line x1="670" y1="90" x2="355" y2="90" stroke="#2563eb" stroke-width="2" />
+          <line x1="355" y1="90" x2="355" y2="110" stroke="#2563eb" stroke-width="2" />
+
+          <line x1="460" y1="155" x2="500" y2="155" stroke="#dc2626" stroke-width="2" />
+          <line x1="590" y1="110" x2="590" y2="70" stroke="#3b82f6" stroke-width="2" />
+
+          <line x1="355" y1="200" x2="355" y2="220" stroke="#94a3b8" stroke-width="1.5" />
+          <line x1="355" y1="220" x2="650" y2="220" stroke="#94a3b8" stroke-width="1.5" />
+          <line x1="650" y1="220" x2="650" y2="240" stroke="#94a3b8" stroke-width="1.5" />
+
+          <line x1="810" y1="240" x2="810" y2="200" stroke="#059669" stroke-width="2" />
+          <line x1="815" y1="110" x2="815" y2="90" stroke="#059669" stroke-width="2" />
+          <line x1="815" y1="90" x2="270" y2="90" stroke="#059669" stroke-width="2" />
+          <line x1="270" y1="90" x2="270" y2="70" stroke="#059669" stroke-width="2" />
+        </svg>
+      </div>
+
+      <h3>Component Executive Summary & Architectural Justification</h3>
+      <p>
+        Each of the 6 components solves a distinct, mission-critical bottleneck in the learning and evaluation lifecycle. 
+        Below is how each component operates at a high level and why its presence is strictly required:
+      </p>
+
+      <div class="grid-2">
+        <!-- Comp 1 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">1. Assignment Designer & Syllabus RAG</span>
+            <span class="badge badge-primary">Authoring Co-pilot</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Ingests teacher curriculum topics, queries the Knowledge Layer to verify prerequisite readiness, seeds multiple-choice/scaffolding distractors with cataloged misconception traps, and pre-authors 4-rung hint ladders and subproblem scaffolding trees.</p>
+          <p><strong>Why it's needed (Justification):</strong> Human teachers lack the hours required to author 20 bespoke, misconception-aware problems every week. Off-the-shelf LLMs produce generic questions with superficial distractors that provide zero diagnostic signal. Seeding questions with known misconception traps turns every student error into an actionable diagnostic insight.</p>
+          <div class="callout callout-info" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> Fragile question generation with random wrong answers that offer no diagnostic insight into student thinking.
+          </div>
+        </div>
+
+        <!-- Comp 2 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">2. Policy Engine & Answer Vault</span>
+            <span class="badge badge-danger">Ground-Truth Guardian</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Acts as the isolated custodian of reference solutions ("The Answer Vault"). When a student submits a step, the Policy Engine routes it to deterministic verifiers (SymPy for math, sandboxed runners for code, AutoSCORE NLI for essays) and computes allowable hint ceilings strictly from session metadata.</p>
+          <p><strong>Why it's needed (Justification):</strong> LLMs suffer from severe hallucinations when verifying symbolic math or complex code and easily succumb to student prompt injection ("Just tell me the answer"). The Policy Engine decouples verification from conversation, ensuring objective mathematical and textual truth always outranks LLM probabilities.</p>
+          <div class="callout callout-danger" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> LLM grading hallucinations, incorrect mathematical feedback, and answer leakage via prompt injection.
+          </div>
+        </div>
+
+        <!-- Comp 3 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">3. Socratic Tutorbot (SIA)</span>
+            <span class="badge badge-primary">Guided Inquiry Guide</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Operates completely "answer-blind"—it receives the student's submission, the verifier verdict, and allowable hint ceiling, but never the final answer. It executes the CLASS "Thoughts of Tutorbot" diagnostic reflection before dispensing Socratic questions or graduated hints (Levels 0 to 3).</p>
+          <p><strong>Why it's needed (Justification):</strong> Replicating Bloom's 2-sigma tutoring effect requires active guided inquiry rather than passive answer delivery. Without strict negative guardrails, AI chatbots short-circuit student learning by writing solutions for them when pressed, destroying the learning process.</p>
+          <div class="callout callout-warning" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> Cognitive offloading where students outsource thinking, calculation, or writing to the AI.
+          </div>
+        </div>
+
+        <!-- Comp 4 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">4. Knowledge Layer & Misconceptions</span>
+            <span class="badge badge-purple">Cognitive Map & Taxonomy</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Stores learning concepts as a Directed Acyclic Graph (DAG) in PostgreSQL and loads it into an in-memory NetworkX DiGraph on server boot for instant O(1) ancestor queries. Uses pgvector to perform cosine similarity matching between erroneous student steps and cataloged misconceptions.</p>
+          <p><strong>Why it's needed (Justification):</strong> Curricula are hierarchical dependency trees. Without a prerequisite graph, AI tools teach concepts out of order. Without a vector misconception taxonomy, systems cannot diagnose <em>why</em> a student failed, only that their final number was wrong.</p>
+          <div class="callout callout-info" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> Out-of-order teaching and inability to diagnose root-cause conceptual misunderstandings.
+          </div>
+        </div>
+
+        <!-- Comp 5 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">5. JSON Event Store & Session Manager</span>
+            <span class="badge badge-amber">Append-Only Flight Recorder</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Logs every micro-interaction (keystroke updates, attempts, SymPy checks, Socratic nudges, dwell times, and self-corrections) as an immutable, timestamped row with a PostgreSQL jsonb payload indexed with GIN.</p>
+          <p><strong>Why it's needed (Justification):</strong> Traditional LMS platforms only store static final submissions, erasing the entire learning struggle. Fiosra's Event Store captures the authentic chronological reasoning process, creating an auditable, student-owned portfolio that powers downstream evidence synthesis.</p>
+          <div class="callout callout-success" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> Ephemeral learning data loss and complete lack of visibility into student reasoning trajectories.
+          </div>
+        </div>
+
+        <!-- Comp 6 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">6. Evidence Dossier Engine</span>
+            <span class="badge badge-success">AutoSCORE Light Synthesizer</span>
+          </div>
+          <p><strong>How it works (High-Level):</strong> Replays raw session events from Component 5 to construct the Structured Evidence Packet ($Z$) using the AutoSCORE framework (AAAI 2026). Extracts 5 core metrics (autonomy rating, self-corrections, hint ratio, dwell time) and generates a 1-page teacher review dossier with clickable evidence quotes.</p>
+          <p><strong>Why it's needed (Justification):</strong> Educators do not have time to read hundreds of student chat logs. The Dossier Engine turns noisy interaction streams into a concise, auditable executive summary with pre-checked rubric citations, reducing grading time from hours to minutes while keeping the human tutor in total control.</p>
+          <div class="callout callout-info" style="margin-bottom: 0; padding: 8px 12px; font-size: 12px;">
+            <strong>Failure Prevented:</strong> Educator grading overload and arbitrary "black-box" AI grading without cited evidence.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: BUILD ORDER -->
+    <section id="build-order">
+      <h2>3. Recommended Step-by-Step Build Order & Implementation Roadmap</h2>
+      <p>
+        Building a multi-agent, multi-domain system with strict guardrails requires an explicit dependency-ordered construction sequence. 
+        To eliminate circular dependencies and ensure that every service has its required foundation in place, the engineering team should 
+        follow this <strong>8-phase implementation roadmap</strong>:
+      </p>
+
+      <!-- Step 1 -->
+      <div class="card" style="border-left: 4px solid var(--slate-900);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">1</span> Phase 1: Database Foundation & Schema Migrations</span>
+          <span class="badge badge-dark">Data Layer Foundation</span>
+        </div>
+        <p><strong>Rationale:</strong> Every service in Fiosra either reads from or writes to the persistent data layer. The database tables, GIN indexes, and vector extensions must be established before writing any application code.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/migrations/001_initial_schema.sql</code>, 
+            <code>fiosra/mvp/database.py</code> (Async engine & session maker), 
+            <code>fiosra/mvp/config.py</code> (Pydantic Settings).
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Enable PostgreSQL extensions: <code>CREATE EXTENSION IF NOT EXISTS vector;</code> and <code>"uuid-ossp";</code>.</li>
+              <li>Execute DDL creating <code>knowledge_components</code>, <code>kc_prerequisites</code>, <code>misconceptions</code> (VECTOR 1536), <code>student_sessions</code>, and <code>session_events</code> (JSONB).</li>
+              <li>Apply GIN index on <code>session_events (payload)</code> and chronological index on <code>(session_id, created_at ASC)</code>.</li>
+              <li>Seed foundational algebra and geometry misconceptions from <code>fiosra/knowledge/seeds/misconceptions_algebra_geometry.seed.json</code>.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Connect to PostgreSQL via <code>psql</code>, run <code>\dt</code> and <code>\d session_events</code>, and confirm all 5 tables and the GIN index exist. Verify vector cosine operator: <code>SELECT '[1,2]'::vector &lt;=&gt; '[1,3]'::vector;</code> succeeds.</li>
+        </ul>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="card" style="border-left: 4px solid var(--purple);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">2</span> Phase 2: Curriculum Knowledge Layer (NetworkX DAG + pgvector)</span>
+          <span class="badge badge-purple">Component 4</span>
+        </div>
+        <p><strong>Rationale:</strong> The Assignment Designer requires prerequisite graphs to draft questions, and the Policy Engine requires the misconception taxonomy to diagnose student errors. Component 4 must be operational first.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/knowledge_layer/models.py</code>, 
+            <code>fiosra/mvp/knowledge_layer/graph_service.py</code>, 
+            <code>fiosra/mvp/knowledge_layer/vector_service.py</code>, 
+            <code>fiosra/mvp/knowledge_layer/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Implement <code>CurriculumGraphService</code> using Python's <code>networkx.DiGraph</code>.</li>
+              <li>Add boot hook to query <code>kc_prerequisites</code> and build the in-memory graph; assert <code>nx.is_directed_acyclic_graph(dag)</code> to guarantee zero circular dependencies.</li>
+              <li>Implement <code>get_all_prerequisites(kc_id)</code> via <code>nx.ancestors</code> for sub-millisecond lookups.</li>
+              <li>Implement <code>get_unlocked_concepts(mastered_kcs)</code> to compute next-step learning frontiers.</li>
+              <li>Implement <code>find_matching_misconception()</code> querying PostgreSQL via <code>pgvector</code> cosine distance with confidence threshold > 0.82.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Run pytest on <code>test_networkx_dag_prerequisites</code>. Send request to <code>GET /knowledge/prerequisites/KC_SYSTEMS</code>; verify ancestors return in &lt; 1ms.</li>
+        </ul>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="card" style="border-left: 4px solid var(--warning);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">3</span> Phase 3: JSON Event Store & Session Management</span>
+          <span class="badge badge-amber">Component 5</span>
+        </div>
+        <p><strong>Rationale:</strong> All downstream student interactions (evaluation, hints, self-corrections) emit events. The append-only ingestion pipeline must be active before deploying interactive logic.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/event_store/models.py</code>, 
+            <code>fiosra/mvp/event_store/event_service.py</code>, 
+            <code>fiosra/mvp/event_store/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Build session lifecycle handlers: <code>POST /events/session/start</code> (generates <code>session_id</code> UUID).</li>
+              <li>Build high-throughput append-only logger: <code>POST /events/log</code> inserting raw JSONB payloads in &lt; 2ms.</li>
+              <li>Implement chronological query service: <code>GET /events/session/{session_id}/timeline</code> ordered by <code>created_at ASC</code> for replay.</li>
+              <li>Implement session completion transition and dwell-time aggregator.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Ingest 50 mock events using <code>asyncpg</code>. Query <code>GET /events/session/{id}/timeline</code>; confirm chronological ordering and verify GIN index performance on deep JSON key lookups.</li>
+        </ul>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="card" style="border-left: 4px solid var(--danger);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">4</span> Phase 4: Policy Engine & Pluggable Verifiers (The Answer Vault)</span>
+          <span class="badge badge-danger">Component 2</span>
+        </div>
+        <p><strong>Rationale:</strong> Enforces ground truth and answer isolation. It holds reference answers away from student-facing prompts and deterministically checks correctness before any conversational response occurs.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/policy_engine/answer_vault.py</code>, 
+            <code>fiosra/mvp/policy_engine/verifiers.py</code>, 
+            <code>fiosra/mvp/policy_engine/hint_ceiling.py</code>, 
+            <code>fiosra/mvp/policy_engine/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Create secured in-memory Answer Vault repository keyed by <code>question_id</code> with zero external read routes.</li>
+              <li>Implement SymPy CAS equivalence verifier: <code>simplify(student_expr - target_expr) == 0</code> with syntax-error handling.</li>
+              <li>Implement AutoSCORE NLI semantic claim verifier (testing premise vs. hypothesis entailment for humanities/essays).</li>
+              <li>Implement non-manipulable <code>compute_hint_ceiling()</code>: strictly inspecting attempt counts and prior mastery, locking Level 4 by default.</li>
+              <li>Wire endpoint <code>POST /policy/verify</code> to dispatch to verifiers, query Component 4 for misconception matching, and log <code>attempt_evaluated</code> to Component 5.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Run <code>test_sympy_math_equivalence</code>: verify that <code>8*x - 12 == 4*(2*x - 3)</code> returns True, <code>8*x - 3</code> returns False with misconception tag, and attempt counts correctly increment hint ceilings from Level 0 to Level 3.</li>
+        </ul>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="card" style="border-left: 4px solid var(--primary);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">5</span> Phase 5: Socratic Interaction Agent (Tutorbot)</span>
+          <span class="badge badge-primary">Component 3</span>
+        </div>
+        <p><strong>Rationale:</strong> The student-facing conversational interface. Guided by strict negative constraints, it receives the verifier verdict from Component 2 and provides calibrated inquiry without leaking answers.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/socratic_tutor/prompts.py</code>, 
+            <code>fiosra/mvp/socratic_tutor/agent.py</code>, 
+            <code>fiosra/mvp/socratic_tutor/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Author system prompt with non-negotiable negative constraints (never supply solutions, never do calculations, refuse answer demands).</li>
+              <li>Format prompt input with: Question Prompt, Current Subproblem Step, Verifier Verdict (from Component 2), and Allowed Max Hint Level.</li>
+              <li>Compel structured JSON output adhering to CLASS framework: extracting <code>thoughts_of_tutorbot</code> and <code>response_text</code>.</li>
+              <li>Handle hint ladder navigation (Level 0 Metacognitive $\to$ Level 1 Conceptual $\to$ Level 2 Procedural $\to$ Level 3 Analogy).</li>
+              <li>Emit <code>hint_delivered</code> event to Component 5 upon every dialogue turn.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Run simulated adversarial prompt: student sends <em>"Just tell me the answer, I give up!"</em>. Verify bot refuses warmly and redirects to a Level 0/1 prompt with 0% answer leakage.</li>
+        </ul>
+      </div>
+
+      <!-- Step 6 -->
+      <div class="card" style="border-left: 4px solid var(--primary);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">6</span> Phase 6: Assignment Designer & Syllabus RAG</span>
+          <span class="badge badge-primary">Component 1</span>
+        </div>
+        <p><strong>Rationale:</strong> Connects educator intent to the Knowledge Layer and Answer Vault, generating structured problem sets seeded with diagnostic traps.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/assignment_designer/schemas.py</code>, 
+            <code>fiosra/mvp/assignment_designer/generator.py</code>, 
+            <code>fiosra/mvp/assignment_designer/distractor_engine.py</code>, 
+            <code>fiosra/mvp/assignment_designer/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Build <code>POST /assignment-designer/draft</code> endpoint accepting topic, domain, grade level, and Bloom's taxonomy depth.</li>
+              <li>Query Component 4 to retrieve prerequisite KCs and top 3 common domain misconceptions.</li>
+              <li>Prompt LLM with structured output schema generating: Question Prompt, Subproblems, Misconception-Seeded Distractors, and 4-Rung Hint Ladders.</li>
+              <li>Automatically register the generated reference solutions into Component 2's Answer Vault.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Post a draft request for topic <em>"Linear Systems"</em>; verify output satisfies <code>QuestionSpec</code> schema, contains 4-rung ladders with Level 4 locked, and successfully registers solutions in the Answer Vault.</li>
+        </ul>
+      </div>
+
+      <!-- Step 7 -->
+      <div class="card" style="border-left: 4px solid var(--accent);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">7</span> Phase 7: Evidence & Scoring Dossier Engine (AutoSCORE Light)</span>
+          <span class="badge badge-success">Component 6</span>
+        </div>
+        <p><strong>Rationale:</strong> Synthesizes raw chronological flight-recorder events into an executive 1-page review dossier for educators with cited student evidence quotes.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/evidence_dossier/extractor.py</code>, 
+            <code>fiosra/mvp/evidence_dossier/scoring.py</code>, 
+            <code>fiosra/mvp/evidence_dossier/router.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Implement AutoSCORE Stage 1 ($f_{\text{extract}}$): Replay session events from Component 5 in chronological order.</li>
+              <li>Calculate the 5 core reasoning indicators: Autonomy score, self-corrections count, hint dependency ratio $H_d$, active dwell times, and misconception remediation status.</li>
+              <li>Assemble Structured Evidence Packet ($Z$) with verbatim student quote citations.</li>
+              <li>Implement AutoSCORE Stage 2 ($f_{\text{score}}$): Pre-score Packet $Z$ against rubric criteria without LLM grading hallucinations.</li>
+              <li>Build educator review endpoint: <code>GET /dossier/{session_id}</code> and grade finalization endpoint <code>POST /dossier/finalize-grade</code>.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Replay event stream from Walkthrough A; verify that Packet $Z$ outputs <code>self_corrections: 1</code>, <code>autonomy_score: 95%</code>, and correctly pre-checks rubric criteria with cited attempt quotes.</li>
+        </ul>
+      </div>
+
+      <!-- Step 8 -->
+      <div class="card" style="border-left: 4px solid var(--primary-dark);">
+        <div class="card-header">
+          <span class="card-title"><span class="step-number">8</span> Phase 8: Central Assembly & Integration Verification</span>
+          <span class="badge badge-primary">System Integration</span>
+        </div>
+        <p><strong>Rationale:</strong> Glues all 6 independent services into a unified, production-ready FastAPI application with CORS middleware, health probes, and comprehensive integration testing.</p>
+        <ul>
+          <li><strong>Deliverables / Files to Create:</strong>
+            <code>fiosra/mvp/app.py</code>, 
+            <code>fiosra/tests/test_mvp_core.py</code>, 
+            <code>fiosra/tests/test_e2e_flow.py</code>.
+          </li>
+          <li><strong>Engineering Tasks:</strong>
+            <ol>
+              <li>Mount all 6 component routers into the central FastAPI app with clear URL prefixes.</li>
+              <li>Configure asynchronous lifespan context manager to load the NetworkX DAG on boot.</li>
+              <li>Implement <code>GET /health</code> endpoint verifying database connectivity and graph node counts.</li>
+              <li>Execute the full PyTest suite testing end-to-end question drafting, student submission, verification, Socratic dialogue, and dossier synthesis.</li>
+            </ol>
+          </li>
+          <li><strong>Acceptance Gate:</strong> Run <code>pytest fiosra/tests/ -v</code>; verify 100% test pass rate. Launch <code>uvicorn fiosra.mvp.app:app --port 8000</code> and verify OpenAPI docs render cleanly at <code>http://localhost:8000/docs</code>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- COMPONENT 1 BUILD GUIDE -->
+    <section id="build-assignment-designer">
+      <h2>Component 1: Assignment Designer & Syllabus RAG</h2>
+      <div class="card-header">
+        <span class="card-title">Role: Curriculum RAG & Misconception Traps</span>
+        <span class="badge badge-primary">fiosra/mvp/assignment_designer/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li>Endpoint receives <code>topic</code>, <code>domain</code>, <code>grade_level</code>, <code>blooms_level</code>.</li>
+        <li>Queries Component 4 (Knowledge Layer) for prerequisite KCs and top 3 common misconceptions.</li>
+        <li>Calls LLM with JSON schema output producing: Questions, Subproblems, Misconception-Seeded Distractors, and 4-Rung Hint Ladders.</li>
+        <li>Stores reference solutions into Component 2's Answer Vault.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/assignment_designer/schemas.py</span><span>Pydantic Models</span></div>
+      <pre><code>from pydantic import BaseModel, Field
+from typing import List, Optional
+
+class HintRung(BaseModel):
+    level: int = Field(ge=0, le=4)
+    hint_type: str  # "metacognitive", "conceptual", "procedural", "worked_analogy", "bottom_out"
+    content: str
+    is_locked: bool = False
+
+class ScaffoldingStep(BaseModel):
+    step_id: str
+    step_prompt: str
+    target_kc: str
+
+class QuestionSpec(BaseModel):
+    question_id: str
+    prompt: str
+    domain: str
+    target_kcs: List[str]
+    subproblems: List[ScaffoldingStep]
+    hint_ladder: List[HintRung]
+    reference_solution: dict
+    rubric_criteria: List[dict]</code></pre>
+    </section>
+
+    <!-- COMPONENT 2 BUILD GUIDE -->
+    <section id="build-policy-engine">
+      <h2>Component 2: Pedagogical Policy Engine & Pluggable Verifiers</h2>
+      <div class="card-header">
+        <span class="card-title">Role: Answer Vault, Verifiers & Hint Ceilings</span>
+        <span class="badge badge-danger">fiosra/mvp/policy_engine/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li><strong>The Answer Vault:</strong> An internal dictionary or secured table storing reference solutions keyed by <code>question_id</code>. Never exposed to Component 3.</li>
+        <li><strong>Math Verifier (SymPy):</strong> Implements <code>simplify(student_expr - target_expr) == 0</code> to test algebraic equivalence.</li>
+        <li><strong>Humanities Verifier (NLI):</strong> Evaluates whether student paragraph text entails required rubric claims.</li>
+        <li><strong>Hint Ceiling Function:</strong> Implements the non-manipulable ceiling logic based strictly on session metadata.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/policy_engine/verifiers.py</span><span>SymPy CAS & NLI Verifiers</span></div>
+      <pre><code>import sympy as sp
+from typing import Dict, Any
+
+class PluggableVerifier:
+    @staticmethod
+    def verify_math_equivalence(student_expr_str: str, target_expr_str: str) -> Dict[str, Any]:
+        """
+        Deterministic CAS check: student_expr - target_expr == 0
+        """
+        try:
+            student_expr = sp.sympify(student_expr_str)
+            target_expr = sp.sympify(target_expr_str)
+            difference = sp.simplify(student_expr - target_expr)
+            if difference == 0:
+                return {"is_correct": True, "verdict": "exact_or_equivalent", "error": None}
+            return {"is_correct": False, "verdict": "algebraic_mismatch", "error": None}
+        except Exception as e:
+            return {"is_correct": False, "verdict": "syntax_error", "error": str(e)}
+
+    @staticmethod
+    def verify_humanities_claim(student_text: str, required_hypothesis: str) -> Dict[str, Any]:
+        """
+        AutoSCORE semantic claim verification via NLI (Premise => Hypothesis).
+        Returns classification: MET, PARTIALLY_MET, or MISSING with extracted citation.
+        """
+        # Production: calls local fast DeBERTa-v3 NLI or structured LLM claim checker
+        # Mock logic demonstrating classification:
+        has_terms = any(word in student_text.lower() for word in required_hypothesis.lower().split() if len(word) > 5)
+        if has_terms:
+            return {"status": "MET", "confidence": 0.92, "evidence_quote": student_text[:120]}
+        return {"status": "MISSING", "confidence": 0.88, "evidence_quote": None}</code></pre>
+
+      <div class="code-header"><span>fiosra/mvp/policy_engine/hint_ceiling.py</span><span>Anti-Manipulation Ceiling Algorithm</span></div>
+      <pre><code>def compute_hint_ceiling(attempt_count: int, prior_mastery: float, teacher_override: bool = False) -> int:
+    """
+    Computes allowable hint rung (0 to 3). Level 4 is locked unless overridden.
+    Never inspects student text, preventing prompt engineering attacks.
+    """
+    if teacher_override:
+        return 4
+    if attempt_count <= 1:
+        base = 0  # Metacognitive prompt
+    elif attempt_count == 2:
+        base = 1  # Conceptual definition
+    elif attempt_count == 3:
+        base = 2  # Procedural guidance
+    else:
+        base = 3  # Parallel worked analogy
+        
+    if prior_mastery < 0.3 and base < 2:
+        base += 1  # Struggling students get earlier scaffolding
+    return min(base, 3)</code></pre>
+    </section>
+
+    <!-- COMPONENT 3 BUILD GUIDE -->
+    <section id="build-socratic-tutor">
+      <h2>Component 3: Socratic Interaction Agent (Tutorbot)</h2>
+      <div class="card-header">
+        <span class="card-title">Role: Answer-Blind Conversational Guide</span>
+        <span class="badge badge-primary">fiosra/mvp/socratic_tutor/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li>Inject strict negative constraints into the system prompt: <em>NEVER provide the answer value, completed equation, or thesis</em>.</li>
+        <li>Format prompt input with: Question Prompt, Current Scaffolding Step, Verifier Verdict (from Component 2), and Allowed Max Hint Level.</li>
+        <li>Enforce CLASS structured output: require the LLM to output a JSON object containing <code>thoughts_of_tutorbot</code> and <code>response_text</code>.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/socratic_tutor/prompts.py</span><span>System Prompt Definition</span></div>
+      <pre><code>SOCRATIC_SYSTEM_PROMPT = """
+You are Fiosra's Socratic Learning Guide.
+Your mission is to help students build genuine understanding through guided inquiry.
+
+ABSOLUTE NON-NEGOTIABLE RULES:
+1. You DO NOT have access to the final answer. NEVER reveal, calculate, or guess the final answer.
+2. NEVER write the complete sentence, calculation, or thesis for the student.
+3. If the student explicitly demands the answer ("tell me the answer", "give up"), refuse warmly and deconstruct into a smaller micro-step.
+4. You are constrained by MAX_HINT_LEVEL:
+   - Level 0: Metacognitive prompts only ("What is the first step?", "Check your signs").
+   - Level 1: State the concept or definition without applying it.
+   - Level 2: Suggest the procedural next step without solving it.
+   - Level 3: Give a parallel worked example with DIFFERENT numbers or context.
+   - NEVER exceed MAX_HINT_LEVEL.
+
+RESPONSE SCHEMA (JSON ONLY):
+{
+  "thoughts_of_tutorbot": "Concise internal analysis of the student error and your pedagogical plan",
+  "response_text": "The Socratic prompt shown to the student"
+}
+"""</code></pre>
+    </section>
+
+    <!-- COMPONENT 4 BUILD GUIDE -->
+    <section id="build-knowledge-layer">
+      <h2>Component 4: Curriculum Knowledge Layer & Misconception Store</h2>
+      <div class="card-header">
+        <span class="card-title">Role: Structural Cognitive Map & Error Taxonomy</span>
+        <span class="badge badge-purple">fiosra/mvp/knowledge_layer/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li>Create SQLAlchemy models for <code>KnowledgeComponent</code>, <code>KCPrerequisite</code>, and <code>Misconception</code>.</li>
+        <li>Build <code>CurriculumGraphService</code> using Python's <code>networkx</code>. On FastAPI startup, query all prerequisite rows and populate an in-memory <code>nx.DiGraph</code>.</li>
+        <li>Implement <code>get_all_prerequisites(kc_id)</code> using <code>nx.ancestors</code> and <code>get_unlocked_concepts(mastered_kcs)</code>.</li>
+        <li>Implement <code>find_matching_misconception()</code> querying PostgreSQL pgvector with cosine distance.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/knowledge_layer/graph_service.py</span><span>Python 3</span></div>
+      <pre><code>import networkx as nx
+from typing import Set, List, Tuple
+
+class CurriculumGraphService:
+    def __init__(self):
+        self.dag = nx.DiGraph()
+
+    def build_from_records(self, edges: List[Tuple[str, str]]):
+        """
+        Loads prerequisite edges: (prerequisite_id, target_kc_id)
+        """
+        self.dag.clear()
+        self.dag.add_edges_from(edges)
+        if not nx.is_directed_acyclic_graph(self.dag):
+            raise ValueError("Curriculum graph contains circular dependencies!")
+
+    def get_all_prerequisites(self, kc_id: str) -> Set[str]:
+        """
+        O(1) in-memory retrieval of all upstream ancestor skills.
+        """
+        if kc_id not in self.dag:
+            return set()
+        return nx.ancestors(self.dag, kc_id)
+
+    def get_unlocked_concepts(self, mastered_kcs: Set[str]) -> Set[str]:
+        """
+        Identifies all downstream concepts where ALL prerequisites are satisfied.
+        """
+        unlocked = set()
+        for node in self.dag.nodes:
+            prereqs = set(self.dag.predecessors(node))
+            if prereqs and prereqs.issubset(mastered_kcs) and node not in mastered_kcs:
+                unlocked.add(node)
+        return unlocked</code></pre>
+
+      <div class="code-header"><span>fiosra/mvp/knowledge_layer/vector_service.py</span><span>pgvector Cosine Search</span></div>
+      <pre><code>from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from typing import Optional, Dict, Any
+
+async def find_matching_misconception(
+    student_error_text: str,
+    target_kc: str,
+    query_embedding: list,
+    db: AsyncSession
+) -> Optional[Dict[str, Any]]:
+    sql = text("""
+        SELECT misconception_id, name, flawed_rule, remediation_hint,
+               1 - (embedding <=> :query_vec) as similarity
+        FROM misconceptions
+        WHERE kc_id = :target_kc
+        ORDER BY embedding <=> :query_vec
+        LIMIT 1;
+    """)
+    result = await db.execute(sql, {"query_vec": str(query_embedding), "target_kc": target_kc})
+    row = result.fetchone()
+    if row and row.similarity > 0.82:
+        return {
+            "id": row.misconception_id,
+            "name": row.name,
+            "flawed_rule": row.flawed_rule,
+            "remediation_hint": row.remediation_hint,
+            "confidence": float(row.similarity)
+        }
+    return None</code></pre>
+
+      <h3>How the System Builds & Evolves the Misconception Taxonomy</h3>
+      <p>
+        A misconception is not a random typo or arithmetic slip; it is a <strong>coherent, flawed cognitive rule</strong> that a student consistently follows 
+        (e.g., <em>"always subtract the smaller number from the larger number"</em> or <em>"moving a term across '=' keeps its sign"</em>). 
+        Fiosra builds and evolves this taxonomy through a <strong>three-tier lifecycle</strong>:
+      </p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Tier 1: Research Seeding</span>
+            <span class="badge badge-dark">Cold-Start Foundation</span>
+          </div>
+          <p>
+            The taxonomy is pre-populated from learning sciences corpora, psychometric benchmarks, and ITS catalogs 
+            (e.g., PSLC DataShop, Eedi mathematics taxonomy, and Physics Force Concept Inventory). 
+            Each record includes a unique ID, target KC, plain-English name, the exact <code>flawed_rule</code>, a research-backed <code>remediation_hint</code>, 
+            and a pre-computed 1536-dimensional vector embedding.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Tier 2: Curriculum Synthesis</span>
+            <span class="badge badge-primary">Authoring Co-Pilot</span>
+          </div>
+          <p>
+            When an educator uploads a new textbook chapter or syllabus excerpt to the <strong>Assignment Designer</strong>, the system prompts a specialized 
+            LLM to analyze the cognitive demands of newly introduced Knowledge Components and hypothesize common developmental misconceptions 
+            (e.g., confounding mass and weight, or confusing correlation with causation in historical analysis).
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Tier 3: In-Flight Harvesting</span>
+            <span class="badge badge-purple">Generate-Retrieve-Rerank</span>
+          </div>
+          <p>
+            When student steps fail verification with low cosine similarity (&lt; 0.82) against known entries, they enter an 
+            <code>unclassified_errors</code> buffer. When multiple students trigger identical error patterns, an offline clustering job 
+            synthesizes a proposed <code>flawed_rule</code> and prompts the teacher in the Studio: 
+            <em>"3 students made this novel error. Add to taxonomy?"</em> (Human-in-the-Loop curation).
+          </p>
+        </div>
+      </div>
+
+      <div class="code-header"><span>fiosra/mvp/knowledge_layer/taxonomy_builder.py</span><span>Seeding & Novel Misconception Harvester</span></div>
+      <pre><code>import json
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from typing import Dict, Any, List
+
+class TaxonomyBuilderService:
+    @staticmethod
+    async def seed_from_json(seed_file_path: str, db: AsyncSession):
+        """
+        Loads pre-curated learning sciences seed misconceptions into PostgreSQL.
+        """
+        with open(seed_file_path, "r", encoding="utf-8") as f:
+            seeds = json.load(f)
+
+        for item in seeds:
+            sql = text("""
+                INSERT INTO misconceptions (misconception_id, kc_id, domain, name, flawed_rule, remediation_hint, embedding)
+                VALUES (:id, :kc_id, :domain, :name, :flawed_rule, :remediation_hint, :embedding)
+                ON CONFLICT (misconception_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    flawed_rule = EXCLUDED.flawed_rule,
+                    remediation_hint = EXCLUDED.remediation_hint;
+            """)
+            await db.execute(sql, {
+                "id": item["misconception_id"],
+                "kc_id": item["kc_id"],
+                "domain": item["domain"],
+                "name": item["name"],
+                "flawed_rule": item["flawed_rule"],
+                "remediation_hint": item["remediation_hint"],
+                "embedding": str(item["embedding"])
+            })
+        await db.commit()
+
+    @staticmethod
+    async def promote_harvested_misconception(
+        proposal: Dict[str, Any],
+        teacher_id: str,
+        db: AsyncSession
+    ) -> str:
+        """
+        Promotes a clustered novel error into the permanent vector taxonomy
+        after human educator 1-click verification.
+        """
+        new_id = f"MISC_{proposal['domain'].upper()}_{proposal['kc_id']}_{proposal['slug']}"
+        sql = text("""
+            INSERT INTO misconceptions (misconception_id, kc_id, domain, name, flawed_rule, remediation_hint, embedding)
+            VALUES (:id, :kc_id, :domain, :name, :flawed_rule, :remediation_hint, :embedding);
+        """)
+        await db.execute(sql, {
+            "id": new_id,
+            "kc_id": proposal["kc_id"],
+            "domain": proposal["domain"],
+            "name": proposal["name"],
+            "flawed_rule": proposal["flawed_rule"],
+            "remediation_hint": proposal["remediation_hint"],
+            "embedding": str(proposal["embedding"])
+        })
+        await db.commit()
+        return new_id</code></pre>
+
+      <h3>How the Misconception Taxonomy Powers the Entire System</h3>
+      <p>
+        The Misconception Taxonomy is not a static lookup table; it is the <strong>semantic spine</strong> connecting problem authoring, 
+        conversational feedback, cognitive tracing, and teacher reporting:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>How the Taxonomy Is Used</th>
+            <th>Concrete Value & Pedagogical Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. Assignment Designer</strong></td>
+            <td>Seeds multiple-choice options and scaffolding traps with specific <code>flawed_rule</code> derivations.</td>
+            <td>
+              <strong>Eliminates Random Distractors:</strong> Instead of arbitrary wrong numbers (e.g. 14, 27, 99), every distractor represents a known cognitive trap. 
+              If a student chooses Option B, the system immediately knows their exact mental misstep without guessing.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>2. Policy Engine</strong></td>
+            <td>Performs vector cosine matching on erroneous intermediate steps ($1 - (\text{emb} \iff \text{query}) > 0.82$).</td>
+            <td>
+              <strong>Instant Diagnostic Classification:</strong> Immediately flags whether an algebraic failure is an accidental calculation error 
+              or a foundational conceptual breakdown (e.g. failing to preserve equality across the equals sign).
+            </td>
+          </tr>
+          <tr>
+            <td><strong>3. Socratic Tutorbot</strong></td>
+            <td>Supplies the <code>remediation_hint</code> directly to the CLASS "Thoughts of Tutorbot" internal prompt.</td>
+            <td>
+              <strong>Targeted Socratic Remediation:</strong> Instead of generic, unhelpful nudges like <em>"Check your work and try again,"</em> the tutorbot targets 
+              the student's specific mental model (e.g., <em>"Notice the minus sign before the 12. What is the opposite operation to preserve balance?"</em>).
+            </td>
+          </tr>
+          <tr>
+            <td><strong>4. Knowledge Layer (Tracing)</strong></td>
+            <td>Traces diagnosed misconceptions upstream through the prerequisite DAG.</td>
+            <td>
+              <strong>Root-Cause Attribution:</strong> When a student fails a systems of equations problem, the system determines whether the breakdown is in 
+              linear substitution (Grade 9) or basic integer negation (Grade 6), preventing misattribution of student ability.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>6. Evidence Dossier</strong></td>
+            <td>Aggregates misconception frequencies across cohorts in the teacher's dashboard.</td>
+            <td>
+              <strong>Actionable Class-Level Insights:</strong> Alerts the teacher: <em>"68% of your students made Error MISC_0031 on Question 2."</em> 
+              The educator immediately knows to spend 5 minutes on the distributive property warm-up tomorrow morning, turning homework into targeted teaching.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- COMPONENT 5 BUILD GUIDE -->
+    <section id="build-event-store">
+      <h2>Component 5: JSON Event Store & Session Manager</h2>
+      <div class="card-header">
+        <span class="card-title">Role: Immutable Append-Only Flight Recorder</span>
+        <span class="badge badge-amber">fiosra/mvp/event_store/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li>Create tables <code>student_sessions</code> and <code>session_events</code> with <code>payload JSONB</code>.</li>
+        <li>Create GIN index: <code>CREATE INDEX idx_session_events_payload ON session_events USING gin (payload);</code></li>
+        <li>Build <code>EventStoreService.append_event()</code> to record every student attempt, verification, hint, and self-correction.</li>
+        <li>Build <code>get_session_timeline(session_id)</code> to return chronological events for replay.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/event_store/event_service.py</span><span>Python 3 / AsyncPG</span></div>
+      <pre><code>from pydantic import BaseModel
+from typing import Dict, Any, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+class EventCreate(BaseModel):
+    session_id: str
+    student_id: str
+    assignment_id: str
+    question_id: str
+    event_type: str
+    payload: Dict[str, Any]
+
+class EventStoreService:
+    @staticmethod
+    async def log_event(event: EventCreate, db: AsyncSession):
+        sql = text("""
+            INSERT INTO session_events 
+            (session_id, student_id, assignment_id, question_id, event_type, payload, created_at)
+            VALUES (:session_id, :student_id, :assignment_id, :question_id, :event_type, :payload, NOW())
+            RETURNING event_id;
+        """)
+        result = await db.execute(sql, {
+            "session_id": event.session_id,
+            "student_id": event.student_id,
+            "assignment_id": event.assignment_id,
+            "question_id": event.question_id,
+            "event_type": event.event_type,
+            "payload": event.payload
+        })
+        await db.commit()
+        return result.scalar()
+
+    @staticmethod
+    async def get_session_events(session_id: str, db: AsyncSession) -> List[dict]:
+        sql = text("""
+            SELECT event_id, student_id, question_id, event_type, payload, created_at
+            FROM session_events
+            WHERE session_id = :session_id
+            ORDER BY created_at ASC;
+        """)
+        result = await db.execute(sql, {"session_id": session_id})
+        return [dict(row._mapping) for row in result.fetchall()]</code></pre>
+    </section>
+
+    <!-- COMPONENT 6 BUILD GUIDE -->
+    <section id="build-evidence-dossier">
+      <h2>Component 6: Evidence & Scoring Dossier Engine</h2>
+      <div class="card-header">
+        <span class="card-title">Role: AutoSCORE Light Replay & 1-Click Teacher Review</span>
+        <span class="badge badge-success">fiosra/mvp/evidence_dossier/</span>
+      </div>
+
+      <h3>How to Build It:</h3>
+      <ol>
+        <li><strong>Stage 1 ($f_{\text{extract}}$):</strong> Replay chronological session events from Component 5.</li>
+        <li>Calculate 5 core metrics: Autonomy score, self-corrections, hint dependency ratio $H_d$, dwell times, and misconception remediation.</li>
+        <li>Assemble <strong>Structured Evidence Packet ($Z$)</strong> with exact student quotes.</li>
+        <li><strong>Stage 2 ($f_{\text{score}}$):</strong> Pre-score Packet $Z$ against rubric criteria.</li>
+        <li>Expose endpoint for teacher 1-click grade approval or override.</li>
+      </ol>
+
+      <div class="code-header"><span>fiosra/mvp/evidence_dossier/extractor.py</span><span>AutoSCORE Light Extraction Logic</span></div>
+      <pre><code>from typing import List, Dict, Any
+
+class AutoScoreLightExtractor:
+    @staticmethod
+    def compile_evidence_packet(session_events: List[Dict[str, Any]], rubric: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Replays event stream to synthesize Structured Packet Z.
+        """
+        attempts = {}
+        hints = {}
+        self_corrections = 0
+        
+        for ev in session_events:
+            q_id = ev["question_id"]
+            ev_type = ev["event_type"]
+            payload = ev["payload"]
+            
+            if ev_type == "attempt_evaluated":
+                attempts.setdefault(q_id, []).append(payload)
+            elif ev_type == "hint_delivered":
+                hints.setdefault(q_id, []).append(payload)
+            elif ev_type == "self_correction_achieved":
+                self_corrections += 1
+
+        total_questions = len(attempts)
+        independent_solves = sum(1 for q, atts in attempts.items() if len(hints.get(q, [])) == 0 and atts[-1].get("is_correct", False))
+        autonomy_score = (independent_solves / total_questions) * 100 if total_questions else 100
+
+        return {
+            "autonomy_score": round(autonomy_score, 1),
+            "self_corrections_count": self_corrections,
+            "total_questions": total_questions,
+            "total_hints_consumed": sum(len(h) for h in hints.values()),
+            "suggested_grade": "A-" if autonomy_score > 75 and self_corrections >= 1 else "B",
+            "rubric_breakdown": [
+                {
+                    "criterion_id": crit["id"],
+                    "status": "MET",
+                    "evidence_quote": attempts.get(crit["target_q"], [{}])[-1].get("student_input", "")
+                }
+                for crit in rubric
+            ]
+        }</code></pre>
+    </section>
+
+    <!-- WALKTHROUGH A: MATH -->
+    <section id="walkthrough-math">
+      <h2>Walkthrough A: Linear Algebra Problem Lifecycle</h2>
+      <p>Problem: Solve $4(2x - 3) = 20$. Below is the step-by-step inter-component data exchange:</p>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-title">1. Question Published to Answer Vault</div>
+          <div class="timeline-body">
+            <strong>Component 1</strong> queries <strong>Component 4</strong> for prerequisite <code>KC_DISTRIBUTIVE</code>, 
+            seeds distractor with <code>MISC_0031</code>, and stores reference solution <code>{"x": 4}</code> in <strong>Component 2's Answer Vault</strong>.
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="timeline-dot danger"></div>
+          <div class="timeline-title">2. Student Submits Attempt 1 (With Distribution Error)</div>
+          <div class="timeline-body">
+            <div class="chat-bubble chat-student">
+              <strong>Student Input:</strong> <code>8x - 3 = 20 ==> 8x = 23</code>
+            </div>
+            <strong>Execution Flow:</strong>
+            <ol>
+              <li>Student sends payload to <code>POST /policy/verify</code> (Component 2).</li>
+              <li>SymPy evaluates: <code>sp.simplify((8*x - 3) - 20) != 0</code> ➔ <strong>Verdict: False</strong>.</li>
+              <li>Component 4 matches input with <code>MISC_0031</code>: <em>"Multiplied 4 by 2x but failed to multiply 4 by -3"</em> (Similarity: 0.93).</li>
+              <li>Component 2 computes hint ceiling: <code>attempt_count = 1 ➔ max_hint_level = 1</code>.</li>
+              <li>Component 5 appends <code>attempt_evaluated</code> row to <code>session_events</code> table.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="timeline-dot warning"></div>
+          <div class="timeline-title">3. Socratic Tutorbot Delivers Nudge</div>
+          <div class="timeline-body">
+            <div class="chat-internal">
+              {"thoughts_of_tutorbot": "Student made partial distribution error MISC_0031. Allowed hint level = 1. Acknowledge 8x, probe parenthetical application to -3."}
+            </div>
+            <div class="chat-bubble chat-bot">
+              <strong>Tutorbot:</strong> "Great work expanding 4 × 2x = 8x! Now look closely at the parentheses: did the 4 also get multiplied by the -3?"
+            </div>
+            <strong>Component 5</strong> appends <code>hint_delivered</code> row to PostgreSQL.
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="timeline-dot success"></div>
+          <div class="timeline-title">4. Student Achieves Self-Correction (Attempt 2)</div>
+          <div class="timeline-body">
+            <div class="chat-bubble chat-student">
+              <strong>Student Input:</strong> <code>8x - 12 = 20 ==> 8x = 32 ==> x = 4</code>
+            </div>
+            <ol>
+              <li>SymPy evaluates: <code>sp.simplify(x - 4) == 0</code> ➔ <strong>Verdict: True ✅</strong>.</li>
+              <li>Component 5 appends <code>self_correction_achieved</code> event.</li>
+              <li>UI celebrates self-correction and increments autonomy score.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WALKTHROUGH B: HUMANITIES -->
+    <section id="walkthrough-humanities">
+      <h2>Walkthrough B: French Revolution Essay Lifecycle</h2>
+      <p>
+        Prompt: <em>"Analyze the primary economic and social causes of the French Revolution in 1789, evaluating the role of the Third Estate."</em>
+      </p>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-title">1. Graph-Structured Rubric (GSR) Setup</div>
+          <div class="timeline-body">
+            Component 1 defines typed claim nodes:
+            <ul>
+              <li><code>CRIT_THESIS</code>: Must articulate both Crown bankruptcy and Three Estates inequality.</li>
+              <li><code>CRIT_THIRD_ESTATE</code>: Must cite specific tax burdens (taille/tithe) and lack of voting leverage.</li>
+              <li><code>CRIT_ENLIGHTENMENT</code>: Must connect Rousseau/Sieyès to challenging divine-right monarchy.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="timeline-dot warning"></div>
+          <div class="timeline-title">2. In-Process Socratic Writing Coach</div>
+          <div class="timeline-body">
+            <div class="chat-bubble chat-student">
+              <strong>Student Draft:</strong> "The French Revolution happened because King Louis XVI was unfair and people were angry. The poor had to pay all the money."
+            </div>
+            <div class="chat-internal">
+              {"thoughts_of_tutorbot": "Student expresses informal moral grievance. Nudge toward naming the formal Three Estates social hierarchy without generating the sentence."}
+            </div>
+            <div class="chat-bubble chat-bot">
+              <strong>Socratic Coach:</strong> "You've highlighted a real grievance! What was the formal name for France's social structure in 1789, and which specific Estate shouldered that tax burden?"
+            </div>
+            <p>Student revises draft: <em>"the Third Estate, making up 98% of the population, bore the entire taille..."</em></p>
+          </div>
+        </div>
+
+        <div class="timeline-item">
+          <div class="timeline-dot success"></div>
+          <div class="timeline-title">3. AutoSCORE Light Two-Stage Evaluation ($f_{\text{extract}} \to Z$)</div>
+          <div class="timeline-body">
+            Component 6 scans the submitted essay text with NLI against each rubric criterion:
+            <pre><code>{
+  "criteria_evaluations": [
+    {
+      "criterion": "CRIT_THESIS",
+      "status": "MET",
+      "evidence_quote": "The French Revolution erupted not merely from royal extravagance, but from Crown bankruptcy combined with an inequitable tax system placed entirely on the Third Estate."
+    },
+    {
+      "criterion": "CRIT_THIRD_ESTATE",
+      "status": "MET",
+      "evidence_quote": "Under the Ancien Régime, the First and Second Estates enjoyed tax exemptions, leaving the Third Estate to shoulder the taille and feudal dues."
+    },
+    {
+      "criterion": "CRIT_ENLIGHTENMENT",
+      "status": "PARTIALLY_MET",
+      "evidence_quote": "Philosophers like Rousseau inspired people to want freedom.",
+      "gap_analysis": "Mentions Rousseau, but does not explain the Social Contract or how it challenged divine-right monarchy."
+    }
+  ]
+}</code></pre>
+            The teacher opens the dossier, sees exact quoted citations, and approves <strong>85% (B)</strong> in 15 seconds.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMPLETE DDL -->
+    <section id="database-ddl">
+      <h2>Complete PostgreSQL 16 DDL Script</h2>
+      <p>Save as <code>fiosra/mvp/migrations/001_initial_schema.sql</code> and execute in PostgreSQL:</p>
+
+      <pre><code>-- 1. Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. Knowledge Components (Curriculum Tree)
+CREATE TABLE knowledge_components (
+    kc_id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    domain VARCHAR(64) NOT NULL,
+    description TEXT,
+    parent_id VARCHAR(64) REFERENCES knowledge_components(kc_id)
+);
+
+-- 3. Prerequisite Directed Edges (DAG)
+CREATE TABLE kc_prerequisites (
+    kc_id VARCHAR(64) REFERENCES knowledge_components(kc_id),
+    prerequisite_id VARCHAR(64) REFERENCES knowledge_components(kc_id),
+    PRIMARY KEY (kc_id, prerequisite_id)
+);
+
+-- 4. Misconception Taxonomy with Vector Search
+CREATE TABLE misconceptions (
+    misconception_id VARCHAR(64) PRIMARY KEY,
+    kc_id VARCHAR(64) REFERENCES knowledge_components(kc_id),
+    domain VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    flawed_rule TEXT NOT NULL,
+    remediation_hint TEXT NOT NULL,
+    embedding VECTOR(1536)
+);
+CREATE INDEX idx_misconceptions_vector ON misconceptions 
+USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+
+-- 5. Student Sessions
+CREATE TABLE student_sessions (
+    session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id VARCHAR(64) NOT NULL,
+    assignment_id UUID NOT NULL,
+    current_question_id VARCHAR(32) NOT NULL,
+    status VARCHAR(32) DEFAULT 'active',
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 6. Append-Only JSON Event Store
+CREATE TABLE session_events (
+    event_id BIGSERIAL PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES student_sessions(session_id),
+    student_id VARCHAR(64) NOT NULL,
+    assignment_id UUID NOT NULL,
+    question_id VARCHAR(32) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    payload JSONB NOT NULL
+);
+CREATE INDEX idx_session_events_payload ON session_events USING gin (payload);
+CREATE INDEX idx_session_events_chronological ON session_events (session_id, created_at ASC);</code></pre>
+    </section>
+
+    <!-- FASTAPI APP MOUNT -->
+    <section id="fastapi-app">
+      <h2>FastAPI App & Unified Router Mounts</h2>
+      <p>Save as <code>fiosra/mvp/app.py</code> to run the central application:</p>
+
+      <pre><code>from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+
+# Import component routers
+from fiosra.mvp.assignment_designer.router import router as assignment_router
+from fiosra.mvp.policy_engine.router import router as policy_router
+from fiosra.mvp.socratic_tutor.router import router as tutor_router
+from fiosra.mvp.knowledge_layer.router import router as knowledge_router
+from fiosra.mvp.event_store.router import router as event_router
+from fiosra.mvp.evidence_dossier.router import router as dossier_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: load NetworkX DAG into memory
+    print("🚀 Booting Fiosra MVP: Pre-loading Curriculum DAG into memory...")
+    yield
+    print("🛑 Shutting down Fiosra MVP...")
+
+app = FastAPI(
+    title="Fiosra Reasoning Infrastructure API",
+    version="1.0.0-MVP",
+    lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount all 6 modular routers
+app.include_router(assignment_router)
+app.include_router(policy_router)
+app.include_router(tutor_router)
+app.include_router(knowledge_router)
+app.include_router(event_router)
+app.include_router(dossier_router)
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "architecture": "Fiosra MVP 6-Component Mesh"}</code></pre>
+    </section>
+
+    <!-- UNIT TESTING -->
+    <section id="unit-testing">
+      <h2>PyTest Verification Suite</h2>
+      <p>Save as <code>fiosra/tests/test_mvp_core.py</code> to verify the verifiers and graph traversal:</p>
+
+      <pre><code>import pytest
+from fiosra.mvp.policy_engine.verifiers import PluggableVerifier
+from fiosra.mvp.policy_engine.hint_ceiling import compute_hint_ceiling
+from fiosra.mvp.knowledge_layer.graph_service import CurriculumGraphService
+
+def test_sympy_math_equivalence():
+    # True equivalent
+    res1 = PluggableVerifier.verify_math_equivalence("8*x - 12", "4*(2*x - 3)")
+    assert res1["is_correct"] is True
+    
+    # False partial distribution error
+    res2 = PluggableVerifier.verify_math_equivalence("8*x - 3", "4*(2*x - 3)")
+    assert res2["is_correct"] is False
+
+def test_hint_ceiling_progression():
+    # Attempt 1 -> Level 0
+    assert compute_hint_ceiling(attempt_count=1, prior_mastery=0.5) == 0
+    # Attempt 2 -> Level 1
+    assert compute_hint_ceiling(attempt_count=2, prior_mastery=0.5) == 1
+    # Attempt 4 without override -> Capped at Level 3
+    assert compute_hint_ceiling(attempt_count=4, prior_mastery=0.5) == 3
+    # With override -> Level 4 unlocked
+    assert compute_hint_ceiling(attempt_count=4, prior_mastery=0.5, teacher_override=True) == 4
+
+def test_networkx_dag_prerequisites():
+    dag = CurriculumGraphService()
+    # Edges: KC1 -> KC2, KC2 -> KC3
+    dag.build_from_records([("KC1", "KC2"), ("KC2", "KC3")])
+    
+    prereqs = dag.get_all_prerequisites("KC3")
+    assert prereqs == {"KC1", "KC2"}
+    
+    unlocked = dag.get_unlocked_concepts(mastered_kcs={"KC1", "KC2"})
+    assert "KC3" in unlocked</code></pre>
+    </section>
+
+    <!-- SECTION 5: SCIENTIFIC & TECHNICAL REFERENCES -->
+    <section id="scientific-references">
+      <h2>5. Scientific & Technical References</h2>
+      <p>
+        The Fiosra architecture is directly grounded in peer-reviewed learning sciences, psychometrics, and multi-agent AI research. 
+        Engineers should consult these foundational papers and technical documentation when refining prompts, extending verifiers, or tuning algorithms:
+      </p>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📚 Foundational Research Papers Mapped to Components</span>
+          <span class="badge badge-primary">Academic Literature</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Paper / Framework</th>
+              <th>Authors & Venue</th>
+              <th>Component Implementation</th>
+              <th>Pedagogical Contribution & Engineering Guidance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a href="https://ojs.aaai.org/index.php/AAAI/article/view/42123" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  AutoSCORE ↗
+                </a>
+              </td>
+              <td>Wang et al.<br><em>AAAI 2026</em><br><a href="https://ojs.aaai.org/index.php/AAAI/article/view/42123" target="_blank" style="font-size: 11.5px; color: #64748b;">ojs.aaai.org/42123</a></td>
+              <td><strong>Component 6</strong><br>(Evidence Dossier)</td>
+              <td>
+                Introduces the two-stage pipeline: $f_{\text{extract}}(\text{traces}) \to Z \to f_{\text{score}}(Z, \text{rubric})$. 
+                Decoupling factual evidence extraction from evaluation eliminates LLM grading hallucinations by over 70%.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://aclanthology.org/2023.findings-emnlp.830/" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  CLASS Framework ↗
+                </a>
+              </td>
+              <td>Sonkar et al.<br><em>Findings of EMNLP 2023</em><br><a href="https://arxiv.org/abs/2305.13272" target="_blank" style="font-size: 11.5px; color: #64748b;">arXiv:2305.13272</a></td>
+              <td><strong>Component 3</strong><br>(Socratic Tutor)</td>
+              <td>
+                Pioneers the <em>"Thoughts of Tutorbot"</em> internal diagnostic trace. 
+                Proves that forcing an LLM to generate an internal diagnostic diagnosis before student-facing output significantly improves Socratic quality.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2502.19535" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  PedagogicalRL (Withholding Answers) ↗
+                </a>
+              </td>
+              <td>Research Consortium<br><em>arXiv:2502.19535 (2025)</em></td>
+              <td><strong>Components 2 & 3</strong><br>(Policy Engine & Tutor)</td>
+              <td>
+                Establishes the Socratic guardrail architecture: separating the Answer Vault from conversational models. 
+                Demonstrates how hint ladders prevent answer leaking under adversarial student prompting.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2308.06922" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  CodeHelp ↗
+                </a>
+              </td>
+              <td>Lau, Liffiton et al.<br><em>ACM Koli Calling / arXiv:2308.06922</em></td>
+              <td><strong>Component 3</strong><br>(Socratic Tutor)</td>
+              <td>
+                Demonstrated a 98% answer non-disclosure rate with 86% student-rated helpfulness in production classrooms, 
+                proving that students value Socratic hints when delivered without delay.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2505.01563" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  TutorGym & SAI Triple ↗
+                </a>
+              </td>
+              <td>Weitekamp et al.<br><em>arXiv:2505.01563 (2025)</em></td>
+              <td><strong>Component 5</strong><br>(JSON Event Store)</td>
+              <td>
+                Formalizes the Selection-Action-Input (SAI) interaction model for logging educational micro-steps. 
+                Forms the data contract for Fiosra's append-only <code>session_events</code> table.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2602.14878" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  Graph-Structured Rubrics (GSR) ↗
+                </a>
+              </td>
+              <td>Franklin et al.<br><em>arXiv:2602.14878 (2026)</em></td>
+              <td><strong>Components 1 & 6</strong><br>(Designer & Dossier)</td>
+              <td>
+                Replaces ambiguous paragraph rubrics with typed, directed evaluation graphs with prerequisite criterion gating. 
+                Allows automated NLI verification of complex essays.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2407.13501" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  Misconception Diagnosis (GRR) ↗
+                </a>
+              </td>
+              <td>Mitton et al.<br><em>arXiv:2407.13501 (2024)</em></td>
+              <td><strong>Component 4</strong><br>(Knowledge Layer)</td>
+              <td>
+                Combines dense embedding retrieval (via <code>pgvector</code>) with contextual LLM reranking, achieving >80% accuracy in diagnosing 
+                domain-specific cognitive errors.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://arxiv.org/abs/2602.22879" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  L-HAKT (Hyperbolic KT) ↗
+                </a>
+              </td>
+              <td>Research Team<br><em>AAAI 2026 / arXiv:2602.22879</em></td>
+              <td><strong>Component 4</strong><br>(Knowledge Layer)</td>
+              <td>
+                Demonstrates that tree-structured educational curricula are faithfully represented in hyperbolic space (Poincaré ball) 
+                without the distortion of Euclidean embeddings.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://doi.org/10.3102/0013189X013006004" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">
+                  Bloom's 2-Sigma Problem ↗
+                </a>
+              </td>
+              <td>Benjamin S. Bloom<br><em>Educational Researcher (1984)</em><br><span style="font-size: 11.5px; color: #64748b;">DOI: 10.3102/0013189X013006004</span></td>
+              <td><strong>System-wide</strong><br>(Core Mission)</td>
+              <td>
+                Foundational educational research showing that 1-on-1 mastery tutoring moves average students two standard deviations (from 50th to 98th percentile) 
+                above lecture-based classrooms.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🛠️ Core Technology & Engineering Documentation</span>
+          <span class="badge badge-dark">Developer Stack References</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Library / Engine</th>
+              <th>Component</th>
+              <th>Key Features Used</th>
+              <th>Documentation Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>SymPy CAS</strong></td>
+              <td>Component 2</td>
+              <td>Symbolic equation equivalence, expression parsing, distributive checks (<code>sp.simplify(a - b) == 0</code>)</td>
+              <td><a href="https://docs.sympy.org/latest/index.html" target="_blank">SymPy Official Documentation</a></td>
+            </tr>
+            <tr>
+              <td><strong>NetworkX</strong></td>
+              <td>Component 4</td>
+              <td>Directed Acyclic Graph (DAG) cycle detection, ancestor lookups, unlocked concepts calculation</td>
+              <td><a href="https://networkx.org/documentation/stable/" target="_blank">NetworkX Graph Algorithms</a></td>
+            </tr>
+            <tr>
+              <td><strong>pgvector</strong></td>
+              <td>Component 4</td>
+              <td>Cosine similarity search (<code>vector_cosine_ops</code>, <code>&lt;=&gt;</code>) for misconception error matching</td>
+              <td><a href="https://github.com/pgvector/pgvector" target="_blank">pgvector GitHub & Documentation</a></td>
+            </tr>
+            <tr>
+              <td><strong>FastAPI & Pydantic v2</strong></td>
+              <td>All Services</td>
+              <td>Typed JSON schema contracts, async route handlers, dependency injection for database sessions</td>
+              <td><a href="https://fastapi.tiangolo.com/" target="_blank">FastAPI Official Docs</a></td>
+            </tr>
+            <tr>
+              <td><strong>SQLAlchemy 2.0 (Async)</strong></td>
+              <td>Component 4 & 5</td>
+              <td>Asynchronous connection pooling, AsyncPG driver, JSONB dialect support with GIN index definitions</td>
+              <td><a href="https://docs.sqlalchemy.org/en/20/" target="_blank">SQLAlchemy 2.0 Async Guide</a></td>
+            </tr>
+            <tr>
+              <td><strong>DeBERTa-v3 / NLI</strong></td>
+              <td>Component 2 & 6</td>
+              <td>Zero-shot semantic claim entailment for essay evaluation (AutoSCORE Premise $\implies$ Hypothesis)</td>
+              <td><a href="https://huggingface.co/tasks/natural-language-inference" target="_blank">HuggingFace NLI Documentation</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

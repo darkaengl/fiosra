@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AssignmentSpecification",
+  "description": "Output schema of the Assignment Design Agent. Contains questions, scaffolding trees, hint ladders, rubrics, and KC mappings — all subject to human tutor review before deployment.",
+  "type": "object",
+  "required": ["assignment_id", "title", "created_by", "learning_objectives", "questions"],
+  "properties": {
+    "assignment_id": {
+      "type": "string",
+      "description": "Unique assignment identifier"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable assignment title"
+    },
+    "created_by": {
+      "type": "object",
+      "properties": {
+        "tutor_id": { "type": "string" },
+        "agent_assisted": { "type": "boolean" },
+        "creation_timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "learning_objectives": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-text learning objectives this assignment targets"
+    },
+    "target_knowledge_components": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "KC IDs from the curriculum knowledge graph"
+    },
+    "target_bloom_levels": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 6
+      },
+      "description": "Bloom's taxonomy levels targeted"
+    },
+    "difficulty_band": {
+      "type": "object",
+      "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "scaffolding_policy": {
+      "type": "object",
+      "description": "Tutor-configured scaffolding constraints for the Student Interaction Agent",
+      "properties": {
+        "max_hint_level_default": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "Default maximum hint level (0-3 for student access, 4=answer requires tutor override)"
+        },
+        "max_attempts_before_hint_escalation": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many incorrect attempts before the hint level increases"
+        },
+        "allow_answer_reveal": {
+          "type": "boolean",
+          "description": "Whether the bottom-out hint (Level 4) is available at all for this assignment"
+        },
+        "time_limit_seconds": {
+          "type": ["integer", "null"],
+          "description": "Optional time limit per question"
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "description": "The assignment questions",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "question_type", "prompt", "knowledge_components", "rubric"],
+        "properties": {
+          "question_id": { "type": "string" },
+          "question_type": {
+            "type": "string",
+            "enum": ["free_response", "scaffolded_steps", "multiple_choice", "fill_in_blank", "diagram_based", "proof"],
+            "description": "Type of question"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "The question text presented to the student"
+          },
+          "prompt_media": {
+            "type": "array",
+            "description": "Optional attached media (images, diagrams)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string", "enum": ["image", "diagram", "chart", "table"] },
+                "url": { "type": "string" },
+                "alt_text": { "type": "string" }
+              }
+            }
+          },
+          "knowledge_components": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "KC IDs this question targets"
+          },
+          "bloom_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "estimated_difficulty": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "correct_answer": {
+            "type": "object",
+            "description": "The canonical correct answer (held by Pedagogical Policy Engine, NEVER exposed to SIA generation context)",
+            "properties": {
+              "value": { "type": "string" },
+              "acceptable_variants": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Equivalent correct forms (e.g., 'x=3' and '3=x' and 'x = 3.0')"
+              },
+              "cas_validation_expression": {
+                "type": "string",
+                "description": "Optional CAS (Computer Algebra System) expression for symbolic equivalence checking"
+              }
+            }
+          },
+          "scaffolding_tree": {
+            "type": "array",
+            "description": "Decomposition of the question into ordered substeps (for scaffolded questions)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step_id": { "type": "string" },
+                "step_prompt": { "type": "string" },
+                "step_kc": { "type": "string" },
+                "correct_answer": {
+                  "type": "object",
+                  "properties": {
+                    "value": { "type": "string" },
+                    "acceptable_variants": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Step IDs that must be completed before this step"
+                }
+              }
+            }
+          },
+          "hint_ladder": {
+            "type": "array",
+            "description": "Pre-authored hints at each escalation level",
+            "items": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["metacognitive_prompt", "conceptual_nudge", "procedural_hint", "worked_sub_example", "bottom_out_hint"]
+                },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "misconception_probes": {
+            "type": "array",
+            "description": "Known misconceptions this question is designed to detect",
+            "items": { "type": "string" }
+          },
+          "distractors": {
+            "type": "array",
+            "description": "For MCQ: misconception-informed wrong answer options",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": { "type": "string" },
+                "mapped_misconception": { "type": "string" },
+                "explanation": { "type": "string" }
+              }
+            }
+          },
+          "rubric": {
+            "type": "object",
+            "description": "Graph-Structured Rubric (GSR) for this question",
+            "properties": {
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "criterion_id": { "type": "string" },
+                    "label": { "type": "string" },
+                    "target_kc": { "type": "string" },
+                    "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "evidence_extraction_rule": {
+                      "type": "string",
+                      "description": "How to extract evidence for this criterion from the student's response"
+                    },
+                    "levels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "score": { "type": "integer" },
+                          "label": { "type": "string" },
+                          "description": { "type": "string" }
+                        }
+                      }
+                    },
+                    "depends_on_criteria": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "Criterion IDs that must be evaluated first (GSR gating)"
+                    }
+                  }
+                }
+              },
+              "max_score": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MisconceptionEntry",
+  "description": "Schema for entries in the Misconception Taxonomy DB. Used by the Misconception Diagnosis Agent (Generate-Retrieve-Rerank pipeline) and the Assignment Design Agent (misconception-aware distractor generation).",
+  "type": "object",
+  "required": ["misconception_id", "domain", "knowledge_component", "label", "description", "severity"],
+  "properties": {
+    "misconception_id": {
+      "type": "string",
+      "pattern": "^MISC_[0-9]{4}",
+      "description": "Unique misconception identifier (e.g., MISC_0047)"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Subject domain (e.g., 'algebra', 'geometry', 'physics', 'biology')"
+    },
+    "knowledge_component": {
+      "type": "string",
+      "description": "Primary KC this misconception is associated with"
+    },
+    "related_knowledge_components": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Additional KCs affected by this misconception"
+    },
+    "label": {
+      "type": "string",
+      "description": "Short, human-readable label for the misconception"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the flawed mental model"
+    },
+    "common_trigger": {
+      "type": "string",
+      "description": "Problem type or context that commonly triggers this misconception"
+    },
+    "example_student_error": {
+      "type": "string",
+      "description": "A concrete example of a student response exhibiting this misconception"
+    },
+    "example_correct_response": {
+      "type": "string",
+      "description": "The correct response for the same problem"
+    },
+    "remediation_strategy": {
+      "type": "string",
+      "description": "Recommended pedagogical approach to address this misconception"
+    },
+    "remediation_hints": {
+      "type": "array",
+      "description": "Pre-authored hint ladder entries tailored to this misconception",
+      "items": {
+        "type": "object",
+        "properties": {
+          "level": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "hint_text": { "type": "string" }
+        }
+      }
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["foundational", "intermediate", "advanced", "surface"],
+      "description": "How critical this misconception is to the learning progression"
+    },
+    "frequency_percentile": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "How commonly this misconception occurs across the student population (higher = more common)"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["literature", "tutor_authored", "system_discovered", "validated"],
+      "description": "Origin of this misconception entry"
+    },
+    "embedding_vector": {
+      "type": "array",
+      "items": { "type": "number" },
+      "description": "Dense vector embedding for semantic retrieval (populated at index time)"
+    }
+  }
+}

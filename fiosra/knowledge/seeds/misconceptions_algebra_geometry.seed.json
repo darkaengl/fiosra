@@ -1,0 +1,106 @@
+[
+  {
+    "misconception_id": "MISC_0001",
+    "domain": "algebra",
+    "knowledge_component": "KC_ALG_ADD_FRACTIONS",
+    "related_knowledge_components": ["KC_ALG_LCD", "KC_ALG_EQUIVALENT_FRACTIONS"],
+    "label": "Adding numerators and denominators separately",
+    "description": "Student adds fractions by adding numerators together and denominators together (e.g., 1/2 + 1/3 = 2/5), treating the fraction bar as a grouping symbol rather than a division operation.",
+    "common_trigger": "Addition of fractions with unlike denominators",
+    "example_student_error": "1/2 + 1/3 = 2/5",
+    "example_correct_response": "1/2 + 1/3 = 3/6 + 2/6 = 5/6",
+    "remediation_strategy": "Use visual fraction models (pie charts, bar models) to show that 2/5 is less than 1/2, creating a contradiction. Then introduce the concept of common denominators as a way to create 'like parts' that can be combined.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Before you add, think about whether the pieces you're adding are the same size."},
+      {"level": 1, "hint_text": "When fractions have different denominators, the pieces are different sizes. You need to find a common denominator first."},
+      {"level": 2, "hint_text": "The LCD of 2 and 3 is 6. Convert both fractions to sixths, then add the numerators."},
+      {"level": 3, "hint_text": "1/2 = 3/6 and 1/3 = 2/6. Now add: 3/6 + 2/6 = ?/6"}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 92,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_0047",
+    "domain": "algebra",
+    "knowledge_component": "KC_ALG_SOLVE_LINEAR",
+    "related_knowledge_components": ["KC_ALG_EQUALITY", "KC_ALG_NEGATIVE_NUMBERS"],
+    "label": "Sign error during subtraction across equals",
+    "description": "Student subtracts a term from one side of the equation but adds it to the other, or fails to flip the sign when moving a term across the equals sign.",
+    "common_trigger": "Equations with negative coefficients or subtraction operations",
+    "example_student_error": "x + 2y = 1 → x = 1 + 2y (should be x = 1 - 2y)",
+    "example_correct_response": "x + 2y = 1 → x = 1 - 2y",
+    "remediation_strategy": "Demonstrate the balance-scale analogy: both sides must remain equal. Emphasize that subtracting from both sides preserves equality. Have student verify by substitution.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Check what happens to the sign when you move a term to the other side of the equation."},
+      {"level": 1, "hint_text": "Remember: to isolate x, you need to subtract 2y from BOTH sides. What does that give you on the right?"},
+      {"level": 2, "hint_text": "x + 2y - 2y = 1 - 2y. Simplify the left side."},
+      {"level": 3, "hint_text": "When you subtract 2y from both sides: x + 2y - 2y = 1 - 2y → x = 1 - 2y"}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 87,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_0102",
+    "domain": "algebra",
+    "knowledge_component": "KC_ALG_DISTRIBUTIVE",
+    "related_knowledge_components": ["KC_ALG_EXPONENTS", "KC_ALG_MULTIPLY_BINOMIALS"],
+    "label": "Distributing exponent over addition",
+    "description": "Student applies the exponent to each term inside parentheses as if it distributes over addition: (a + b)² = a² + b² instead of the correct expansion (a + b)² = a² + 2ab + b².",
+    "common_trigger": "Squaring binomials, expanding (x + c)² expressions",
+    "example_student_error": "(x + 3)² = x² + 9",
+    "example_correct_response": "(x + 3)² = x² + 6x + 9",
+    "remediation_strategy": "Show that (x+3)² means (x+3)(x+3) and use area model or FOIL to visualize why the middle term (2ab) exists. Verify with a specific value (e.g., x=1: (1+3)² = 16, but 1+9 = 10).",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What does it actually mean to square something? Try writing it as a multiplication."},
+      {"level": 1, "hint_text": "(x + 3)² means (x + 3) × (x + 3). Try multiplying these out using FOIL or the area model."},
+      {"level": 2, "hint_text": "First: x·x = x². Outer: x·3 = 3x. Inner: 3·x = 3x. Last: 3·3 = 9. Now combine."},
+      {"level": 3, "hint_text": "(x+3)(x+3) = x² + 3x + 3x + 9 = x² + 6x + 9"}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 84,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_0203",
+    "domain": "algebra",
+    "knowledge_component": "KC_ALG_SOLVE_QUADRATIC",
+    "related_knowledge_components": ["KC_ALG_ZERO_PRODUCT", "KC_ALG_FACTORING"],
+    "label": "Losing a solution when dividing both sides by variable",
+    "description": "Student divides both sides of an equation by x (or another variable), eliminating the x=0 solution. For example, solving x² = 3x by dividing both sides by x gives x=3, missing x=0.",
+    "common_trigger": "Quadratic equations where one side can be factored with x as a common factor",
+    "example_student_error": "x² = 3x → x = 3 (only one solution)",
+    "example_correct_response": "x² - 3x = 0 → x(x - 3) = 0 → x = 0 or x = 3",
+    "remediation_strategy": "Explain that dividing by a variable is only valid if you know the variable is non-zero. Instead, move all terms to one side and factor. Emphasize the zero product property.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Be careful about dividing by a variable — you might be dividing by zero! Is there a safer approach?"},
+      {"level": 1, "hint_text": "Instead of dividing, try moving everything to one side: x² - 3x = 0. Can you factor this?"},
+      {"level": 2, "hint_text": "x² - 3x = x(x - 3) = 0. If a product equals zero, what do you know about the factors?"},
+      {"level": 3, "hint_text": "x(x-3) = 0 means x = 0 OR x - 3 = 0. So x = 0 or x = 3."}
+    ],
+    "severity": "intermediate",
+    "frequency_percentile": 71,
+    "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_0305",
+    "domain": "geometry",
+    "knowledge_component": "KC_GEO_TRIANGLE_ANGLES",
+    "related_knowledge_components": ["KC_GEO_ANGLE_SUM", "KC_GEO_EXTERIOR_ANGLES"],
+    "label": "Assuming all triangles have a 90-degree angle",
+    "description": "Student applies right-triangle reasoning (Pythagorean theorem, SOH-CAH-TOA) to non-right triangles, implicitly assuming one angle is 90°.",
+    "common_trigger": "Problems involving oblique triangles or when the problem does not specify a right angle",
+    "example_student_error": "In triangle ABC with sides a=5, b=7, angle C=60°, student uses a² + b² = c²",
+    "example_correct_response": "Use law of cosines: c² = a² + b² - 2ab·cos(C) = 25 + 49 - 70·cos(60°) = 74 - 35 = 39",
+    "remediation_strategy": "Have student identify what makes a triangle 'right' (one 90° angle explicitly stated or implied). Show that Pythagorean theorem is a special case of the law of cosines when C=90°.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Look at the triangle carefully — does the problem state or imply that any angle is 90°?"},
+      {"level": 1, "hint_text": "This is not a right triangle. The Pythagorean theorem only works for right triangles. What formula works for any triangle?"},
+      {"level": 2, "hint_text": "For a triangle with sides a, b and included angle C, use the Law of Cosines: c² = a² + b² - 2ab·cos(C)."}
+    ],
+    "severity": "intermediate",
+    "frequency_percentile": 68,
+    "source": "literature"
+  }
+]

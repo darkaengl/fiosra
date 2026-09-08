@@ -1,0 +1,29 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+
+class HintRung(BaseModel):
+    level: int = Field(ge=0, le=4)
+    hint_type: str  # "metacognitive", "conceptual", "procedural", "worked_analogy", "bottom_out"
+    content: str
+    is_locked: bool = False
+
+class ScaffoldingStep(BaseModel):
+    step_id: str
+    step_prompt: str
+    target_kc: str
+
+class QuestionDraftRequest(BaseModel):
+    topic: str
+    domain: str = "algebra"
+    grade_level: str = "Grade 9"
+    blooms_level: str = "Apply"
+
+class QuestionSpec(BaseModel):
+    question_id: str
+    prompt: str
+    domain: str
+    target_kcs: List[str]
+    subproblems: List[ScaffoldingStep]
+    hint_ladder: List[HintRung]
+    reference_solution: Dict[str, Any]
+    rubric_criteria: List[Dict[str, Any]]
