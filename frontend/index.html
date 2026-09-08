@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiosra • Frontend Design & Screen Hub</title>
+  <link rel="stylesheet" href="css/design-system.css">
+  <style>
+    .hub-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 60px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    .hub-header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .hub-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: var(--color-horizon-bright);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 4px 12px;
+      border-radius: var(--radius-full);
+      width: fit-content;
+      text-transform: uppercase;
+    }
+
+    .hub-title {
+      font-family: var(--font-brand);
+      font-size: 36px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    .hub-desc {
+      font-size: 16px;
+      color: var(--color-slate-light);
+      max-width: 720px;
+      line-height: 1.6;
+    }
+
+    .screens-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 24px;
+    }
+
+    .screen-card {
+      background-color: var(--color-graphite);
+      border: 1px solid var(--color-graphite-border);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      box-shadow: var(--shadow-md);
+    }
+
+    .screen-card:hover {
+      border-color: var(--color-horizon-blue);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.4), 0 0 16px var(--color-horizon-glow);
+    }
+
+    .screen-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .screen-title {
+      font-family: var(--font-brand);
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .screen-summary {
+      font-size: 13.5px;
+      color: var(--color-slate-light);
+      line-height: 1.6;
+    }
+
+    .feature-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .feature-tag {
+      background-color: var(--color-graphite-card);
+      border: 1px solid var(--color-graphite-border);
+      color: var(--color-slate-bright);
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: var(--radius-xs);
+      font-weight: 500;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-horizon-bright);
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <a href="index.html" class="brand-logo">FIOSRA</a>
+      <span class="studio-badge">UI Architecture &amp; Screens</span>
+    </div>
+
+    <div class="header-right">
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        Direct HTML5 / CSS System
+      </div>
+    </div>
+  </header>
+
+  <main class="hub-container">
+    <div class="hub-header">
+      <span class="hub-badge">Phase 1-5 Frontend Architecture</span>
+      <h1 class="hub-title">Fiosra Interactive UI Screens</h1>
+      <p class="hub-desc">
+        Pure semantic HTML5 and vanilla CSS interfaces built with Fiosra's Obsidian/Bone design tokens.
+        Each screen embodies the <strong>Structured Exploration</strong> and <strong>Sovereign Teacher</strong> principles.
+      </p>
+    </div>
+
+    <div class="screens-grid">
+      
+      <!-- Screen 1 Card -->
+      <a href="educator_studio_review.html" class="screen-card">
+        <div class="screen-card-top">
+          <span class="badge badge-success">Live Screen</span>
+          <span class="badge badge-info">3-Column Layout</span>
+        </div>
+        <h2 class="screen-title">Educator Studio: AutoSCORE Review</h2>
+        <p class="screen-summary">
+          Review queue for submitted student reasoning sessions. Features 1-click AutoSCORE Light dossier verification, verbatim quotation evidence with NLI confidence scores, and cognitive trajectory flight recorder audit trails.
+        </p>
+        <div class="feature-tags">
+          <span class="feature-tag">1-Click Sovereign Approval</span>
+          <span class="feature-tag">Evidence Packet Z</span>
+          <span class="feature-tag">DeBERTa-v3 NLI</span>
+          <span class="feature-tag">Flight Recorder Audit</span>
+        </div>
+        <div class="card-footer">
+          <span>Open AutoSCORE Review Screen</span>
+          <span>→</span>
+        </div>
+      </a>
+
+      <!-- Screen 2 Card -->
+      <a href="assignment_designer.html" class="screen-card">
+        <div class="screen-card-top">
+          <span class="badge badge-success">Live Screen</span>
+          <span class="badge badge-info">Authoring Co-Pilot</span>
+        </div>
+        <h2 class="screen-title">Assignment Designer &amp; Socratic Scaffolder</h2>
+        <p class="screen-summary">
+          Assignment authoring environment for educators. Selects target curriculum nodes and auto-resolved prerequisites from Neo4j, sets up 4-rung answer-blind Socratic hint ladders, configures misconception traps, and tests dialogues in a live agent simulator sandbox.
+        </p>
+        <div class="feature-tags">
+          <span class="feature-tag">Neo4j Prerequisite Graph</span>
+          <span class="feature-tag">4-Rung Socratic Ladder</span>
+          <span class="feature-tag">Misconception Traps</span>
+          <span class="feature-tag">3-Agent Live Sandbox</span>
+        </div>
+        <div class="card-footer">
+          <span>Open Assignment Designer Screen</span>
+          <span>→</span>
+        </div>
+      </a>
+
+    </div>
+  </main>
+
+</body>
+</html>
