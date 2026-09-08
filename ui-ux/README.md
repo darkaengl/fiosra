@@ -14,8 +14,14 @@ ui-ux/
 ├── teacher-experience/
 │   └── README.md              # Detailed Specification of the Educator Studio & Observability
 │
+├── lms-experience/
+│   └── README.md              # Detailed Specification of Course & Curriculum Management Layer
+│
 └── frontend/                  # Interactive Semantic HTML5 & Vanilla CSS Screen Implementations
     ├── index.html             # Central Screen Hub & Navigation
+    ├── educator_lms_courses.html   # Educator Course Portfolio & Syllabus Grounding Hub
+    ├── educator_lms_modules.html   # Curriculum Modules, Sequencer & Cohort Roster
+    ├── student_lms_portal.html     # Student Course Portal, Timeline & Reasoning Portfolio
     ├── educator_studio_review.html # AutoSCORE Review Queue & Evidence Dossier
     ├── assignment_designer.html    # Assignment Designer & Scope De-Ambiguator Co-Pilot
     ├── student_workspace.html      # Sectional Scaffolding Reasoning Canvas
@@ -54,3 +60,16 @@ ui-ux/
   - **Knowledge Graph Explorer** (`knowledge_graph.html`): Interactive topological visualizer connecting Neo4j prerequisite DAGs and `pgvector` semantic vector proximity.
 
 👉 **Read the full specification:** [`ui-ux/teacher-experience/README.md`](teacher-experience/README.md)
+
+---
+
+## 🏛️ 3. [LMS Experience Specification](lms-experience/README.md)
+* **Metaphor:** *Sovereign Course Grounding & Intellectual Portfolio*
+* **Core Invariants:** Rejects legacy LMS administrative bloat. Anchors active reasoning in formal syllabi and primary source corpora. Replaces empty letter grades with cryptographic evidence dossiers.
+* **Key Workflows:**
+  - **Educator Course Portfolio & Grounding Hub** (`educator_lms_courses.html`): Term management, active cohort monitoring, and 4-stage syllabus corpus ingestion into `pgvector` and Neo4j.
+  - **Curriculum Architecture & Cohort Roster** (`educator_lms_modules.html`): Linear & DAG-locked units, assignment lifecycle states (Evaluated, In Review, Active Canvas), and 24-student diagnostic autonomy matrix with 1-click micro-scaffold dispatching.
+  - **Student Course Portal & Reasoning Transcript** (`student_lms_portal.html`): Enrolled course timeline, integrated primary source clipping reader, and verified reasoning portfolio showcasing autonomy rate ($88.4\%$), entailed claims, and teacher endorsements.
+
+👉 **Read the full specification:** [`ui-ux/lms-experience/README.md`](lms-experience/README.md)
+
