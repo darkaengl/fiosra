@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiosra • Student Learning Workspace &amp; Reasoning Canvas</title>
+  <link rel="stylesheet" href="css/design-system.css">
+  <style>
+    /* Student Workspace Specific Layout */
+    .workspace-layout {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      min-height: calc(100vh - 64px);
+      background-color: var(--color-bone);
+    }
+
+    /* Left Column: Dominant Reasoning Canvas */
+    .canvas-column {
+      padding: 32px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      overflow-y: auto;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Primary Source Anchor Card */
+    .source-anchor-card {
+      background: #ffffff;
+      border: 1px solid var(--color-bone-border);
+      border-left: 4px solid var(--color-horizon-blue);
+      border-radius: var(--radius-sm);
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .source-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .source-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-horizon-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .source-text {
+      font-size: 13.5px;
+      color: #334155;
+      line-height: 1.6;
+      font-style: italic;
+    }
+
+    .source-citation {
+      font-size: 11px;
+      color: var(--color-slate-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Argument Writing Canvas */
+    .canvas-card {
+      background: #ffffff;
+      border: 1px solid var(--color-bone-border);
+      border-radius: var(--radius-md);
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: var(--shadow-md);
+      flex: 1;
+    }
+
+    .canvas-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--color-bone-border);
+      padding-bottom: 16px;
+    }
+
+    .canvas-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .canvas-prompt {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .canvas-instruction {
+      font-size: 12px;
+      color: var(--color-slate-muted);
+    }
+
+    /* Live Criteria Coverage Indicators */
+    .rubric-pill-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--color-bone-muted);
+      border-radius: var(--radius-sm);
+    }
+
+    .pill-criterion {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      background: #ffffff;
+      border: 1px solid var(--color-bone-border);
+      color: var(--color-slate-subtle);
+    }
+
+    .pill-criterion.met {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #065f46;
+      font-weight: 600;
+    }
+
+    .pill-criterion.pending {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #92400e;
+    }
+
+    /* Drafting Textarea */
+    .draft-editor {
+      width: 100%;
+      min-height: 380px;
+      border: none;
+      outline: none;
+      font-family: var(--font-ui);
+      font-size: 14.5px;
+      line-height: 1.75;
+      color: #1e293b;
+      resize: vertical;
+      background: transparent;
+    }
+
+    .canvas-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--color-bone-border);
+      padding-top: 16px;
+      font-size: 12px;
+      color: var(--color-slate-muted);
+    }
+
+    .word-counter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Right Column: Socratic Ambient Tutor Panel */
+    .tutor-panel {
+      background: #ffffff;
+      border-left: 1px solid var(--color-bone-border);
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      overflow-y: auto;
+    }
+
+    .tutor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tutor-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tutor-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tutor-tagline {
+      font-size: 11.5px;
+      color: var(--color-slate-muted);
+    }
+
+    /* Socratic Inquiry Card */
+    .socratic-nudge-card {
+      background: #f0f7ff;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.08);
+    }
+
+    .nudge-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nudge-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--color-horizon-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .nudge-message {
+      font-size: 13px;
+      line-height: 1.55;
+      color: #1e3a8a;
+      font-style: italic;
+    }
+
+    .nudge-footer {
+      font-size: 11px;
+      color: #3b82f6;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 4-Rung Socratic Hint Ladder */
+    .ladder-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ladder-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ladder-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #1e293b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hint-dependency-stat {
+      font-size: 11.5px;
+      color: var(--color-slate-muted);
+      font-family: var(--font-mono);
+    }
+
+    .hint-ladder {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hint-rung {
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-bone-border);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--color-bone);
+      transition: all 0.15s ease;
+    }
+
+    .hint-rung.unlocked {
+      background: #ffffff;
+      border-color: #cbd5e1;
+    }
+
+    .hint-rung.locked {
+      opacity: 0.65;
+      background: #f8fafc;
+      border-style: dashed;
+      cursor: pointer;
+    }
+
+    .hint-rung.locked:hover {
+      opacity: 0.9;
+      border-color: var(--color-horizon-blue);
+    }
+
+    .rung-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rung-num {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .rung-text {
+      font-size: 12px;
+      color: #334155;
+      line-height: 1.45;
+    }
+
+    /* Student Socratic Reply & Actions */
+    .interaction-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .reply-input-box {
+      display: flex;
+      gap: 8px;
+    }
+
+    .reply-input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--color-bone-border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-ui);
+      font-size: 12.5px;
+      outline: none;
+    }
+
+    .reply-input:focus {
+      border-color: var(--color-horizon-blue);
+      box-shadow: 0 0 0 2px var(--color-horizon-glow);
+    }
+
+    .quick-probes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quick-probe-btn {
+      background: var(--color-bone-muted);
+      border: 1px solid var(--color-bone-border);
+      color: var(--color-slate-subtle);
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .quick-probe-btn:hover {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: var(--color-horizon-blue);
+    }
+
+    /* Autonomy Gauge in Header */
+    .header-autonomy {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--color-graphite);
+      border: 1px solid var(--color-graphite-border);
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+    }
+
+    .autonomy-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .autonomy-label {
+      font-size: 9.5px;
+      color: var(--color-slate-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .autonomy-num {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-signal-green);
+      font-family: var(--font-brand);
+    }
+
+    .mini-track {
+      width: 70px;
+      height: 6px;
+      background: var(--color-graphite-border);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+
+    .mini-fill {
+      width: 82%;
+      height: 100%;
+      background: var(--color-signal-green);
+      border-radius: var(--radius-full);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <a href="index.html" class="brand-logo">FIOSRA</a>
+      <span class="studio-badge" style="background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.25); color: var(--color-aurora-bright);">
+        Reasoning Canvas
+      </span>
+      <div class="breadcrumb-trail">
+        HIST-201 • French Revolution <span>›</span> Assignment 4: Causes of 1789
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Live Autonomy Metric Indicator -->
+      <div class="header-autonomy">
+        <div class="autonomy-text">
+          <span class="autonomy-label">Autonomy Score</span>
+          <span class="autonomy-num">82% <small style="font-size: 10px; color: var(--color-slate-light); font-weight: normal;">(Target &gt; 75%)</small></span>
+        </div>
+        <div class="mini-track">
+          <div class="mini-fill"></div>
+        </div>
+      </div>
+
+      <a href="student_trace.html" class="btn btn-primary" style="font-size: 12px; padding: 7px 14px;">
+        Review Emergent Trace →
+      </a>
+
+      <div class="profile-chip">
+        <div class="avatar" style="background: linear-gradient(135deg, var(--color-horizon-blue), var(--color-signal-green));">JH</div>
+        <span>Julian Hayes</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Workspace 2-Column Layout -->
+  <div class="workspace-layout">
+
+    <!-- Dominant Left Column: Primary Source + Writing Canvas -->
+    <main class="canvas-column">
+
+      <!-- Primary Source Context Anchor -->
+      <section class="source-anchor-card">
+        <div class="source-header">
+          <span class="source-label">Primary Source Grounding</span>
+          <span class="badge badge-info">Evidence Verification Anchor</span>
+        </div>
+        <p class="source-text">
+          "The deficit in French finances was caused by loans for the American war... The nobility and clergy are exempt from the taille, throwing the whole weight of direct taxes upon the Third Estate."
+        </p>
+        <div class="source-citation">
+          <span>📖 Arthur Young, <em>Travels in France</em> (1789)</span>
+          <span>•</span>
+          <span>Curated for NLI Entailment Checking</span>
+        </div>
+      </section>
+
+      <!-- Active Reasoning Writing Card -->
+      <section class="canvas-card">
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h1 class="canvas-prompt">Analyze the Fiscal and Social Catalysts of the French Revolution</h1>
+            <p class="canvas-instruction">Construct your historical argument citing institutional causes, social stratification, and war debts.</p>
+          </div>
+          <span class="badge badge-warning">Draft Revision: Turn 4</span>
+        </div>
+
+        <!-- Real-Time Entailment Coverage Indicators -->
+        <div class="rubric-pill-strip">
+          <div class="pill-criterion met">
+            <span>✓</span>
+            <span>Criterion A: Fiscal Crisis &amp; War Debts (Entailed)</span>
+          </div>
+          <div class="pill-criterion met">
+            <span>✓</span>
+            <span>Criterion B: Three Estates &amp; Taille Inequity (Self-Corrected)</span>
+          </div>
+          <div class="pill-criterion pending">
+            <span>○</span>
+            <span>Criterion C: Enlightenment &amp; Social Contract (Needs Institutional Challenge)</span>
+          </div>
+        </div>
+
+        <!-- Student Writing Area -->
+        <textarea class="draft-editor" spellcheck="true">
+The French Revolution erupted because the Crown was bankrupt after funding the American War of Independence and Seven Years' War.
+
+Under the Ancien Régime, the 1st and 2nd Estates paid no direct taxes, leaving the Third Estate (97% of people) to shoulder the entire taille burden.
+
+Philosophers like Rousseau inspired people to want freedom from kings.
+        </textarea>
+
+        <div class="canvas-footer">
+          <div class="word-counter">
+            <span>Words: <strong>58</strong></span>
+            <span>•</span>
+            <span>Last autosaved at 10:19:42</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" style="font-size: 11.5px; padding: 6px 12px;">
+              Revert to Turn 3
+            </button>
+            <button class="btn btn-primary" style="font-size: 11.5px; padding: 6px 14px;">
+              Check Argument with Socratic Tutor
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Right Column: Ambient Answer-Blind Socratic Tutor -->
+    <aside class="tutor-panel">
+      <div class="tutor-header">
+        <div class="tutor-title-group">
+          <h2 class="tutor-title">
+            <span>Socratic Guide</span>
+            <span class="status-dot"></span>
+          </h2>
+          <span class="tutor-tagline">Answer-Blind Autonomous Scaffolding</span>
+        </div>
+        <span class="badge badge-info">Level 1 Active</span>
+      </div>
+
+      <!-- Active Socratic Nudge -->
+      <div class="socratic-nudge-card">
+        <div class="nudge-top">
+          <span class="nudge-label">Contextual Nudge</span>
+          <span style="font-size: 10px; color: #3b82f6; font-family: var(--font-mono);">Turn 4 • 10:19:42</span>
+        </div>
+        <p class="nudge-message">
+          "You've clearly connected Rousseau to popular desire for freedom. But how did the concept of the <strong>Social Contract</strong> directly challenge the Crown's divine right to rule?"
+        </p>
+        <div class="nudge-footer">
+          <span>💡 Answer-blind probe for Criterion C (KC_HIST_ENLIGHTENMENT)</span>
+        </div>
+      </div>
+
+      <!-- 4-Rung Socratic Hint Ladder -->
+      <div class="ladder-section">
+        <div class="ladder-header">
+          <span class="ladder-title">Socratic Hint Ladder</span>
+          <span class="hint-dependency-stat">Dependency: 0.25 (1/4)</span>
+        </div>
+
+        <div class="hint-ladder">
+          <!-- Rung 1: Unlocked -->
+          <div class="hint-rung unlocked">
+            <div class="rung-row">
+              <span class="rung-num" style="color: var(--color-horizon-blue);">Rung 1 • Conceptual Probe</span>
+              <span class="badge badge-success" style="font-size: 8.5px;">Active</span>
+            </div>
+            <p class="rung-text">"What underlying fiscal and financial pressures made the French Crown insolvent by 1789?"</p>
+          </div>
+
+          <!-- Rung 2: Unlocked -->
+          <div class="hint-rung unlocked">
+            <div class="rung-row">
+              <span class="rung-num" style="color: var(--color-aurora);">Rung 2 • Key Distinction</span>
+              <span class="badge badge-info" style="font-size: 8.5px;">Reviewed</span>
+            </div>
+            <p class="rung-text">"Notice the difference between wartime debts (Seven Years War / American aid) vs ordinary revenues."</p>
+          </div>
+
+          <!-- Rung 3: Locked -->
+          <div class="hint-rung locked">
+            <div class="rung-row">
+              <span class="rung-num" style="color: var(--color-amber-dark);">Rung 3 • Structural Anchor</span>
+              <span style="font-size: 10px; color: var(--color-amber-dark);">🔒 Click to Unlock</span>
+            </div>
+            <p class="rung-text" style="color: var(--color-slate-muted);">Examine the Three Estates: Who generated wealth and who was exempt from direct taxes?</p>
+          </div>
+
+          <!-- Rung 4: Locked -->
+          <div class="hint-rung locked">
+            <div class="rung-row">
+              <span class="rung-num" style="color: var(--color-rose-dark);">Rung 4 • Source Analysis</span>
+              <span style="font-size: 10px; color: var(--color-rose-dark);">🔒 Click to Unlock</span>
+            </div>
+            <p class="rung-text" style="color: var(--color-slate-muted);">Detailed breakdown referencing Arthur Young's tax exemption citations.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Exploration Prompts & Reply -->
+      <div class="interaction-card">
+        <span style="font-size: 11px; font-weight: 600; color: var(--color-slate-muted); text-transform: uppercase;">
+          Ask Socratic Tutor for Clarification
+        </span>
+        
+        <div class="quick-probes">
+          <button class="quick-probe-btn">How does the Social Contract challenge absolutism?</button>
+          <button class="quick-probe-btn">Explain direct vs indirect taxes</button>
+        </div>
+
+        <div class="reply-input-box">
+          <input type="text" class="reply-input" placeholder="Type your reasoning question or hypothesis...">
+          <button class="btn btn-primary" style="padding: 0 14px;">Ask</button>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+</body>
+</html>
