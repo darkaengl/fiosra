@@ -80,7 +80,7 @@ tutor/
 │       ├── README_MASTER_VISION.md  # Full theoretical framework (hyperbolic geometry, Kafka, etc.)
 │       └── agents/                  # Full 6-agent research specifications
 │
-├── ui/ux/frontend/                  # Web Client Applications & HTML5/CSS Screens
+├── ui-ux/frontend/               # Web Client Applications & HTML5/CSS Screens
 ├── docker-compose.yml               # PostgreSQL 16 + pgvector container
 ├── requirements.txt                 # Backend Python dependencies
 ├── Makefile                         # Developer CLI commands

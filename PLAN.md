@@ -37,7 +37,7 @@
 | `fiosra/mvp/assignment_designer/__init__.py` | ✅ Done | Package init |
 | `fiosra/knowledge/seeds/misconceptions_algebra_geometry.seed.json` | ⏸️ Deferred | Algebra seed preserved for post-MVP math phase. Not used in current build. |
 | `fiosra/knowledge/seeds/misconceptions_language_history.seed.json` | ⬜ Not Started | **New: MVP domain seed file** — language & history misconceptions with 4-rung hints |
-| `ui/ux/frontend/README.md` | ✅ Done | Design tokens, screen inventory, UX invariants |
+| `ui-ux/frontend/README.md` | ✅ Done | Design tokens, screen inventory, UX invariants |
 
 ---
 
