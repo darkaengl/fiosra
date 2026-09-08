@@ -28,6 +28,8 @@ ui-ux/
     └── screenshots/            # Verified Headless Raster Captures
 ```
 
+![Fiosra Central Screen Hub & Design System](frontend/screenshots/hub_index.png)
+
 ---
 
 ## 🎓 1. [Student Experience Specification](student-experience/README.md)

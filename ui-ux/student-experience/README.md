@@ -66,6 +66,8 @@ The student journey is structured across three interconnected, distraction-free 
    - Previews future conceptual units (*Module 2: The Constitutional Monarchy & The Terror*) that remain locked until prerequisite competencies are demonstrated.
    - Prevents cognitive overload by hiding future complexity until foundational prerequisites are grounded.
 
+![Student Course Home & Orientation](../frontend/screenshots/student_home.png)
+
 ---
 
 ## 🖥️ Surface 2: Sectional Reasoning Canvas & Scaffolding
@@ -128,6 +130,8 @@ Fiosra distinguishes between **clerical/physical writing friction** (which deser
 - Once the sectional milestones are satisfied, the student clicks `📄 Weave Sections into Continuous Essay →`.
 - A modal preview displays the discrete blocks seamlessly compiled into continuous academic prose, showing an aggregate **92.5% NLI Entailment Score**.
 
+![Student Learning Workspace & Reasoning Canvas](../frontend/screenshots/student_workspace.png)
+
 ---
 
 ## 🖥️ Surface 3: The Emergent Path & Deliberate Finalisation
@@ -146,6 +150,8 @@ Fiosra distinguishes between **clerical/physical writing friction** (which deser
    - Displays qualified autonomy score ($82\%$), 2 self-corrections, and $0.25$ hint dependency.
    - Prominent action button: `🚀 Submit Qualified Reasoning Trace to Dr. Vance`.
    - Packages the session into **Structured Evidence Packet $Z$** for instant educator review.
+
+![The Emergent Path & Deliberate Submission](../frontend/screenshots/student_trace.png)
 
 ---
 

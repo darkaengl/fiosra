@@ -92,6 +92,8 @@ flowchart LR
    - Prominent 1-click sovereign button: `✓ Approve Evaluation & Dispatch Grade`.
    - Override controls: teacher can adjust the slider or leave direct qualitative voice notes.
 
+![AutoSCORE Review Queue](../frontend/screenshots/educator_studio_review.png)
+
 ---
 
 ## 🖥️ Tab 2: Assignment Designer & Scope De-Ambiguator Co-Pilot
@@ -146,6 +148,10 @@ flowchart TD
     - *Evidence Layer:* Evaluates DeBERTa NLI score in 32ms.
   - **Publish Button:** Locks reference solution into the encrypted Answer Vault and dispatches assignment to 24 student reasoning canvases.
 
+![Assignment Designer](../frontend/screenshots/assignment_designer.png)
+
+![Scope De-Ambiguator Co-Pilot Modal](../frontend/screenshots/assignment_designer_modal.png)
+
 ---
 
 ## 🖥️ Tab 3: Cohort Diagnostics & Misconception Heatmap
@@ -167,6 +173,8 @@ flowchart TD
      `🚀 Dispatch Targeted Micro-Scaffold to 10 Flagged Students`.
    - Sends a 2-minute interactive Socratic primer on institutional debt directly to the affected students' reasoning canvases.
 
+![Cohort Diagnostics & Misconception Heatmap](../frontend/screenshots/cohort_diagnostics.png)
+
 ---
 
 ## 🖥️ Tab 4: Curriculum Knowledge Graph Explorer
@@ -183,6 +191,8 @@ flowchart TD
    - Prerequisite ancestor tree (depth 1, depth 2).
    - Cohort mastery rate ($78\%$), average hint dependency ($0.28$), and downstream unlocked concepts.
    - Bound misconception traps and `pgvector` cosine distance distributions.
+
+![Curriculum Knowledge Graph Explorer](../frontend/screenshots/knowledge_graph.png)
 
 ---
 
