@@ -520,8 +520,11 @@ class SocraticAgent:
 **Depends on**: 7.2
 
 ```
-POST /dialogue/message          → Main student interaction endpoint
+POST /dialogue/message          → Main student interaction endpoint (answer-blind Socratic probe)
 GET  /dialogue/session/{id}     → Retrieve dialogue history for session
+POST /dialogue/step/verify      → Evaluate single section milestone claim via NLI; unlock next step
+POST /dialogue/weave-synthesis  → Weave discrete verified sections into cohesive continuous essay
+POST /dialogue/speech-to-thought→ Transcribe student verbal explanation & crystallize into draft premises
 ```
 
 ---

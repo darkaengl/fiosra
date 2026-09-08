@@ -205,7 +205,31 @@ flowchart TD
 | **Level 1** | Conceptual Principle | States relevant domain definitions or historical context without applying them to the current problem. | Attempt 2, or prior low mastery |
 | **Level 2** | Procedural Step | Suggests the immediate next sub-action without computing or writing the result. | Attempt 3 |
 | **Level 3** | Worked Analogy | Presents an isomorphic problem with completely different entities or numbers. | Attempt 4+ |
-| **Level 4** | Bottom-Out Solution | Complete explanation and solution. **Strictly locked in MVP.** | Teacher Override Only |
+#### Sectional Scaffolding & Progressive Synthesis Protocol (Decomposed Inquiry)
+
+To eliminate blank-page paralysis and working memory overload during long-form argumentative tasks, Fiosra structures writing through a **Section-by-Section Decomposed Inquiry Model**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Blueprinting: Ingest Scope & Agree on 3-4 Sections
+    Blueprinting --> Section1_Active: Unlock Section 1 Canvas
+    Section1_Active --> Section1_Verified: DeBERTa NLI Entailment ≥ 0.85
+    Section1_Verified --> Section2_Active: Auto-Unlock Section 2
+    Section2_Active --> Section2_Verified: DeBERTa NLI Entailment ≥ 0.85
+    Section2_Verified --> Section3_Active: Auto-Unlock Section 3
+    Section3_Active --> Section3_Verified: DeBERTa NLI Entailment ≥ 0.85
+    Section3_Verified --> Synthesis_Weaving: 1-Click Weave All Sections into Continuous Essay
+    Synthesis_Weaving --> [*]: Submit Reasoning Trace & Packet Z
+```
+
+1. **Section Roadmap Blueprinting:** The assignment prompt is partitioned into 3–4 ordered cognitive milestones (e.g., *1. Crown Fiscal Insolvency ➔ 2. Three Estates & Taille Inequity ➔ 3. Structural Synthesis & Conclusion*). The student reviews and locks the architectural outline before drafting.
+2. **Single-Focus Active Canvas:** The student works in an isolated canvas dedicated strictly to the active section (1–2 paragraphs). Other sections remain collapsed. The primary source view auto-scrolls and highlights excerpts pertinent to the active section.
+3. **Zero-Penalty Mechanical Writing Assists:** To alleviate physical writing fatigue without compromising cognitive struggle, the student is provided with:
+   - **Speech-to-Thought Crystallizer:** Converts spontaneous student voice explanations into structured draft premises (0% autonomy penalty; retains student's authentic vocabulary).
+   - **1-Click "Clip to Claim" Highlighter:** Selects primary source text and anchors it directly to the active argument premise as formatted evidence (0% autonomy penalty).
+   - **Rhetorical Launchpads:** Non-intrusive sentence stems (*"While popular accounts emphasize [X], institutional records reveal [Y]..."*) providing syntactic momentum without revealing content (0% autonomy penalty).
+4. **Targeted Sectional Verification:** The Integrity Agent's DeBERTa NLI verifier evaluates claims section by section. Once a section achieves entailment ($\ge 0.85$), it closes with a verified status and automatically unlocks the subsequent section.
+5. **Holistic Synthesis Weaving:** Once all sections are verified, the engine compiles the discrete arguments into a unified, continuous academic essay for final student read-through, transitional polish, and deliberate submission.
 
 ---
 
@@ -517,6 +541,8 @@ sequenceDiagram
 | `/api/assignment/draft` | POST | **Assignment Designer** | `topic`, `domain`, `grade_level`, `blooms_depth` | Generates structured assignment with subproblems, misconception-seeded distractors, and registers solutions with Answer Vault. |
 | `/api/assignment/analyze-scope` | POST | **Scope De-Ambiguator** | `raw_prompt`, `syllabus_text`, `course_id` | Evaluates prompt across 4 criteria, computes Ambiguity Index ($A_i$), and generates 3-question clarification interview. |
 | `/api/assignment/clarify-and-scaffold` | POST | **Assignment Designer** | `scope_epoch`, `selected_traps`, `source_anchor`, `kc_id` | Derives 4-rung Socratic ladder ($H_d = 0.25$), NLI premise-hypothesis rules, and registers solution in Answer Vault. |
+| `/api/dialogue/step/verify` | POST | **Integrity Agent** | `session_id`, `step_index`, `section_text`, `cited_evidence` | Evaluates isolated section claim via NLI. If entailed (≥ 0.85), marks step VERIFIED and unlocks next section. |
+| `/api/dialogue/weave-synthesis` | POST | **Dialogue Agent** | `session_id`, `verified_sections` | Stitches discrete verified sectional arguments into cohesive essay draft with transitional rhetoric. |
 
 ---
 

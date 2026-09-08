@@ -228,8 +228,17 @@ RETURN kc.kc_id, kc.name;
   │ 3. STATUS & REINFORCEMENT (○───○───●───○ Progress / Focus Toggle)     │
   └───────────────────────────────────────────────────────────────────────┘
   ```
+- **Section-by-Section Decomposed Inquiry Canvas**:
+  - Rather than facing an intimidating blank essay document, the assignment is partitioned into **3–4 architectural milestones** (e.g. *1. Crown Fiscal Insolvency ➔ 2. Three Estates & Taille Inequity ➔ 3. Structural Synthesis*).
+  - The student focuses on one isolated section at a time. The primary source viewer highlights relevant excerpts for that section, and the Dialogue Agent evaluates only that sub-claim.
+  - As each section passes DeBERTa NLI verification ($\ge 0.85$), it closes with a verified badge and unlocks the next milestone.
+- **Zero-Penalty Mechanical Writing Assists**:
+  - **Speech-to-Thought (🎙️)**: Audio transcription crystallizes spoken reasoning into draft premises (0% autonomy penalty).
+  - **1-Click "Clip to Claim" (📎)**: Highlights primary source text and anchors it as formatted citation evidence (0% autonomy penalty).
+  - **Rhetorical Launchpads (💡)**: Opt-in sentence starters providing syntactic momentum without feeding content.
+- **1-Click Synthesis Weaving**: Assembles discrete verified sections into a seamless, continuous academic draft with transitional polish before submission.
 - **Focus Mode**: One-click toggle that hides all navigation and secondary metadata, leaving only the work surface and an optional calm timer.
-- **Dialogue Interaction**: Socratic, warm, and non-judgmental. If an expression is algebraically incorrect, the tutor invites self-correction (*"Check what happened to the negative sign when distributing across parentheses."*).
+- **Dialogue Interaction**: Socratic, warm, and non-judgmental. If an expression or claim is incorrect, the tutor invites self-correction (*"Check how the Social Contract directly challenged divine right monarchy."*).
 
 ### Component 4: Integrity & Policy Guardrails (Answer Vault + CAS Verifier)
 - **Role**: Enforcing strict answer isolation and objective mathematical verification.
