@@ -42,26 +42,18 @@ Traditional learning management systems measure only terminal outcomes: whether 
 
 ### Three Non-Negotiable Invariants
 
-```
-               ┌───────────────────────────────────────────────┐
-               │         Rule 1: Strict Answer Isolation       │
-               │   Student-facing Dialogue Agent NEVER sees   │
-               │    the ground-truth answer or target thesis   │
-               └───────────────────────┬───────────────────────┘
-                                       │
-                                       ▼
-               ┌───────────────────────────────────────────────┐
-               │    Rule 2: Deterministic Over Probabilistic   │
-               │   Objective logic engines (NLI, CAS) decide   │
-               │    verdicts—never conversational LLM guesses   │
-               └───────────────────────┬───────────────────────┘
-                                       │
-                                       ▼
-               ┌───────────────────────────────────────────────┐
-               │        Rule 3: Sovereign Teacher Authority    │
-               │   AI never issues unilateral final grades;    │
-               │   Evidence Agent produces 1-click audit packet│
-               └───────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Invariants["Core Architectural Invariants"]
+        R1["Rule 1: Strict Answer Isolation<br/>Student-facing Dialogue Agent NEVER sees ground-truth answer or target thesis"]
+        R2["Rule 2: Deterministic Over Probabilistic<br/>Objective logic engines (NLI, CAS) outrank conversational LLM guesses"]
+        R3["Rule 3: Sovereign Teacher Authority<br/>AI never grades unilaterally; Evidence Agent compiles 1-click audit packet"]
+        R1 --> R2 --> R3
+    end
+    style Invariants fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px
+    style R1 fill:#eff6ff,stroke:#2563eb,stroke-width:2px
+    style R2 fill:#fef2f2,stroke:#dc2626,stroke-width:2px
+    style R3 fill:#ecfdf5,stroke:#059669,stroke-width:2px
 ```
 
 1. **Strict Answer Isolation:** The student-facing model (Dialogue Agent) *never* receives the reference answer, completed calculation, or thesis in its generation prompt. Only the isolated Integrity Agent has access to the Answer Vault. This eliminates prompt injection attacks where students attempt to extract solutions.
@@ -87,33 +79,51 @@ Traditional learning management systems measure only terminal outcomes: whether 
 
 Fiosra decouples user interfaces, core functional agents, and supporting data services into distinct architectural tiers:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       PRESENTATION & APPLICATION LAYER                      │
-│     Educator Studio (Authoring & Review)   │   Student Reasoning Canvas     │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼──────────────────────────────────────┐
-│                        THREE FUNCTIONAL AGENTS                              │
-│                                                                             │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌───────────────────┐  │
-│  │   Integrity Agent    │  │    Dialogue Agent    │  │  Evidence Agent   │  │
-│  │ 🔒 Isolated Vault   │  │ Answer-Blind Tutor   │  │ AutoSCORE Light   │  │
-│  │ Deterministic NLI    │──│ CLASS Diagnostics    │──│ Event Replay      │  │
-│  │ Hint Ceiling Logic   │  │ 4-Rung Scaffolding   │  │ Teacher Packet Z  │  │
-│  └──────────────────────┘  └──────────────────────┘  └───────────────────┘  │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼──────────────────────────────────────┐
-│                         SUPPORTING SERVICES                                 │
-│  Knowledge Layer (Neo4j + pgvector)   │   JSON Event Store (Flight Recorder)│
-│  Assignment Designer & Syllabus RAG   │   Course, Module & Cohort Context   │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼──────────────────────────────────────┐
-│                    STORAGE & INFRASTRUCTURE BACKBONE                        │
-│   PostgreSQL 16 (JSONB + pgvector)   │   Neo4j 5 (Graph)   │   Redis Cache   │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Presentation["Presentation & Application Layer"]
+        UI_T["Educator Studio (Authoring, Monitoring & Grading)"]
+        UI_S["Student Reasoning Canvas (Socratic Dialogue)"]
+    end
+
+    subgraph Agents["Three Functional Agents"]
+        direction LR
+        AG_INT["Integrity Agent<br/>• Isolated Answer Vault<br/>• Deterministic NLI & SymPy Verifiers<br/>• Hint Ceiling Calculator"]
+        AG_DIA["Dialogue Agent<br/>• Answer-Blind Socratic Tutor<br/>• CLASS Diagnostic Reflection<br/>• 4-Rung Scaffolding & Hints"]
+        AG_EVI["Evidence Agent<br/>• AutoSCORE Light Engine<br/>• Chronological Replay<br/>• 1-Click Teacher Review Dossier"]
+    end
+
+    subgraph Services["Supporting Platform Services"]
+        SRV_KNOW["Knowledge Layer (Neo4j + pgvector)"]
+        SRV_EVT["JSON Event Store (Flight Recorder)"]
+        SRV_DES["Assignment Designer & Syllabus RAG"]
+        SRV_CRS["Course, Module & Cohort Context"]
+    end
+
+    subgraph Storage["Storage & Infrastructure Backbone"]
+        DB_PG["PostgreSQL 16<br/>(Relational, JSONB & pgvector)"]
+        DB_NEO["Neo4j 5<br/>(Prerequisite DAG & Misconceptions)"]
+        CACHE_REDIS["Redis Cache"]
+    end
+
+    UI_T -->|Drafts & Approves| SRV_DES
+    SRV_DES -->|Registers Solutions| AG_INT
+    SRV_DES -->|Queries Prereqs| SRV_KNOW
+
+    UI_S -->|Submits Work| AG_INT
+    AG_INT -->|Verdict & Ceiling| AG_DIA
+    AG_DIA -->|Guided Prompt & Hints| UI_S
+
+    AG_INT -.->|Logs Verification| SRV_EVT
+    AG_DIA -.->|Logs Dialogue Turns| SRV_EVT
+    UI_S -.->|Logs Keystrokes & Inputs| SRV_EVT
+
+    SRV_EVT -->|Replay Stream| AG_EVI
+    AG_EVI -->|1-Click Dossier| UI_T
+
+    SRV_KNOW --- DB_NEO
+    SRV_KNOW --- DB_PG
+    SRV_EVT --- DB_PG
 ```
 
 ### High-Level Inter-Agent Coordination Flow
@@ -130,26 +140,22 @@ Fiosra decouples user interfaces, core functional agents, and supporting data se
 
 Building Fiosra requires strict dependency sequencing. Storage infrastructure and immutable event logging must precede verification logic, which in turn must precede dialogue generation.
 
-```
-Phase 1: Storage Infrastructure (PostgreSQL 16 + pgvector + Neo4j 5)
-   │
-   ▼
-Phase 2: Hybrid Knowledge Layer (Prerequisite DAGs + Misconception Vectors)
-   │
-   ▼
-Phase 3: JSON Event Store (Append-Only Ingestion + Timeline Replay)
-   │
-   ▼
-Phase 4: Integrity Agent (Isolated Answer Vault + NLI Claim Verifier)
-   │
-   ▼
-Phase 5: Dialogue Agent (Answer-Blind Prompts + 4-Rung Hint Hierarchy)
-   │
-   ▼
-Phase 6: Evidence Agent (AutoSCORE Light Replay + Teacher Dossier)
-   │
-   ▼
-Phase 7: Assignment Designer & Presentation UI (Next.js Studio & Canvas)
+```mermaid
+flowchart TD
+    P1["Phase 1: Storage Infrastructure<br/>PostgreSQL 16 + pgvector + Neo4j 5"] --> P2["Phase 2: Hybrid Knowledge Layer<br/>Prerequisite DAGs + Misconception Vectors"]
+    P2 --> P3["Phase 3: JSON Event Store<br/>Append-Only Ingestion + Timeline Replay"]
+    P3 --> P4["Phase 4: Integrity Agent<br/>Isolated Answer Vault + NLI Claim Verifier"]
+    P4 --> P5["Phase 5: Dialogue Agent<br/>Answer-Blind Prompts + 4-Rung Hint Hierarchy"]
+    P5 --> P6["Phase 6: Evidence Agent<br/>AutoSCORE Light Replay + Teacher Dossier"]
+    P6 --> P7["Phase 7: Assignment Designer & Presentation UI<br/>Next.js Studio & Canvas Integration"]
+
+    style P1 fill:#0f172a,color:#ffffff,stroke:#334155,stroke-width:2px
+    style P2 fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style P3 fill:#fffbeb,stroke:#d97706,stroke-width:2px
+    style P4 fill:#fef2f2,stroke:#dc2626,stroke-width:2px
+    style P5 fill:#eff6ff,stroke:#2563eb,stroke-width:2px
+    style P6 fill:#ecfdf5,stroke:#059669,stroke-width:2px
+    style P7 fill:#f8fafc,stroke:#475569,stroke-width:2px
 ```
 
 ### Phase Breakdown & Acceptance Criteria
@@ -251,15 +257,23 @@ Phase 7: Assignment Designer & Presentation UI (Next.js Studio & Canvas)
 
 Curriculum concepts form hierarchical, multi-hop dependency graphs, while student misconceptions require semantic vector similarity matching. Fiosra combines Neo4j with PostgreSQL `pgvector`:
 
-```
-┌──────────────────────────────────┐        ┌──────────────────────────────────┐
-│      Neo4j 5 Graph Engine        │        │      PostgreSQL 16 pgvector      │
-├──────────────────────────────────┤        ├──────────────────────────────────┤
-│ • Hierarchical Concept Trees     │        │ • 1536-d Misconception Vectors   │
-│ • REQUIRES_PREREQUISITE DAGs     │  ◄──►  │ • Cosine Distance Search         │
-│ • EXEMPLIFIES_MISCONCEPTION Edges│        │ • Novel Error Classification     │
-│ • Sub-millisecond Ancestor Walk  │        │ • Unclassified Error Clustering  │
-└──────────────────────────────────┘        └──────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Neo4j["Neo4j 5 Graph Engine (Cognitive Structure)"]
+        direction TB
+        C1["Concept Node A"] -->|REQUIRES_PREREQUISITE| C2["Concept Node B"]
+        M1["Misconception Node"] -->|EXEMPLIFIES_MISCONCEPTION| C1
+    end
+
+    subgraph pgvector["PostgreSQL 16 pgvector (Semantic Space)"]
+        direction TB
+        V1["Vector Embeddings (1536-d)"]
+        V2["Cosine Similarity Matching (Threshold > 0.82)"]
+        V3["Unclassified Error Clustering"]
+        V1 --> V2 --> V3
+    end
+
+    Neo4j <-->|Linked via Entity ID| pgvector
 ```
 
 - **Neo4j Graph Engine:**
@@ -300,47 +314,45 @@ Curriculum concepts form hierarchical, multi-hop dependency graphs, while studen
 > **Assignment Prompt:**  
 > *"Analyze the primary economic and social causes of the French Revolution in 1789, specifically assessing the financial crisis of the Crown and the grievances of the Third Estate."*
 
-```
-1. Rubric Configuration (Assignment Designer)
-   ├── Criterion A: Fiscal Breakdown (Debt from American War & royal deficit)
-   ├── Criterion B: Social Inequality (Taille/corvée burden on Third Estate)
-   └── Criterion C: Enlightenment Influence (Rousseau & Social Contract)
-        │
-        ▼
-2. Student Initial Submission
-   "The French Revolution started because the king wasted all the country's
-    money on palaces and people got really mad because they had to pay everything."
-        │
-        ▼
-3. Integrity Agent Verification (NLI Claim Engine)
-   ├── Criterion A: PARTIALLY_MET (Mentions spending, misses wars/deficit)
-   ├── Criterion B: PARTIALLY_MET (Mentions payment, misses Third Estate)
-   ├── Criterion C: MISSING (No philosophical connection)
-   └── Policy Decision: max_hint_level = 1 (Conceptual)
-        │
-        ▼
-4. Dialogue Agent Socratic Scaffolding
-   [Internal CLASS Reflection]: Student understands grievance intuitively.
-   Nudge toward formal social structure and specific taxes.
-   "You've highlighted a genuine grievance! What was the formal name for France's
-    social hierarchy in 1789, and which group shouldered that tax burden?"
-        │
-        ▼
-5. Student Revision & Self-Correction
-   "Under the Ancien Régime, the First and Second Estates paid no taxes,
-    leaving the Third Estate—over 97% of the population—to shoulder
-    the taille and feudal tithes without voting leverage."
-        │
-        ▼
-6. Integrity Agent Re-Verification: Criteria A & B = MET ✅
-   Event Store logs self_correction_achieved.
-        │
-        ▼
-7. Evidence Agent Synthesizes AutoSCORE Light Dossier
-   ├── Autonomy Rating: 82% (Resolved on Level 1 conceptual guidance)
-   ├── Self-Corrections: 1 validated revision
-   ├── Verbatim Citations: Exact quotes linked to rubric criteria
-   └── Teacher Review: Educator views 1-page dossier and approves grade in 12s.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as Student (Reasoning Canvas)
+    participant DA as Dialogue Agent
+    participant IA as Integrity Agent (Answer Vault)
+    participant ES as JSON Event Store
+    participant EA as Evidence Agent
+    actor T as Teacher (Educator Studio)
+
+    Note over T,IA: Step 1: Assignment Setup & Criteria Vault
+    T->>IA: Register Rubric Criteria (Fiscal Crisis, Third Estate, Enlightenment)
+    
+    Note over S,DA: Step 2: Student Initial Submission
+    S->>IA: Submits draft: "King wasted money... people poor..."
+    IA->>ES: Log event: step_attempted
+    IA->>IA: NLI Verifier Check: Crit A=PARTIAL, Crit B=PARTIAL, Crit C=MISSING
+    IA->>IA: Calculate hint ceiling: max_hint_level = 1
+    IA->>ES: Log event: verifier_evaluated
+    IA-->>DA: Verdict + Hint Ceiling (Answer-Blind)
+
+    Note over DA,S: Step 3: Socratic Scaffolding
+    DA->>DA: CLASS Diagnostic Reflection
+    DA->>S: Level 1 Conceptual Prompt: "What was the formal social structure in 1789?"
+    DA->>ES: Log event: hint_delivered (Level 1)
+
+    Note over S,IA: Step 4: Revision & Self-Correction
+    S->>IA: Revised draft: "Third Estate bore the taille and tithes..."
+    IA->>IA: NLI Verifier Check: Crit A=MET, Crit B=MET
+    IA->>ES: Log event: self_correction_achieved
+    IA-->>DA: Verdict: MET
+    DA->>S: Praise historical precision & nudge Criterion C
+
+    Note over EA,T: Step 5: AutoSCORE Light Review
+    S->>ES: Log event: session_completed
+    EA->>ES: Replay chronological event stream
+    EA->>EA: Compile Packet Z (Autonomy 82%, 1 Self-Correction, Exact Quotes)
+    EA->>T: Deliver 1-Page Teacher Review Dossier
+    T->>T: Review verbatim citations and approve grade (12s)
 ```
 
 ---
@@ -349,30 +361,27 @@ Curriculum concepts form hierarchical, multi-hop dependency graphs, while studen
 
 > **Problem Prompt:** Solve for $x$: $4(2x - 3) = 20$.
 
-```
-1. Student Attempt 1
-   Student Input: 8x - 3 = 20
-        │
-        ▼
-2. Integrity Agent Verification (SymPy CAS)
-   CAS Evaluation: (8*x - 3) - 20 != 0 ➔ Verdict: False
-   pgvector Cosine Match: MISC_DIST_PARTIAL (Similarity: 0.94)
-   "Student multiplied 4 by 2x but failed to distribute 4 to -3"
-   Hint Ceiling: max_hint_level = 1
-        │
-        ▼
-3. Dialogue Agent Socratic Prompt
-   "Great job expanding 4 × 2x = 8x! Now look closely at the parentheses:
-    did the 4 also get multiplied by the -3?"
-        │
-        ▼
-4. Student Attempt 2 (Self-Correction)
-   Student Input: 8x - 12 = 20 => 8x = 32 => x = 4
-        │
-        ▼
-5. Verification & Persistence
-   SymPy: x - 4 == 0 ➔ Verdict: True ✅
-   Event Store: self_correction_achieved appended. Autonomy rating preserved.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as Student
+    participant IA as Integrity Agent (Answer Vault)
+    participant KB as pgvector Misconceptions
+    participant DA as Dialogue Agent
+    participant ES as Event Store
+
+    S->>IA: Attempt 1: "8x - 3 = 20"
+    IA->>IA: SymPy CAS: (8x - 3) - 20 != 0 (False)
+    IA->>KB: Cosine search error text
+    KB-->>IA: Match: MISC_DIST_PARTIAL (Similarity: 0.94)
+    IA->>ES: Log event: verifier_evaluated (Partial Distribution Error)
+    IA-->>DA: Verdict: False, Hint Level 1, Misconception Tag
+    DA->>S: Socratic Nudge: "Did the 4 also multiply the -3 inside?"
+    S->>IA: Attempt 2: "8x - 12 = 20 => 8x = 32 => x = 4"
+    IA->>IA: SymPy CAS: x - 4 == 0 (True)
+    IA->>ES: Log event: self_correction_achieved
+    IA-->>DA: Verdict: True
+    DA->>S: Confirm resolution & preserve autonomy score
 ```
 
 ---
