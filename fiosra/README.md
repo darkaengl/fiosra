@@ -194,15 +194,19 @@ RETURN kc.kc_id, kc.name;
   - *Why does it matter to my course?*
   - *What should I do next?*
 
-### Component 2: Assignment Designer (Educator Studio)
-- **Role**: Authoring rubric-aligned, misconception-aware tasks.
-- **Surface**: Focused design canvas, **not a tedious administrative form**.
+### Component 2: Assignment Designer & Pedagogical Scope De-Ambiguator (Educator Studio)
+- **Role**: Authoring rubric-aligned, misconception-aware tasks from raw syllabi or unstructured prompts.
+- **Surface**: Focused design canvas with integrated **AI Pedagogical De-Ambiguator Co-Pilot Modal**, not a tedious administrative form.
 - **UX Flow**:
-  1. Define Task Purpose & Context.
-  2. Map Learning Objectives & Bloom's Taxonomy Level.
-  3. Set Policy Boundaries (e.g., AI permitted for conceptual inquiry, prohibited for direct calculation).
-  4. Scaffold Step-by-Step Milestones and Rubric Criteria.
-  5. Automatically lock bottom-out solutions into the secured Answer Vault.
+  1. **Raw Syllabus Ingestion**: Educator enters topic, uploads syllabus snippet, or types an open-ended assignment prompt.
+  2. **Automated Ambiguity Diagnosis ($A_i$)**: The system evaluates temporal bounds, Neo4j KC path reachability, causal clarity, and primary source grounding. If $A_i > 30\%$, the Co-Pilot modal triggers.
+  3. **3-Question Alignment Interview**:
+     - *Temporal & Causal Focus*: Selects epoch and mechanism from Neo4j concepts (e.g. Fiscal Insolvency 1787–1789).
+     - *Expected Misconception Traps*: Toggles active cognitive trap monitors (e.g. `MISC_TAILLE_EQUALITY`, `MISC_MORAL_VERSUS_INST`).
+     - *Primary Source Grounding*: Binds curated source text (e.g. Arthur Young excerpt) for DeBERTa-v3 NLI premise-hypothesis verification.
+  4. **Auto-Populate Scaffolding**: Automatically constructs the 4-rung Socratic hint ladder ($H_d = 0.25$) and machine-verifiable NLI rubric rules ($\ge 0.85$).
+  5. **3-Agent Simulator Sandbox**: Teacher dry-runs simulated student inputs against Dialogue, Integrity, and Evidence agents.
+  6. **Automated Vault Registration & Publish**: Locks target solutions into the encrypted Answer Vault and publishes to student reasoning canvases.
 
 ### Component 3: Student Learning Workspace & Contextual Dialogue
 - **Role**: The primary environment where thinking, struggle, and discovery occur.

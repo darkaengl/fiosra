@@ -58,15 +58,23 @@ This directory hosts the web client applications for Fiosra. The user interface 
    - Allows review and **Re-Engage** before deliberate final submission.
 
 ### 2. Educator Experience
-1. **Workspace & Course Overview (`/educator/courses`)**:
-   - Syllabus grounding, module structure, and assignment publishing.
-2. **Observability & Signal Triage (`/educator/signals`)**:
-   - Prioritized queue: `Signal -> Context -> Interpretation -> Action`.
-   - Answers: *"What deserves my attention right now?"* (No walls of charts).
-3. **Evidence Dossier Review (`/educator/dossier/[id]`)**:
+1. **Assignment Designer & Scope De-Ambiguator Co-Pilot (`assignment_designer.html`)**:
+   - Ingests raw syllabus text or unstructured assignment prompts.
+   - Evaluates multi-dimensional Ambiguity Index ($A_i$).
+   - Launches interactive 3-question alignment interview (temporal epoch, misconception traps, primary source verifier anchor).
+   - Auto-populates 4-rung Socratic hint ladder ($H_d = 0.25$) and verifiable NLI rubric rules ($\ge 0.85$).
+   - 3-Agent Live Sandbox (Dialogue, Integrity, Evidence) for dry-running student hypotheses.
+2. **AutoSCORE Evidence Review Queue (`educator_studio_review.html`)**:
    - Side-by-side view of final work + interactive Reasoning Trace.
    - Cited verbatim student quotes supporting each rubric criterion.
-   - **1-Click Grade Confirmation**.
+   - **1-Click Sovereign Grade Confirmation**.
+3. **Cohort Diagnostics & Misconception Heatmap (`cohort_diagnostics.html`)**:
+   - Class-wide cognitive aggregation across student cohorts.
+   - Diagnoses Neo4j prerequisite knowledge bottlenecks.
+   - 1-click targeted micro-primer remediation dispatcher.
+4. **Curriculum Knowledge Graph Explorer (`knowledge_graph.html`)**:
+   - Interactive SVG topological graph visualizer (Neo4j + pgvector).
+   - Prerequisite DAG edges, semantic vector proximity, and cohort mastery overlays.
 
 ---
 

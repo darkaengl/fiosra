@@ -20,7 +20,7 @@
 6. [Supporting Platform Services](#6-supporting-platform-services)
    - [Hybrid Knowledge Layer (Neo4j + pgvector)](#a-hybrid-knowledge-layer-neo4j-5--pgvector-16)
    - [JSON Event Store (Append-Only Flight Recorder)](#b-json-event-store-append-only-flight-recorder)
-   - [Assignment Designer & Syllabus RAG](#c-assignment-designer--syllabus-rag)
+   - [Assignment Designer, Syllabus Ingestion & Scope De-Ambiguator Co-Pilot](#c-assignment-designer-syllabus-ingestion--scope-de-ambiguator-co-pilot)
    - [Course, Module & Cohort Context](#d-course-module--cohort-context)
 7. [End-to-End System Walkthroughs](#7-end-to-end-system-walkthroughs)
    - [Primary MVP Walkthrough: History Essay (Humanities)](#primary-mvp-walkthrough-french-revolution-essay-analysis)
@@ -96,7 +96,7 @@ flowchart TB
     subgraph Services["Supporting Platform Services"]
         SRV_KNOW["Knowledge Layer (Neo4j + pgvector)"]
         SRV_EVT["JSON Event Store (Flight Recorder)"]
-        SRV_DES["Assignment Designer & Syllabus RAG"]
+        SRV_DES["Assignment Designer, Syllabus Ingestion<br/>& Scope De-Ambiguator Co-Pilot"]
         SRV_CRS["Course, Module & Cohort Context"]
     end
 
@@ -293,12 +293,92 @@ flowchart LR
 - **Indexing Strategy:** GIN indexing on the JSONB payload for rapid sub-second attribute lookups, paired with composite chronological indexing on `(session_id, created_at ASC)` for deterministic replay.
 - **Tamper Resistance:** Prevents retroactive alteration or deletion of student reasoning history.
 
-### C. Assignment Designer & Syllabus RAG
+### C. Assignment Designer, Syllabus Ingestion & Scope De-Ambiguator Co-Pilot
 
-- **Prerequisite Validation:** Queries the Neo4j graph to confirm all prerequisite concepts are sequenced correctly before publishing.
-- **Misconception Trapping:** Seeds multiple-choice options and scaffolding prompts with known cognitive traps from the taxonomy, turning every incorrect choice into an actionable diagnostic signal.
-- **Hint Ladder Pre-Authoring:** Generates calibrated 4-rung hint hierarchies for each problem step.
-- **Automated Vault Registration:** Automatically registers reference solutions directly with the Integrity Agent upon teacher approval.
+The Assignment Designer is the educator authoring surface that bridges raw course curricula, institutional syllabi, and Fiosra's structured reasoning engines.
+
+#### The Problem: Downstream Failures of Ill-Defined Assignment Scope
+In practice, instructors often upload ambiguous prompts or high-level syllabus statements (e.g., *"Write an essay analyzing why the French Revolution occurred and what went wrong"*). In Fiosra's architecture, deploying an ill-defined assignment triggers three fatal system failures:
+1. **Evidence Verification Failure:** DeBERTa-v3 NLI zero-shot verifiers cannot evaluate student claims without explicit premise-hypothesis bounds, target causal relationships, and curated primary source anchors.
+2. **Dialogue Agent Boundary Collapse:** Without precise knowledge component bounds, the Socratic tutor cannot distinguish between benign contextual scaffolding and answer leakage, risking collapse into an unrestricted chatbot.
+3. **Pedagogical Drift & False Positives:** Students default to vague, moralistic generalities (e.g., *"the King was wicked and peasants were hungry"*) rather than demonstrating mastery of target curriculum concepts (e.g., *Crown fiscal insolvency, Compte Rendu debt disclosure, and Third Estate taille inequity*).
+
+#### Architecture: The 4-Stage Pedagogical De-Ambiguator Co-Pilot
+
+```mermaid
+flowchart TD
+    subgraph Ingestion["1. Raw Ingestion Layer"]
+        RAW["Educator Input<br/>• Syllabus document<br/>• Freeform assignment prompt<br/>• Target learning outcome"]
+    end
+
+    subgraph Diagnosis["2. Scope & Ambiguity Evaluator (f_de-ambiguate)"]
+        A_TEMPORAL["Temporal / Epoch Boundary Check"]
+        A_GRAPH["Neo4j KC Path Resolvability Check"]
+        A_MISC["Misconception Susceptibility Analysis"]
+        A_NLI["NLI Verifier Testability & Anchor Check"]
+        SCORE["Compute Ambiguity Index (A_i ∈ [0, 100%])"]
+        RAW --> A_TEMPORAL & A_GRAPH & A_MISC & A_NLI --> SCORE
+    end
+
+    subgraph Interview["3. Socratic Educator Interview (Modal Co-Pilot)"]
+        direction TB
+        Q1["Q1: Temporal & Causal Epoch Disambiguation"]
+        Q2["Q2: Active Misconception Traps Selection"]
+        Q3["Q3: Primary Source & Ground-Truth Anchor Grounding"]
+        SCORE --"If A_i > 30%"--> Q1 --> Q2 --> Q3
+    end
+
+    subgraph Scaffolding["4. Deterministic Scaffolding Engine"]
+        LADDER["Calibrated 4-Rung Socratic Ladder (H_d = 0.25)"]
+        RULES["Verifiable NLI Entailment Rules (Premise ➔ Hypothesis)"]
+        VAULT["Encrypted Answer Vault Registration (Integrity Agent)"]
+        TRAPS["Misconception Traps (ASSOCIATED_WITH Neo4j Edges)"]
+        Q3 --> LADDER & RULES & VAULT & TRAPS
+    end
+
+    subgraph Sandbox["5. Sovereign Review & Sandbox Dry-Run"]
+        SIM["3-Agent Live Sandbox Preview<br/>(Dialogue • Integrity • Evidence)"]
+        PUB["Sovereign 1-Click Publish to Cohort Canvas"]
+        LADDER & RULES & VAULT & TRAPS --> SIM --> PUB
+    end
+
+    SCORE --"If A_i ≤ 30%"--> LADDER
+
+    style Ingestion fill:#f8fafc,stroke:#cbd5e1
+    style Diagnosis fill:#fffbeb,stroke:#f59e0b
+    style Interview fill:#eff6ff,stroke:#3b82f6
+    style Scaffolding fill:#ecfdf5,stroke:#10b981
+    style Sandbox fill:#f5f3ff,stroke:#8b5cf6
+```
+
+#### Core Components & Pipeline Specifications
+
+1. **Multi-Dimensional Ambiguity Diagnostic ($f_{\text{de-ambiguate}}$)**:
+   - Evaluates the raw prompt across four formal criteria:
+     - **Temporal / Epoch Precision:** Identifies whether the prompt binds the problem to an unambiguous timeframe or historical milestone.
+     - **Knowledge Component DAG Reachability:** Traverses the Neo4j curriculum graph to identify candidate target nodes (`KnowledgeComponent`) and validates whether required ancestors (`REQUIRES_PREREQUISITE`) have been covered.
+     - **Causal Mechanism Clarity:** Assesses whether the prompt requires concrete causal mechanisms vs. subjective opinions.
+     - **NLI Verifiability & Anchor Grounding:** Detects whether curated primary source texts or mathematical ground truths are present to establish verifiable reference premises.
+   - Outputs an **Ambiguity Index ($A_i$)**. If $A_i > 30\%$, the Educator Studio launches the **Pedagogical Scope De-Ambiguator Co-Pilot**.
+
+2. **3-Question Socratic Educator Interview**:
+   - Rather than forcing the teacher to write formal JSON schemas or mathematical rules, the Co-Pilot conducts a rapid, 3-question diagnostic interview:
+     - **Step 1: Causal Mechanism & Epoch:** Presents curated epoch options extracted from Neo4j (e.g., *Fiscal Insolvency & Estate Taxation 1787–1789* vs. *Enlightenment Public Sphere* vs. *Bastille Radicalization*).
+     - **Step 2: Expected Misconception Traps:** Surfaces known cognitive traps from the Neo4j `Misconception` catalog and `pgvector` error cluster database (e.g., `MISC_TAILLE_EQUALITY`, `MISC_MORAL_VERSUS_INST`) to prime the Integrity Agent for real-time detection.
+     - **Step 3: Primary Source Grounding:** Solicits or auto-recommends curated primary source anchors (e.g., Arthur Young's *Travels in France*, 1789) required for the DeBERTa-v3 NLI claim verifier.
+
+3. **Auto-Populated Scaffolding & Calibrated Ladder**:
+   - **4-Rung Socratic Hint Ladder:** Derives a calibrated sequence where each step increases hint dependency ($H_d$) by exactly 0.25 while maintaining strict zero-solution-leakage:
+     - *Rung 1 (Conceptual Probe):* Answer-blind inquiry into core pressures without providing mechanisms.
+     - *Rung 2 (Key Distinction):* Differentiates confusable factors (e.g., wartime loans vs. ordinary tax revenues).
+     - *Rung 3 (Structural Anchor):* Directs focus toward institutional structures (e.g., Three Estates tax exemptions).
+     - *Rung 4 (Source Analysis):* Explicit grounding in the primary source document.
+   - **Verifiable Rubric Entailment Rules:** Formulates machine-checkable NLI rules:
+     $$\text{Premise}(\text{Student Argument}) \xrightarrow{\text{NLI } \ge 0.85} \text{Hypothesis}(\text{Target Rubric Criterion})$$
+
+4. **Automated Vault Registration & Sovereign Override**:
+   - Registers ground-truth criteria, acceptable inferences, and locked bottom-out solutions directly into the isolated **Answer Vault** (Integrity Agent).
+   - Preserves **Sovereign Teacher Authority**: The instructor dry-runs the prompt in the 3-Agent Live Sandbox (simulating Dialogue, Integrity, and Evidence responses) and must explicitly confirm before publishing to student reasoning canvases.
 
 ### D. Course, Module & Cohort Context
 
@@ -435,6 +515,8 @@ sequenceDiagram
 | `/api/evidence/dossier/{session_id}` | GET | **Evidence Agent** | `session_id` | Returns Structured Packet $Z$, autonomy score, self-correction log, rubric criteria breakdown, and verbatim evidence citations. |
 | `/api/knowledge/prerequisites/{kc_id}` | GET | **Knowledge Layer** | `kc_id` | Returns list of all upstream prerequisite concept IDs via Neo4j graph traversal. |
 | `/api/assignment/draft` | POST | **Assignment Designer** | `topic`, `domain`, `grade_level`, `blooms_depth` | Generates structured assignment with subproblems, misconception-seeded distractors, and registers solutions with Answer Vault. |
+| `/api/assignment/analyze-scope` | POST | **Scope De-Ambiguator** | `raw_prompt`, `syllabus_text`, `course_id` | Evaluates prompt across 4 criteria, computes Ambiguity Index ($A_i$), and generates 3-question clarification interview. |
+| `/api/assignment/clarify-and-scaffold` | POST | **Assignment Designer** | `scope_epoch`, `selected_traps`, `source_anchor`, `kc_id` | Derives 4-rung Socratic ladder ($H_d = 0.25$), NLI premise-hypothesis rules, and registers solution in Answer Vault. |
 
 ---
 

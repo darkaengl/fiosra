@@ -426,11 +426,26 @@ GET  /integrity/hint-ceiling    → Compute current hint ceiling for session
 
 ---
 
-## 📝 Phase 6: Assignment Designer
+## 📝 Phase 6: Assignment Designer & Pedagogical Scope De-Ambiguator Co-Pilot
 > **Dependency**: Phase 3 (Knowledge Layer for KCs + misconceptions), Phase 5 (Answer Vault to register solutions). Can start partial implementation after Phase 3.
 
+### 6.0 — `assignment_designer/deambiguator.py`
+**Status**: ⬜ Not Started  
+**Depends on**: 3.2 (Neo4j KC & misconception traversal)
+
+```python
+# Multi-dimensional ambiguity evaluation pipeline ($f_{\text{de-ambiguate}}$):
+# 1. Evaluate temporal/epoch boundary clarity
+# 2. Check Neo4j KC DAG reachability & prerequisite completeness
+# 3. Detect causal mechanism ambiguity & moral hand-waving susceptibility
+# 4. Validate primary source anchor presence for DeBERTa NLI verifier
+# 5. Compute Ambiguity Index (A_i) & generate 3-question Socratic educator interview
+evaluate_prompt_ambiguity(raw_prompt: str, course_id: str) -> AmbiguityDiagnosis
+generate_clarification_interview(diagnosis: AmbiguityDiagnosis) -> List[ClarificationQuestion]
+```
+
 ### 6.1 — `assignment_designer/schemas.py`
-**Status**: ✅ Done — `QuestionSpec`, `HintRung`, `ScaffoldingStep` models complete.
+**Status**: ✅ Done — `QuestionSpec`, `HintRung`, `ScaffoldingStep` models complete. (Need to add `AmbiguityDiagnosis`, `ClarificationQuestion`, `ScopeClarificationRequest`).
 
 ### 6.2 — `assignment_designer/distractor_engine.py`
 **Status**: 🔧 Partial — stub exists  
@@ -443,25 +458,30 @@ generate_distractors(kc_id: str, domain: str) -> List[DistractorOption]
 
 ### 6.3 — `assignment_designer/generator.py`
 **Status**: 🔧 Partial — hardcoded stub  
-**Depends on**: 3.2, 6.2
+**Depends on**: 3.2, 6.0, 6.2
 
 ```python
 # Replace hardcoded stub with:
 # 1. Query Knowledge Layer for prerequisite KCs + top-3 misconceptions
 # 2. Build structured LLM prompt (structured JSON output schema)
-# 3. Parse LLM response into QuestionSpec
-# 4. Register reference_solution in Answer Vault
+# 3. Apply teacher clarifications (epoch, selected traps, primary source anchor)
+# 4. Generate 4-rung answer-blind Socratic hint ladder (Hd step: 0.25)
+# 5. Formulate verifiable NLI rubric rules (Premise ➔ Hypothesis ≥ 0.85)
+# 6. Register reference_solution in Answer Vault
 draft_question(req: QuestionDraftRequest) -> QuestionSpec
+scaffold_from_clarifications(req: ScopeClarificationRequest) -> AssignmentScaffoldingSpec
 ```
 
 ### 6.4 — `assignment_designer/router.py`
 **Status**: ⬜ Not Started  
-**Depends on**: 6.2, 6.3, 5.1 (Answer Vault registration)
+**Depends on**: 6.0, 6.2, 6.3, 5.1 (Answer Vault registration)
 
 ```
-POST /assignments/draft          → Generate QuestionSpec + register solution in vault
-GET  /assignments/{id}           → Fetch published assignment spec
-POST /assignments/{id}/publish   → Publish to module
+POST /assignments/analyze-scope       → Ingest raw syllabus/prompt, return Ambiguity Index + 3-question interview
+POST /assignments/clarify-and-scaffold→ Ingest teacher interview responses, auto-populate 4-rung ladder & NLI rules
+POST /assignments/draft               → Generate QuestionSpec + register solution in vault
+GET  /assignments/{id}                → Fetch published assignment spec
+POST /assignments/{id}/publish        → Publish to module and student canvases
 ```
 
 ---

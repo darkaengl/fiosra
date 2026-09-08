@@ -428,6 +428,238 @@
       color: var(--color-slate-muted);
       line-height: 1.4;
     }
+
+    /* Pedagogical Alignment Co-Pilot Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(14, 17, 23, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal-dialog,
+    .modal-container {
+      background: #ffffff;
+      border: 1px solid var(--color-bone-border);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 860px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.96) translateY(10px);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.active .modal-dialog,
+    .modal-overlay.active .modal-container {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--color-bone-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      background: #f8fafc;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .modal-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .modal-subtitle {
+      font-size: 12.5px;
+      color: var(--color-slate-muted);
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      color: var(--color-slate-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-xs);
+    }
+
+    .modal-close-btn:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .modal-body {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      background: #ffffff;
+    }
+
+    /* Diagnosis Alert Box */
+    .diagnosis-card {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .diagnosis-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .raw-input-quote {
+      background: #ffffff;
+      border: 1px solid #fef3c7;
+      border-radius: var(--radius-xs);
+      padding: 10px 14px;
+      font-size: 12.5px;
+      font-style: italic;
+      color: #92400e;
+    }
+
+    .gap-bullets {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: #78350f;
+    }
+
+    /* Question Interview Cards */
+    .interview-step {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .step-question-label {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .option-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .option-card-label {
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border: 1px solid var(--color-bone-border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .option-card-label:hover {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .option-card-label.selected {
+      border-color: var(--color-horizon-blue);
+      background: #eff6ff;
+    }
+
+    .option-card-label input {
+      accent-color: var(--color-horizon-blue);
+    }
+
+    .option-text-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .option-main {
+      font-size: 13px;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .option-detail {
+      font-size: 11.5px;
+      color: var(--color-slate-muted);
+    }
+
+    /* Proposal Preview */
+    .proposal-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .proposal-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #166534;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .proposal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      font-size: 12px;
+      color: #14532d;
+    }
+
+    .modal-footer {
+      padding: 20px 28px;
+      border-top: 1px solid var(--color-bone-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    }
   </style>
 </head>
 <body>
@@ -445,8 +677,8 @@
     <nav class="header-tabs">
       <a href="educator_studio_review.html" class="nav-tab">AutoSCORE Review</a>
       <a href="assignment_designer.html" class="nav-tab active">Assignment Designer</a>
-      <a href="#" class="nav-tab">Cohort Diagnostics</a>
-      <a href="#" class="nav-tab">Knowledge Graph</a>
+      <a href="cohort_diagnostics.html" class="nav-tab">Cohort Diagnostics</a>
+      <a href="knowledge_graph.html" class="nav-tab">Knowledge Graph</a>
     </nav>
 
     <div class="header-right">
@@ -544,8 +776,15 @@
     <!-- Column 2: Assignment Specification & Socratic Scaffolding -->
     <main class="editor-col">
       <div class="editor-header">
-        <h1 class="editor-title">Assignment Specification & Socratic Scaffolding</h1>
-        <p class="editor-subtitle">Define primary source anchors, 4-rung hint ladders, and verifiable NLI rubric rules</p>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+          <div>
+            <h1 class="editor-title">Assignment Specification & Socratic Scaffolding</h1>
+            <p class="editor-subtitle">Define primary source anchors, 4-rung hint ladders, and verifiable NLI rubric rules</p>
+          </div>
+          <button class="btn btn-primary" id="openModalBtn" style="white-space: nowrap; font-size: 12.5px; padding: 10px 16px; gap: 8px; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);">
+            ✨ Scope De-Ambiguator Co-Pilot
+          </button>
+        </div>
       </div>
 
       <!-- Assignment Title -->
@@ -713,6 +952,193 @@
     </aside>
 
   </div>
+
+  <!-- Pedagogical Alignment Co-Pilot (Scope De-Ambiguator Modal) -->
+  <div class="modal-overlay" id="alignmentModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">✨ Pedagogical Scope De-Ambiguator Co-Pilot</h2>
+          <p class="modal-subtitle">AI analysis detected ambiguities in raw assignment syllabus. Clarify scope to generate answer-blind guardrails.</p>
+        </div>
+        <button class="modal-close-btn" id="closeModalBtn" aria-label="Close modal">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Diagnosis Alert Box -->
+        <div class="diagnosis-card">
+          <div class="diagnosis-top">
+            <span style="font-size: 11px; font-weight: 700; color: #b45309; text-transform: uppercase; letter-spacing: 0.5px;">
+              ⚠️ Raw Prompt Ambiguity Diagnosis
+            </span>
+            <span class="badge badge-warning">68% Ambiguity Rating</span>
+          </div>
+          <div class="raw-input-quote">
+            "Write an essay about the causes of the French Revolution and discuss what went wrong."
+          </div>
+          <div class="gap-bullets">
+            <div>• <strong>Temporal Gap:</strong> No timeframe specified (1789 pre-crisis vs 1793 Reign of Terror vs Directory).</div>
+            <div>• <strong>Causal Risk:</strong> High probability students default to moral tropes ("King was evil") without fiscal evidence.</div>
+            <div>• <strong>Verification Blindspot:</strong> Missing primary source bounding; DeBERTa NLI cannot reliably grade without anchor texts.</div>
+          </div>
+        </div>
+
+        <!-- 3-Question Clarification Interview -->
+        <!-- Question 1: Temporal Focus -->
+        <div class="interview-step">
+          <label class="step-question-label">
+            <span class="badge badge-info">Step 1</span>
+            Which specific causal mechanism and epoch should the reasoning canvas target?
+          </label>
+          <div class="option-cards">
+            <label class="option-card-label selected">
+              <input type="radio" name="scope_epoch" value="fiscal" checked>
+              <div class="option-text-group">
+                <span class="option-main">Fiscal Insolvency & Estate Taxation (1787–1789)</span>
+                <span class="option-detail">Focuses on American War debt, Necker's Compte Rendu, and Third Estate taille burden.</span>
+              </div>
+            </label>
+            <label class="option-card-label">
+              <input type="radio" name="scope_epoch" value="ideological">
+              <div class="option-text-group">
+                <span class="option-main">Enlightenment Ideology & Public Sphere (1750–1789)</span>
+                <span class="option-detail">Focuses on Rousseau, Montesquieu, and salon political pamphlets.</span>
+              </div>
+            </label>
+            <label class="option-card-label">
+              <input type="radio" name="scope_epoch" value="radical">
+              <div class="option-text-group">
+                <span class="option-main">Radicalization & The Great Fear (Summer 1789)</span>
+                <span class="option-detail">Focuses on harvest failure, bread riots, and the storming of the Bastille.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Question 2: Expected Student Misconceptions -->
+        <div class="interview-step">
+          <label class="step-question-label">
+            <span class="badge badge-info">Step 2</span>
+            Which misconception traps should the Integrity Agent actively monitor during dialogue?
+          </label>
+          <div class="option-cards">
+            <label class="option-card-label selected">
+              <input type="checkbox" checked>
+              <div class="option-text-group">
+                <span class="option-main">MISC_TAILLE_EQUALITY: Third Estate carried equal tax burden to Clergy/Nobility</span>
+                <span class="option-detail">Trigger: Deploys Rung 3 Structural Anchor highlighting tax exemptions.</span>
+              </div>
+            </label>
+            <label class="option-card-label selected">
+              <input type="checkbox" checked>
+              <div class="option-text-group">
+                <span class="option-main">MISC_MORAL_VERSUS_INST: Attributing collapse purely to monarch's personal malice</span>
+                <span class="option-detail">Trigger: Deploys Rung 1 Conceptual Probe on structural budget deficit.</span>
+              </div>
+            </label>
+            <label class="option-card-label">
+              <input type="checkbox">
+              <div class="option-text-group">
+                <span class="option-main">MISC_BASTILLE_START: Believing the Revolution began exclusively with the Bastille</span>
+                <span class="option-detail">Trigger: Deploys Rung 2 Key Distinction on the Assembly of Notables (1787).</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Question 3: Primary Source Grounding -->
+        <div class="interview-step">
+          <label class="step-question-label">
+            <span class="badge badge-info">Step 3</span>
+            Curated Primary Source Anchor for NLI Entailment Verifier:
+          </label>
+          <div class="option-cards">
+            <label class="option-card-label selected">
+              <input type="radio" name="source_anchor" value="young" checked>
+              <div class="option-text-group">
+                <span class="option-main">Arthur Young, <em>Travels in France</em> (1789)</span>
+                <span class="option-detail">Direct testimony on war deficit, peasant taxation, and feudal privileges. (Recommended)</span>
+              </div>
+            </label>
+            <label class="option-card-label">
+              <input type="radio" name="source_anchor" value="cahiers">
+              <div class="option-text-group">
+                <span class="option-main">Cahiers de Doléances (Third Estate Petitions, 1789)</span>
+                <span class="option-detail">Grievances demanding equal voting by head and tax reform.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Generated Proposal Summary -->
+        <div class="proposal-box">
+          <div class="proposal-title">⚡ Auto-Generated Scaffolding Architecture</div>
+          <div class="proposal-grid">
+            <div>
+              <strong>Target Graph Node:</strong> <code>KC_HIST_FRENCH_DEBT</code><br>
+              <strong>Prerequisite Anchors:</strong> <code>KC_HIST_THREE_ESTATES</code>, <code>KC_HIST_ANCIEN_REGIME</code>
+            </div>
+            <div>
+              <strong>Socratic Ladder:</strong> 4 Rungs (Hd step: 0.25, Zero Solution Leakage)<br>
+              <strong>NLI Entailment Rules:</strong> 2 Verifiable Premise-Hypothesis Rules (≥ 0.85)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelModalBtn">Dismiss</button>
+        <button class="btn btn-primary" id="applyModalBtn">🚀 Apply Alignment & Auto-Populate Scaffolding</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById('alignmentModal');
+    const openBtn = document.getElementById('openModalBtn');
+    const closeBtn = document.getElementById('closeModalBtn');
+    const cancelBtn = document.getElementById('cancelModalBtn');
+    const applyBtn = document.getElementById('applyModalBtn');
+
+    if (openBtn) {
+      openBtn.addEventListener('click', () => modal.classList.add('active'));
+    }
+    // Auto-open if #modal in URL
+    if (window.location.hash === '#modal' || window.location.search.includes('modal=true')) {
+      modal.classList.add('active');
+    }
+    const closeModal = () => modal.classList.remove('active');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        closeModal();
+      });
+    }
+    // Close on backdrop click
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+
+    // Interactive card selection
+    document.querySelectorAll('.option-card-label').forEach(label => {
+      const input = label.querySelector('input');
+      if (input) {
+        input.addEventListener('change', () => {
+          if (input.type === 'radio') {
+            document.querySelectorAll(`input[name="${input.name}"]`).forEach(r => {
+              r.closest('.option-card-label').classList.remove('selected');
+            });
+            label.classList.add('selected');
+          } else if (input.type === 'checkbox') {
+            label.classList.toggle('selected', input.checked);
+          }
+        });
+      }
+    });
+  </script>
 
 </body>
 </html>
