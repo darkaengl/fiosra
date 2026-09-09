@@ -2,6 +2,10 @@
 name = "fiosra"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = [
+    "pypdf>=6.18.0",
+    "python-multipart>=0.0.32",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

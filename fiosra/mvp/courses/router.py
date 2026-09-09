@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 
 from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.courses.schemas import (
@@ -11,6 +11,7 @@ from fiosra.mvp.courses.schemas import (
     CourseResponse,
     ModuleCreate,
     ModuleResponse,
+    ResourceCreateRequest,
     SyllabusChunkResponse,
     SyllabusIngestRequest,
 )
@@ -19,6 +20,7 @@ from fiosra.mvp.courses.service import course_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses", tags=["Courses & Modules Grounding"])
+
 
 
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
@@ -126,7 +128,152 @@ async def ingest_syllabus(course_id: UUID, payload: SyllabusIngestRequest) -> li
         ) from e
 
 
+@router.get("/{course_id}/syllabus", response_model=list[SyllabusChunkResponse])
+async def list_course_syllabus(
+    course_id: UUID,
+    module_id: Annotated[UUID | None, Query()] = None,
+) -> list[SyllabusChunkResponse]:
+    """
+    Lists all ingested syllabus reading resources and primary sources for a course,
+    optionally filtered by module_id.
+    """
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    return await syllabus_parser.list_chunks(course_id=course_id, module_id=module_id)
+
+
+@router.post(
+    "/{course_id}/modules/{module_id}/resources",
+    response_model=list[SyllabusChunkResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_module_resource(
+    course_id: UUID,
+    module_id: UUID,
+    payload: ResourceCreateRequest,
+) -> list[SyllabusChunkResponse]:
+    """
+    Adds text, markdown excerpts, or external link reading material directly attached
+    to a specific course module. Embeds into pgvector and grounds to Neo4j KCs.
+    """
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    module = await course_service.get_module(course_id, module_id)
+    if not module:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Module '{module_id}' not found in course '{course_id}'.",
+        )
+
+    try:
+        return await syllabus_parser.ingest_syllabus(
+            course_id=course_id,
+            content=payload.content,
+            title=payload.title,
+            module_id=module_id,
+            domain=course.domain,
+            resource_type=payload.resource_type,
+            source_url=payload.source_url,
+        )
+    except Exception as e:
+        logger.exception("Error ingesting module resource")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add module resource: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/{course_id}/modules/{module_id}/resources/upload",
+    response_model=list[SyllabusChunkResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_module_resource_file(
+    course_id: UUID,
+    module_id: UUID,
+    file: Annotated[UploadFile, File(...)],
+    title: Annotated[str | None, Form()] = None,
+) -> list[SyllabusChunkResponse]:
+    """
+    Uploads a PDF, Markdown, or text document for a module.
+    Extracts text using pypdf / UTF-8 decode, generates vector embeddings, and stores in pgvector.
+    """
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    module = await course_service.get_module(course_id, module_id)
+    if not module:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Module '{module_id}' not found in course '{course_id}'.",
+        )
+
+    try:
+        raw_bytes = await file.read()
+        is_pdf = bool(file.filename and file.filename.lower().endswith(".pdf")) or (
+            file.content_type == "application/pdf"
+        )
+        extracted_text = syllabus_parser.extract_text(raw_bytes, is_pdf=is_pdf)
+        if not extracted_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No readable text could be extracted from uploaded file.",
+            )
+
+        doc_title = title or file.filename or "Uploaded Resource"
+        resource_type = "pdf" if is_pdf else "document"
+
+        return await syllabus_parser.ingest_syllabus(
+            course_id=course_id,
+            content=extracted_text,
+            title=doc_title,
+            module_id=module_id,
+            domain=course.domain,
+            resource_type=resource_type,
+            source_url=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error uploading module resource file")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process uploaded file: {e!s}",
+        ) from e
+
+
+@router.delete("/{course_id}/resources/{chunk_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_resource_chunk(course_id: UUID, chunk_id: UUID) -> None:
+    """
+    Deletes an attached reading or primary source chunk from pgvector.
+    """
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    deleted = await syllabus_parser.delete_chunk(chunk_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Resource chunk '{chunk_id}' not found.",
+        )
+
+
 @router.get("/{course_id}/syllabus/search", response_model=list[SyllabusChunkResponse])
+
 async def search_syllabus(
     course_id: UUID,
     query: Annotated[str, Query(min_length=2, description="Semantic search query")],

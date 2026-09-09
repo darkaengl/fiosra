@@ -133,6 +133,8 @@ class SyllabusParser:
         module_id: UUID | str | None = None,
         domain: str = "History",
         is_pdf: bool = False,
+        resource_type: str = "document",
+        source_url: str | None = None,
     ) -> list[SyllabusChunkResponse]:
         """
         Parses, chunks, embeds, grounds, and stores syllabus chunks in PostgreSQL with pgvector.
@@ -144,11 +146,11 @@ class SyllabusParser:
 
         insert_sql = text("""
             INSERT INTO syllabus_chunks (
-                chunk_id, course_id, module_id, title, content, kc_id, embedding, created_at
+                chunk_id, course_id, module_id, title, content, kc_id, embedding, resource_type, source_url, created_at
             ) VALUES (
-                :chunk_id, :course_id, :module_id, :title, :content, :kc_id, :embedding, NOW()
+                :chunk_id, :course_id, :module_id, :title, :content, :kc_id, :embedding, :resource_type, :source_url, NOW()
             )
-            RETURNING chunk_id, course_id, module_id, title, content, kc_id, created_at;
+            RETURNING chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at;
         """)
 
         async with AsyncSessionLocal() as session:
@@ -169,6 +171,8 @@ class SyllabusParser:
                         "content": c_text,
                         "kc_id": kc_id,
                         "embedding": str(embedding),
+                        "resource_type": resource_type,
+                        "source_url": source_url,
                     },
                 )
                 row = result.mappings().first()
@@ -181,6 +185,8 @@ class SyllabusParser:
                             title=row["title"],
                             content=row["content"],
                             kc_id=row["kc_id"],
+                            resource_type=row.get("resource_type") or resource_type,
+                            source_url=row.get("source_url"),
                             created_at=row["created_at"],
                             similarity=1.0,
                         )
@@ -206,7 +212,7 @@ class SyllabusParser:
         query_vector = generate_deterministic_embedding(query)
 
         query_sql = text("""
-            SELECT chunk_id, course_id, module_id, title, content, kc_id, created_at,
+            SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at,
                    1.0 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
             FROM syllabus_chunks
             WHERE course_id = :course_id
@@ -214,7 +220,6 @@ class SyllabusParser:
             ORDER BY embedding <=> CAST(:query_vec AS vector) ASC
             LIMIT :top_k;
         """)
-
 
         async with AsyncSessionLocal() as session:
             result = await session.execute(
@@ -236,11 +241,69 @@ class SyllabusParser:
                 title=r["title"],
                 content=r["content"],
                 kc_id=r["kc_id"],
+                resource_type=r.get("resource_type") or "document",
+                source_url=r.get("source_url"),
                 created_at=r["created_at"],
                 similarity=round(float(r["similarity"]), 4) if r["similarity"] is not None else None,
             )
             for r in rows
         ]
 
+    @classmethod
+    async def list_chunks(
+        cls,
+        course_id: UUID | str,
+        module_id: UUID | str | None = None,
+    ) -> list[SyllabusChunkResponse]:
+        """
+        Lists all ingested syllabus and primary source reading chunks for a course.
+        """
+        query_sql = text("""
+            SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at
+            FROM syllabus_chunks
+            WHERE course_id = :course_id
+              AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
+            ORDER BY created_at ASC;
+        """)
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                query_sql,
+                {
+                    "course_id": str(course_id),
+                    "module_id": str(module_id) if module_id else None,
+                },
+            )
+            rows = result.mappings().all()
+
+        return [
+            SyllabusChunkResponse(
+                chunk_id=r["chunk_id"],
+                course_id=r["course_id"],
+                module_id=r["module_id"],
+                title=r["title"],
+                content=r["content"],
+                kc_id=r["kc_id"],
+                resource_type=r.get("resource_type") or "document",
+                source_url=r.get("source_url"),
+                created_at=r["created_at"],
+                similarity=1.0,
+            )
+            for r in rows
+        ]
+
+    @classmethod
+    async def delete_chunk(cls, chunk_id: UUID | str) -> bool:
+        """
+        Deletes a specific resource or reading chunk by chunk_id.
+        """
+        delete_sql = text("DELETE FROM syllabus_chunks WHERE chunk_id = :chunk_id RETURNING chunk_id;")
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(delete_sql, {"chunk_id": str(chunk_id)})
+            deleted = result.scalar() is not None
+            await session.commit()
+            return deleted
+
 
 syllabus_parser = SyllabusParser()
+

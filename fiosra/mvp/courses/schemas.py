@@ -60,8 +60,18 @@ class SyllabusChunkResponse(BaseModel):
     title: str | None = None
     content: str
     kc_id: str | None = None
+    resource_type: str = "document"
+    source_url: str | None = None
     created_at: datetime
     similarity: float | None = None
+
+
+class ResourceCreateRequest(BaseModel):
+    title: str = Field(..., description="Resource or reading excerpt title")
+    content: str = Field(..., description="Text content or pedagogical summary")
+    resource_type: str = Field(default="document", description="Type: document, primary_source, or external_link")
+    source_url: str | None = Field(default=None, description="Optional external URL link")
+    module_id: UUID | None = Field(default=None, description="Target module ID to bind resource to")
 
 
 class CohortStudentMetrics(BaseModel):

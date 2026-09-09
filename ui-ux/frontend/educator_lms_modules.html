@@ -380,6 +380,116 @@
       font-weight: 700;
       color: #ffffff;
     }
+
+    /* Module Resources Section */
+    .resources-section {
+      padding: 14px 20px;
+      background: rgba(15, 18, 25, 0.6);
+      border-top: 1px solid var(--color-graphite-border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .resources-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .resources-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .resource-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--color-obsidian);
+      border: 1px solid var(--color-graphite-border);
+      border-radius: var(--radius-sm);
+      gap: 12px;
+      transition: border-color 0.15s ease;
+    }
+
+    .resource-item:hover {
+      border-color: rgba(59, 130, 246, 0.4);
+    }
+
+    .resource-left {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .resource-icon {
+      font-size: 16px;
+      margin-top: 2px;
+    }
+
+    .resource-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .resource-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .resource-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .resource-excerpt {
+      font-size: 11.5px;
+      color: var(--color-slate-light);
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .resource-tabs {
+      display: flex;
+      gap: 8px;
+      background: var(--color-obsidian);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-graphite-border);
+    }
+
+    .resource-tab-btn {
+      flex: 1;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      color: var(--color-slate-light);
+      border-radius: var(--radius-xs);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+
+    .resource-tab-btn.active {
+      background: rgba(59, 130, 246, 0.2);
+      color: #ffffff;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -803,9 +913,141 @@
     </div>
   </div>
 
+  <!-- Add Course Material Modal -->
+  <div id="addResourceModal" class="modal-overlay" onclick="closeAddResourceModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="width: 640px;">
+      <div class="modal-header">
+        <div class="modal-title">📚 Ingest Course Material &amp; Grounding Corpus</div>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeAddResourceModal()">✕</button>
+      </div>
+
+      <div>
+        <div style="font-size: 13px; color: var(--color-slate-light); line-height: 1.5;">
+          Attach reading material, primary sources, PDF documents, or external research links to this unit. Content is chunked, embedded into <strong style="color: var(--color-signal-green);">1536-dim pgvector</strong> embeddings, and grounded to Neo4j Knowledge Components.
+        </div>
+        <div id="resourceModalTargetModule" style="margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--color-horizon-bright); background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); padding: 6px 12px; border-radius: var(--radius-xs);">
+          Target Module: Unit 01
+        </div>
+      </div>
+
+      <!-- Mode Tabs -->
+      <div class="resource-tabs">
+        <button type="button" id="tabResText" class="resource-tab-btn active" onclick="switchResourceMode('text')">
+          ✍️ Paste Text / Excerpt
+        </button>
+        <button type="button" id="tabResPdf" class="resource-tab-btn" onclick="switchResourceMode('pdf')">
+          📄 Upload PDF / Doc
+        </button>
+        <button type="button" id="tabResLink" class="resource-tab-btn" onclick="switchResourceMode('link')">
+          🔗 External URL Link
+        </button>
+      </div>
+
+      <form id="addResourceForm" onsubmit="submitAddResource(event)" style="display: flex; flex-direction: column; gap: 14px;">
+        <input type="hidden" id="resourceTargetModuleId" value="">
+
+        <!-- Mode 1: Paste Text -->
+        <div id="resPanelText" style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Material Title <span style="color: var(--color-rose);">*</span>
+            </label>
+            <input id="resTextTitle" type="text" placeholder="e.g. Sir John Marshall 1931 Mohenjo-daro Excavation Report"
+                   style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Resource Classification
+            </label>
+            <select id="resTextType" style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px;">
+              <option value="primary_source">Primary Source Excerpt</option>
+              <option value="document">Secondary Scholarly Analysis / Reading Notes</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Content / Excerpt Text (Markdown supported) <span style="color: var(--color-rose);">*</span>
+            </label>
+            <textarea id="resTextContent" rows="6" placeholder="Paste historical excerpt, excavation report, or study notes..."
+                      style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; resize: vertical; line-height: 1.5;"></textarea>
+          </div>
+        </div>
+
+        <!-- Mode 2: Upload PDF -->
+        <div id="resPanelPdf" style="display: none; flex-direction: column; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Select Document File (.pdf, .txt, .md) <span style="color: var(--color-rose);">*</span>
+            </label>
+            <div style="border: 2px dashed var(--color-graphite-border); border-radius: var(--radius-sm); padding: 20px; text-align: center; background: var(--color-obsidian);">
+              <div style="font-size: 32px; margin-bottom: 8px;">📑</div>
+              <input type="file" id="resFileInput" accept=".pdf,.txt,.md,.markdown" style="font-size: 12.5px; color: var(--color-slate-light); margin: 0 auto; display: block;">
+              <div style="font-size: 11.5px; color: var(--color-slate-muted); margin-top: 8px;">
+                pypdf automatically extracts text, parses semantic headings, and embeds into pgvector.
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Document Display Title (Optional)
+            </label>
+            <input id="resFileTitle" type="text" placeholder="Defaults to file name if left blank"
+                   style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+          </div>
+        </div>
+
+        <!-- Mode 3: External Link -->
+        <div id="resPanelLink" style="display: none; flex-direction: column; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              External URL <span style="color: var(--color-rose);">*</span>
+            </label>
+            <input id="resLinkUrl" type="url" placeholder="https://asi.nic.in/indus-valley-excavations"
+                   style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Resource Title <span style="color: var(--color-rose);">*</span>
+            </label>
+            <input id="resLinkTitle" type="text" placeholder="e.g. Archaeological Survey of India: Mohenjo-daro Archive"
+                   style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Pedagogical Notes &amp; Summary (Used for Vector Embeddings) <span style="color: var(--color-rose);">*</span>
+            </label>
+            <textarea id="resLinkContent" rows="4" placeholder="Summarize key architectural, stratigraphical, or chronological insights from this external resource..."
+                      style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; resize: vertical; line-height: 1.5;"></textarea>
+          </div>
+        </div>
+
+        <div id="addResourceFeedback" style="display: none; font-size: 12px; padding: 8px 12px; border-radius: var(--radius-xs);"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--color-graphite-border); padding-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddResourceModal()">Cancel</button>
+          <button type="submit" id="btnSubmitResource" class="btn btn-primary">
+            <span>🚀 Ingest &amp; Ground Material</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     let currentCourseId = null;
     let currentCourseData = null;
+    let allCourseResources = [];
+    let currentResourceMode = 'text';
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
     function switchTab(tab) {
       if (tab === 'modules') {
@@ -837,6 +1079,42 @@
       if (feedback) feedback.style.display = 'none';
     }
 
+    function openAddResourceModal(moduleId, moduleTitle) {
+      if (!currentCourseId) {
+        alert('Please open a course first.');
+        return;
+      }
+      document.getElementById('resourceTargetModuleId').value = moduleId;
+      document.getElementById('resourceModalTargetModule').textContent = `Target Module: ${moduleTitle || 'Curriculum Unit'}`;
+      switchResourceMode('text');
+      document.getElementById('addResourceForm').reset();
+      const feedback = document.getElementById('addResourceFeedback');
+      if (feedback) feedback.style.display = 'none';
+      document.getElementById('addResourceModal').classList.add('active');
+    }
+
+    function closeAddResourceModal(e) {
+      if (e && e.target !== e.currentTarget && e.type === 'click') return;
+      document.getElementById('addResourceModal').classList.remove('active');
+    }
+
+    function switchResourceMode(mode) {
+      currentResourceMode = mode;
+      ['text', 'pdf', 'link'].forEach(m => {
+        const btn = document.getElementById(`tabRes${m.charAt(0).toUpperCase() + m.slice(1)}`);
+        const panel = document.getElementById(`resPanel${m.charAt(0).toUpperCase() + m.slice(1)}`);
+        if (btn && panel) {
+          if (m === mode) {
+            btn.classList.add('active');
+            panel.style.display = 'flex';
+          } else {
+            btn.classList.remove('active');
+            panel.style.display = 'none';
+          }
+        }
+      });
+    }
+
     async function loadCourseWorkspace() {
       const urlParams = new URLSearchParams(window.location.search);
       currentCourseId = urlParams.get('course_id');
@@ -861,16 +1139,26 @@
           <span id="bannerStudentCount">0 ENROLLED STUDENTS</span>
         `;
         document.getElementById('courseBannerDetails').innerHTML = `
-          <span>📖 Syllabus: <em>${course.syllabus_context || 'Curriculum initialized in PostgreSQL &amp; Neo4j.'}</em></span>
+          <span>📖 Syllabus: <em>${escapeHtml(course.syllabus_context || 'Curriculum initialized in PostgreSQL & Neo4j.')}</em></span>
           <span>•</span>
           <span id="bannerModulesCount">🧬 Neo4j Prerequisite DAG: ${(course.modules ? course.modules.length : 0)} Modules Configured</span>
         `;
         document.getElementById('btnCoPilotAssignment').href = `assignment_designer.html?course_id=${currentCourseId}`;
 
-        // 2. Render Modules
+        // 2. Fetch Syllabus Resources
+        try {
+          const sylRes = await fetch(`/courses/${currentCourseId}/syllabus`);
+          if (sylRes.ok) {
+            allCourseResources = await sylRes.json();
+          }
+        } catch (sErr) {
+          console.warn('Syllabus resources load note:', sErr);
+        }
+
+        // 3. Render Modules
         renderModulesList(course.modules || []);
 
-        // 3. Load Roster
+        // 4. Load Roster
         try {
           const rosterRes = await fetch(`/courses/${currentCourseId}/roster`);
           if (rosterRes.ok) {
@@ -899,7 +1187,7 @@
                       <div class="student-cell">
                         <div class="student-avatar" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6);">${initials}</div>
                         <div>
-                          <div style="font-weight: 600; color: #fff;">${stu.student_id}</div>
+                          <div style="font-weight: 600; color: #fff;">${escapeHtml(stu.student_id)}</div>
                           <div style="font-size: 11px; color: var(--color-slate-muted);">${stu.session_count} Sessions Logged</div>
                         </div>
                       </div>
@@ -923,7 +1211,7 @@
                       </span>
                     </td>
                     <td>
-                      <a href="student_trace.html?student_id=${stu.student_id}&course_id=${currentCourseId}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;">
+                      <a href="student_trace.html?student_id=${encodeURIComponent(stu.student_id)}&course_id=${currentCourseId}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;">
                         Trace ↗
                       </a>
                     </td>
@@ -962,6 +1250,7 @@
 
       container.innerHTML = '';
       modules.sort((a, b) => a.position - b.position).forEach((m, idx) => {
+        const modResources = allCourseResources.filter(r => r.module_id === m.module_id);
         const modEl = document.createElement('div');
         modEl.className = 'module-card';
         modEl.innerHTML = `
@@ -969,19 +1258,81 @@
             <div class="module-title-group">
               <span class="module-index-badge">UNIT 0${idx + 1}</span>
               <div>
-                <div class="module-title">${m.title}</div>
+                <div class="module-title">${escapeHtml(m.title)}</div>
                 <div style="font-size: 12px; color: var(--color-slate-light); margin-top: 2px;">
-                  ${m.description || 'Pedagogical scope and learning frontier'}
+                  ${escapeHtml(m.description || 'Pedagogical scope and learning frontier')}
                 </div>
               </div>
             </div>
-            <span class="module-badge-status status-active">Active • Position ${m.position}</span>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <button class="btn btn-secondary" onclick="openAddResourceModal('${m.module_id}', '${escapeHtml(m.title)}')" style="font-size: 11px; padding: 4px 10px;">
+                📄 Add Material
+              </button>
+              <span class="module-badge-status status-active">Active • Position ${m.position}</span>
+            </div>
           </div>
           ${m.learning_objectives && m.learning_objectives.length > 0 ? `
             <div style="padding: 10px 18px; font-size: 12px; color: var(--color-slate-light); background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--color-graphite-border);">
-              <strong>Learning Objectives:</strong> ${m.learning_objectives.join(' • ')}
+              <strong>Learning Objectives:</strong> ${m.learning_objectives.map(escapeHtml).join(' • ')}
             </div>
           ` : ''}
+
+          <!-- Grounded Readings & Primary Sources Section -->
+          <div class="resources-section">
+            <div class="resources-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 14px;">📚</span>
+                <span style="font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.3px;">GROUNDED READINGS &amp; PRIMARY SOURCES</span>
+                <span class="badge badge-info" style="font-size: 10px;">${modResources.length} Ingested</span>
+              </div>
+              <button class="btn btn-secondary" onclick="openAddResourceModal('${m.module_id}', '${escapeHtml(m.title)}')" style="font-size: 11px; padding: 3px 8px;">
+                + Ingest Material
+              </button>
+            </div>
+            ${modResources.length > 0 ? `
+              <div class="resources-list">
+                ${modResources.map(r => `
+                  <div class="resource-item">
+                    <div class="resource-left">
+                      <span class="resource-icon">${r.resource_type === 'pdf' ? '📕' : r.resource_type === 'external_link' ? '🔗' : '📄'}</span>
+                      <div class="resource-details">
+                        <div class="resource-title-row">
+                          <span class="resource-name">${escapeHtml(r.title || 'Curriculum Material')}</span>
+                          <span class="badge" style="${r.resource_type === 'pdf' ? 'background: rgba(239, 68, 68, 0.15); color: #f87171;' : r.resource_type === 'external_link' ? 'background: rgba(59, 130, 246, 0.15); color: #60a5fa;' : 'background: rgba(168, 85, 247, 0.15); color: #c084fc;'}">
+                            ${r.resource_type === 'pdf' ? 'PDF Document' : r.resource_type === 'external_link' ? 'External Link' : 'Primary Source Excerpt'}
+                          </span>
+                          <span style="font-size: 10.5px; color: var(--color-signal-green); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                            ● 1536-dim pgvector Grounded
+                          </span>
+                          ${r.source_url ? `
+                            <a href="${escapeHtml(r.source_url)}" target="_blank" style="font-size: 11px; color: var(--color-horizon-bright); text-decoration: none; margin-left: 6px;">
+                              Open Link ↗
+                            </a>
+                          ` : ''}
+                        </div>
+                        <div class="resource-excerpt">
+                          ${escapeHtml((r.content || '').substring(0, 150))}${(r.content || '').length > 150 ? '...' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="resource-actions">
+                      <button class="btn btn-secondary" onclick="deleteResource('${r.chunk_id}')" title="Delete this chunk" style="padding: 3px 8px; font-size: 11px; color: var(--color-rose);">
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div style="padding: 10px 14px; font-size: 12px; color: var(--color-slate-muted); font-style: italic; display: flex; align-items: center; justify-content: space-between;">
+                <span>No primary sources, PDFs, or external links attached to this module yet.</span>
+                <button class="btn btn-secondary" onclick="openAddResourceModal('${m.module_id}', '${escapeHtml(m.title)}')" style="font-size: 11px; padding: 3px 8px;">
+                  + Add Course Material
+                </button>
+              </div>
+            `}
+          </div>
+
           <div class="assignments-list">
             ${m.assignments && m.assignments.length > 0 ? m.assignments.map(a => `
               <div class="assignment-row">
@@ -989,8 +1340,8 @@
                   <span class="assignment-icon">📄</span>
                   <div class="assignment-info">
                     <div class="assignment-name">
-                      <span>${a.title || 'Assignment'}</span>
-                      <span class="badge badge-success">${a.status || 'Active'}</span>
+                      <span>${escapeHtml(a.title || 'Assignment')}</span>
+                      <span class="badge badge-success">${escapeHtml(a.status || 'Active')}</span>
                     </div>
                   </div>
                 </div>
@@ -1070,6 +1421,114 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<span>+ Add Unit to Curriculum</span>';
+      }
+    }
+
+    async function submitAddResource(event) {
+      event.preventDefault();
+      if (!currentCourseId) return;
+      const moduleId = document.getElementById('resourceTargetModuleId').value;
+      if (!moduleId) {
+        alert('No target module specified.');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitResource');
+      const feedback = document.getElementById('addResourceFeedback');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Embedding into pgvector &amp; Grounding...</span>';
+      feedback.style.display = 'none';
+
+      try {
+        let res;
+        if (currentResourceMode === 'text') {
+          const title = document.getElementById('resTextTitle').value.trim();
+          const resType = document.getElementById('resTextType').value;
+          const content = document.getElementById('resTextContent').value.trim();
+          if (!title || !content) throw new Error('Please fill in material title and excerpt content.');
+
+          res = await fetch(`/courses/${currentCourseId}/modules/${moduleId}/resources`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: title,
+              content: content,
+              resource_type: resType,
+              source_url: null,
+              module_id: moduleId
+            })
+          });
+        } else if (currentResourceMode === 'pdf') {
+          const fileInput = document.getElementById('resFileInput');
+          if (!fileInput.files || fileInput.files.length === 0) {
+            throw new Error('Please select a file to upload (.pdf, .txt, or .md).');
+          }
+          const title = document.getElementById('resFileTitle').value.trim();
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+          if (title) formData.append('title', title);
+
+          res = await fetch(`/courses/${currentCourseId}/modules/${moduleId}/resources/upload`, {
+            method: 'POST',
+            body: formData
+          });
+        } else if (currentResourceMode === 'link') {
+          const url = document.getElementById('resLinkUrl').value.trim();
+          const title = document.getElementById('resLinkTitle').value.trim();
+          const content = document.getElementById('resLinkContent').value.trim();
+          if (!url || !title || !content) throw new Error('Please fill in external URL, title, and summary notes.');
+
+          res = await fetch(`/courses/${currentCourseId}/modules/${moduleId}/resources`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: title,
+              content: content,
+              resource_type: 'external_link',
+              source_url: url,
+              module_id: moduleId
+            })
+          });
+        }
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.detail || 'Server returned HTTP ' + res.status);
+        }
+
+        // Refresh resources
+        const sylRes = await fetch(`/courses/${currentCourseId}/syllabus`);
+        if (sylRes.ok) {
+          allCourseResources = await sylRes.json();
+        }
+        renderModulesList(currentCourseData.modules || []);
+        closeAddResourceModal();
+
+      } catch (err) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'rgba(239, 68, 68, 0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        feedback.textContent = 'Failed to ingest resource: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🚀 Ingest &amp; Ground Material</span>';
+      }
+    }
+
+    async function deleteResource(chunkId) {
+      if (!confirm('Remove this grounded reading chunk from the curriculum and pgvector?')) return;
+      try {
+        const res = await fetch(`/courses/${currentCourseId}/resources/${chunkId}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok && res.status !== 204) {
+          throw new Error('Server returned HTTP ' + res.status);
+        }
+        allCourseResources = allCourseResources.filter(r => r.chunk_id !== chunkId);
+        renderModulesList(currentCourseData.modules || []);
+      } catch (err) {
+        alert('Failed to remove resource: ' + err.message);
       }
     }
 
