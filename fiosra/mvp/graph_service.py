@@ -164,5 +164,23 @@ class GraphService:
                 return None
             return dict(record)
 
+    async def list_all_kcs(self, domain: str | None = None) -> list[dict[str, Any]]:
+        """
+        Lists all Knowledge Components optionally filtered by domain.
+        """
+        cypher = """
+        MATCH (k:KnowledgeComponent)
+        WHERE ($domain IS NULL OR k.domain = $domain)
+        RETURN k.kc_id AS kc_id,
+               k.label AS label,
+               k.domain AS domain,
+               k.description AS description
+        ORDER BY k.kc_id ASC
+        """
+        async with self.client.get_session() as session:
+            result = await session.run(cypher, {"domain": domain})
+            return await result.data()
+
+
 
 graph_service = GraphService()
