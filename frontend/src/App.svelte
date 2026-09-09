@@ -120,7 +120,11 @@
 </script>
 
 <div class="fiosra-app">
-  <AppHeader activeTab="modules" courseTitle={currentCourse?.title || 'HIST-002 Indian History'} />
+  <AppHeader
+    activeTab="modules"
+    courseTitle={currentCourse?.title || 'Course Workspace'}
+    courseId={currentCourseId}
+  />
 
   <main class="modules-main">
     {#if isLoading}
@@ -135,12 +139,13 @@
         <div style="font-size: 42px;">🗺️</div>
         <h2>No Course Selected</h2>
         <p>Please select an active course workspace from the Course Portfolio.</p>
-        <a href="./#courses" class="btn btn-primary">Go to Course Portfolio</a>
+        <a href="educator_lms_courses.html" class="btn btn-primary">Go to Course Portfolio</a>
       </div>
     {:else}
       <!-- Course Banner -->
       <CourseBanner
         course={currentCourse}
+        courseId={currentCourseId}
         enrolledCount={rosterData.total_enrolled || rosterData.students?.length || 0}
         onAddModule={() => (isAddModuleOpen = true)}
       />
@@ -240,14 +245,14 @@
   }
 
   .modules-main {
-    padding: 28px 40px 80px 40px;
-    max-width: 1440px;
+    padding: 24px 36px 80px 36px;
+    max-width: 1400px;
     width: 100%;
     margin: 0 auto;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 20px;
   }
 
   .loading-state {
@@ -339,6 +344,6 @@
   .modules-container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 18px;
   }
 </style>
