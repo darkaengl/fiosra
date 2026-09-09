@@ -16,10 +16,10 @@
     window.addEventListener('hashchange', handleHashChange);
 
     try {
-      const res = await fetch('/api/v1/lms/courses');
+      const res = await fetch('/courses');
       if (res.ok) {
         const data = await res.json();
-        courses = data.courses || data || [];
+        courses = Array.isArray(data) ? data : data.courses || [];
       }
     } catch {
       // ignore network errors

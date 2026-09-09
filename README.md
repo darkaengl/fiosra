@@ -5,6 +5,18 @@
 
 ---
 
+## 📚 Comprehensive Developer Guide
+
+For detailed architectural specifications, service breakdowns, entity-relationship diagrams, Svelte 5 component guides, and API contracts, refer to the **[Developer Guide](docs/developer-guide/README.md)**:
+
+- [**Chapter 1: System Architecture & Philosophy**](docs/developer-guide/01-system-architecture.md) — 4 Core Invariants, Answer Isolation, and Sequence Workflows.
+- [**Chapter 2: Backend Services & Storage Architecture**](docs/developer-guide/02-backend-services.md) — FastAPI, 6 Reasoning Engines, Neo4j & PostgreSQL Schemas.
+- [**Chapter 3: Frontend Architecture (Svelte 5 SPA)**](docs/developer-guide/03-frontend-architecture.md) — Svelte 5 Runes, Hash Routing, Design Tokens, & Component Library.
+- [**Chapter 4: Comprehensive API Reference**](docs/developer-guide/04-api-reference.md) — Complete REST Route Contracts & Request/Response Payloads.
+- [**Chapter 5: Developer Workflows & Operations**](docs/developer-guide/05-development-workflows.md) — Local Dev, Docker Stack, Pytest Suite, & Svelte Build.
+
+---
+
 ## 🚀 Quickstart for Developers
 
 ### 1. Prerequisites
