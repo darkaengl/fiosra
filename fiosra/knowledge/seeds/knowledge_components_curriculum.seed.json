@@ -1,0 +1,173 @@
+[
+  {
+    "kc_id": "KC_HIST_ANCIEN_REGIME",
+    "label": "Ancien Régime Social and Institutional Order",
+    "domain": "history",
+    "bloom_level": 2,
+    "description": "Understanding the corporate structure, divine-right monarchy, and institutional gridlock of 18th-century France.",
+    "estimated_difficulty": 0.30,
+    "prerequisite_ids": []
+  },
+  {
+    "kc_id": "KC_HIST_THREE_ESTATES",
+    "label": "The Three Estates and Fiscal Privileges",
+    "domain": "history",
+    "bloom_level": 2,
+    "description": "Analyzing the legal divisions between First (Clergy), Second (Nobility), and Third (Commoners/Bourgeoisie) estates and tax exemptions.",
+    "estimated_difficulty": 0.35,
+    "prerequisite_ids": ["KC_HIST_ANCIEN_REGIME"]
+  },
+  {
+    "kc_id": "KC_HIST_FRENCH_DEBT",
+    "label": "Crown Debt and Structural Fiscal Impasse",
+    "domain": "history",
+    "bloom_level": 3,
+    "description": "Tracing the sovereign debt crisis from the Seven Years' War and American Revolution, compounding interest, and royal borrowing limits.",
+    "estimated_difficulty": 0.50,
+    "prerequisite_ids": ["KC_HIST_ANCIEN_REGIME"]
+  },
+  {
+    "kc_id": "KC_HIST_POPULAR_SOV",
+    "label": "Enlightenment Philosophy and Popular Sovereignty",
+    "domain": "history",
+    "bloom_level": 3,
+    "description": "Understanding how Enlightenment concepts of natural rights, social contracts, and popular sovereignty challenged divine right.",
+    "estimated_difficulty": 0.55,
+    "prerequisite_ids": ["KC_HIST_ANCIEN_REGIME"]
+  },
+  {
+    "kc_id": "KC_HIST_ESTATES_GENERAL",
+    "label": "Convocation and Voting Crisis of the Estates-General",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Analyzing the electoral process, Cahiers de Doléances, and procedural standoff over voting by order versus voting by head.",
+    "estimated_difficulty": 0.60,
+    "prerequisite_ids": ["KC_HIST_THREE_ESTATES", "KC_HIST_FRENCH_DEBT"]
+  },
+  {
+    "kc_id": "KC_HIST_TENNIS_COURT_OATH",
+    "label": "The National Assembly and Tennis Court Oath",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Examining the self-proclamation of the Third Estate as the National Assembly and the pledge to establish a constitutional monarchy.",
+    "estimated_difficulty": 0.65,
+    "prerequisite_ids": ["KC_HIST_ESTATES_GENERAL", "KC_HIST_POPULAR_SOV"]
+  },
+  {
+    "kc_id": "KC_HIST_BASTILLE_FALL",
+    "label": "Storming of the Bastille and Popular Mobilization",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Evaluating the tactical panic, gunpowder search, seizure of the fortress, and political intervention of the Parisian urban crowd.",
+    "estimated_difficulty": 0.60,
+    "prerequisite_ids": ["KC_HIST_TENNIS_COURT_OATH"]
+  },
+  {
+    "kc_id": "KC_HIST_DECL_RIGHTS_MAN",
+    "label": "Declaration of the Rights of Man and of the Citizen",
+    "domain": "history",
+    "bloom_level": 5,
+    "description": "Analyzing the foundational tenets of civic equality, liberty, property, legal limits, and initial exclusions of women and colonial subjects.",
+    "estimated_difficulty": 0.70,
+    "prerequisite_ids": ["KC_HIST_TENNIS_COURT_OATH", "KC_HIST_POPULAR_SOV"]
+  },
+  {
+    "kc_id": "KC_HIST_TIMELINE_SEQUENCING",
+    "label": "Chronological Reasoning and Periodization",
+    "domain": "history",
+    "bloom_level": 2,
+    "description": "Placing events in chronological order and recognizing immediate antecedents vs. broader epochs.",
+    "estimated_difficulty": 0.25,
+    "prerequisite_ids": []
+  },
+  {
+    "kc_id": "KC_HIST_CAUSE_AND_EFFECT",
+    "label": "Multi-Causal Historical Analysis",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Distinguishing between structural preconditions, medium-term catalysts, and immediate short-term triggers.",
+    "estimated_difficulty": 0.55,
+    "prerequisite_ids": ["KC_HIST_TIMELINE_SEQUENCING"]
+  },
+  {
+    "kc_id": "KC_HIST_PRIMARY_SOURCE_ANALYSIS",
+    "label": "Primary Source Interrogation and Provenance",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Evaluating provenance, audience, purpose, and credibility of historical documents and material evidence.",
+    "estimated_difficulty": 0.60,
+    "prerequisite_ids": []
+  },
+  {
+    "kc_id": "KC_HIST_PERSPECTIVE_AND_BIAS",
+    "label": "Historiographical Perspective and Contextualization",
+    "domain": "history",
+    "bloom_level": 4,
+    "description": "Identifying authorial bias, contemporary ideological frameworks, and avoiding anachronistic moralizing.",
+    "estimated_difficulty": 0.65,
+    "prerequisite_ids": ["KC_HIST_PRIMARY_SOURCE_ANALYSIS"]
+  },
+  {
+    "kc_id": "KC_HIST_HISTORICAL_ARGUMENT",
+    "label": "Evidence-Backed Historical Argumentation",
+    "domain": "history",
+    "bloom_level": 5,
+    "description": "Constructing coherent historiographical claims supported by corroborated primary and secondary sources.",
+    "estimated_difficulty": 0.75,
+    "prerequisite_ids": ["KC_HIST_CAUSE_AND_EFFECT", "KC_HIST_PERSPECTIVE_AND_BIAS"]
+  },
+  {
+    "kc_id": "KC_LANG_READING_COMPREHENSION",
+    "label": "Literal and Inferential Reading Comprehension",
+    "domain": "language",
+    "bloom_level": 2,
+    "description": "Extracting explicit information and decoding implied authorial tone and subtext.",
+    "estimated_difficulty": 0.20,
+    "prerequisite_ids": []
+  },
+  {
+    "kc_id": "KC_LANG_ARGUMENT_IDENTIFICATION",
+    "label": "Argument Identification and Claim Parsing",
+    "domain": "language",
+    "bloom_level": 3,
+    "description": "Distinguishing central claims, supporting premises, factual assertions, and opinions.",
+    "estimated_difficulty": 0.40,
+    "prerequisite_ids": ["KC_LANG_READING_COMPREHENSION"]
+  },
+  {
+    "kc_id": "KC_LANG_EVIDENCE_EVALUATION",
+    "label": "Source Credibility and Evidence Evaluation",
+    "domain": "language",
+    "bloom_level": 4,
+    "description": "Assessing the sufficiency, relevance, and representative strength of evidence used to support arguments.",
+    "estimated_difficulty": 0.60,
+    "prerequisite_ids": ["KC_LANG_ARGUMENT_IDENTIFICATION"]
+  },
+  {
+    "kc_id": "KC_LANG_CLAIM_CONSTRUCTION",
+    "label": "Thesis Formulation and Reasoning Construction",
+    "domain": "language",
+    "bloom_level": 5,
+    "description": "Drafting precise, contestable analytical thesis statements backed by warrants and textual justification.",
+    "estimated_difficulty": 0.65,
+    "prerequisite_ids": ["KC_LANG_ARGUMENT_IDENTIFICATION"]
+  },
+  {
+    "kc_id": "KC_LANG_STRUCTURED_ESSAY",
+    "label": "Structured Analytical Essay Composition",
+    "domain": "language",
+    "bloom_level": 5,
+    "description": "Organizing sustained analytical writing with clear transitions, unified paragraphs, and evidence integration.",
+    "estimated_difficulty": 0.70,
+    "prerequisite_ids": ["KC_LANG_CLAIM_CONSTRUCTION", "KC_LANG_EVIDENCE_EVALUATION"]
+  },
+  {
+    "kc_id": "KC_LANG_RHETORICAL_ANALYSIS",
+    "label": "Rhetorical Strategies and Persuasion Analysis",
+    "domain": "language",
+    "bloom_level": 5,
+    "description": "Evaluating ethos, pathos, logos, syntax, and rhetorical figures in persuasive discourse.",
+    "estimated_difficulty": 0.75,
+    "prerequisite_ids": ["KC_LANG_ARGUMENT_IDENTIFICATION", "KC_LANG_EVIDENCE_EVALUATION"]
+  }
+]

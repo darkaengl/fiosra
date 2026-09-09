@@ -10,7 +10,7 @@ help:
 	@echo "  make clean     - Remove python caches and build artifacts"
 
 dev:
-	uv run uvicorn fiosra.mvp.app:app --reload --port 8000
+	uv run uvicorn fiosra.mvp.main:app --reload --port 8000
 
 test:
 	uv run pytest tests/ -v
@@ -20,6 +20,11 @@ db-up:
 
 db-down:
 	docker compose down
+
+seed:
+	uv run python -m fiosra.mvp.seed_pipeline
+
+db-seed: seed
 
 lint:
 	uv run ruff check fiosra/ tests/
