@@ -1,4 +1,5 @@
-from typing import List, Dict, Any
+from typing import Any
+
 
 class DistractorEngine:
     """
@@ -6,7 +7,7 @@ class DistractorEngine:
     derived from the misconception taxonomy.
     """
     @staticmethod
-    def generate_distractors(topic: str, misconceptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def generate_distractors(topic: str, misconceptions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         distractors = []
         for m in misconceptions:
             distractors.append({

@@ -1,5 +1,6 @@
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "Fiosra Reasoning Infrastructure"
@@ -13,9 +14,14 @@ class Settings(BaseSettings):
     # PostgreSQL Connection String (asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fiosra_db"
 
+    # Neo4j 5 Connection Settings
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "fiosra_neo4j_password"
+
     # LLM API Keys
-    OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
 
     # Verifiers & Scaffolding
     ENABLE_MATH_CAS: bool = True

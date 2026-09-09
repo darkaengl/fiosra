@@ -10,10 +10,10 @@ help:
 	@echo "  make clean     - Remove python caches and build artifacts"
 
 dev:
-	uvicorn fiosra.mvp.app:app --reload --port 8000
+	uv run uvicorn fiosra.mvp.app:app --reload --port 8000
 
 test:
-	pytest fiosra/tests/ -v
+	uv run pytest tests/ -v
 
 db-up:
 	docker compose up -d
@@ -22,7 +22,7 @@ db-down:
 	docker compose down
 
 lint:
-	ruff check fiosra/
+	uv run ruff check fiosra/ tests/
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

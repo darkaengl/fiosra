@@ -1,5 +1,7 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+
 
 class HintRung(BaseModel):
     level: int = Field(ge=0, le=4)
@@ -22,8 +24,8 @@ class QuestionSpec(BaseModel):
     question_id: str
     prompt: str
     domain: str
-    target_kcs: List[str]
-    subproblems: List[ScaffoldingStep]
-    hint_ladder: List[HintRung]
-    reference_solution: Dict[str, Any]
-    rubric_criteria: List[Dict[str, Any]]
+    target_kcs: list[str]
+    subproblems: list[ScaffoldingStep]
+    hint_ladder: list[HintRung]
+    reference_solution: dict[str, Any]
+    rubric_criteria: list[dict[str, Any]]
