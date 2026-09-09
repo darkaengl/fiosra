@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fiosra.mvp.assignment_designer.router import router as assignment_router
 from fiosra.mvp.config import settings
+from fiosra.mvp.courses.router import router as courses_router
 from fiosra.mvp.dialogue_router import router as dialogue_router
 from fiosra.mvp.events_router import router as events_router
 from fiosra.mvp.evidence_dossier.router import router as evidence_router
@@ -44,6 +45,7 @@ app.include_router(events_router)
 app.include_router(dialogue_router)
 app.include_router(evidence_router)
 app.include_router(assignment_router)
+app.include_router(courses_router)
 
 
 @app.get("/healthz", tags=["System"])
