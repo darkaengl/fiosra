@@ -1,8 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from fiosra.mvp.assignment_designer.router import router as assignment_router
 from fiosra.mvp.config import settings
@@ -39,6 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Include Routers
 app.include_router(knowledge_router)
 app.include_router(events_router)
@@ -47,8 +51,20 @@ app.include_router(evidence_router)
 app.include_router(assignment_router)
 app.include_router(courses_router)
 
+# Mount Static UI Frontend if available
+UI_DIR = Path(__file__).resolve().parent.parent.parent / "ui-ux" / "frontend"
+if UI_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect() -> RedirectResponse:
+    """Redirect root to UI landing page."""
+    return RedirectResponse(url="/ui/")
+
 
 @app.get("/healthz", tags=["System"])
 async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok", "app": settings.APP_NAME}
+
