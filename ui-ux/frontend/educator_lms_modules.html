@@ -379,26 +379,26 @@
     <!-- Course Banner -->
     <div class="course-banner">
       <div class="banner-left">
-        <div class="banner-meta">
+        <div id="courseBannerMeta" class="banner-meta">
           <span>UNDERGRADUATE HISTORICAL INQUIRY</span>
           <span>•</span>
           <span style="color: var(--color-horizon-bright);">FALL 2026</span>
           <span>•</span>
-          <span>24 ENROLLED STUDENTS</span>
+          <span id="bannerStudentCount">24 ENROLLED STUDENTS</span>
         </div>
-        <h1 class="course-h1">HIST-201: The French Revolution &amp; Modern Statehood</h1>
-        <div class="course-details-line">
+        <h1 id="courseBannerTitle" class="course-h1">HIST-201: The French Revolution &amp; Modern Statehood</h1>
+        <div id="courseBannerDetails" class="course-details-line">
           <span>📖 Corpus: <em>Arthur Young (1789), Sieyès (1789), Necker Compte Rendu</em></span>
           <span>•</span>
-          <span>🧬 Neo4j Prerequisite DAG: 3 Modules Configured</span>
+          <span id="bannerModulesCount">🧬 Neo4j Prerequisite DAG: 3 Modules Configured</span>
         </div>
       </div>
 
       <div class="banner-right">
-        <a href="cohort_diagnostics.html" class="btn btn-secondary">
-          📊 Misconception Heatmap
-        </a>
-        <a href="assignment_designer.html" class="btn btn-primary">
+        <button class="btn btn-secondary" onclick="openAddModuleModal()">
+          + Add Module
+        </button>
+        <a id="btnCoPilotAssignment" href="assignment_designer.html" class="btn btn-primary">
           + Co-Pilot New Assignment
         </a>
       </div>
@@ -582,7 +582,7 @@
             <th>Action</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="rosterTableBody">
           <tr>
             <td>
               <div class="student-cell">
@@ -705,7 +705,59 @@
 
   </main>
 
+  <!-- Add Module Modal -->
+  <div id="addModuleModal" class="modal-overlay" onclick="closeAddModuleModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title">🗺️ Add Curriculum Unit Module</div>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeAddModuleModal()">✕</button>
+      </div>
+
+      <p style="font-size: 13px; color: var(--color-slate-light); line-height: 1.5;">
+        Define a new sequential learning unit. Modules anchor student reasoning tasks, track prerequisite knowledge components, and unlock downstream concepts in Neo4j.
+      </p>
+
+      <form id="addModuleForm" onsubmit="submitAddModule(event)" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+            Module Title <span style="color: var(--color-rose);">*</span>
+          </label>
+          <input id="newModuleTitle" type="text" placeholder="e.g. Unit 01: The Indus Valley Civilization &amp; Early Urban Planning" required
+                 style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13.5px;">
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+            Pedagogical Scope &amp; Summary
+          </label>
+          <textarea id="newModuleDescription" rows="3" placeholder="Core historical concepts, primary sources to analyze, and prerequisite dependencies..."
+                    style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; resize: vertical;"></textarea>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+            Learning Objectives (comma-separated)
+          </label>
+          <input id="newModuleObjectives" type="text" placeholder="e.g. Analyze urban sanitation, Evaluate trade routes, Contrast Harappan seals"
+                 style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+        </div>
+
+        <div id="addModuleFeedback" style="display: none; font-size: 12px; padding: 8px 12px; border-radius: var(--radius-xs);"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--color-graphite-border); padding-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddModuleModal()">Cancel</button>
+          <button type="submit" id="btnSubmitModule" class="btn btn-primary">
+            <span>+ Add Unit to Curriculum</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
+    let currentCourseId = null;
+    let currentCourseData = null;
+
     function switchTab(tab) {
       if (tab === 'modules') {
         document.getElementById('viewModules').style.display = 'flex';
@@ -719,6 +771,213 @@
         document.getElementById('tabRoster').classList.add('active');
       }
     }
+
+    function openAddModuleModal() {
+      if (!currentCourseId) {
+        alert('Please open this page from a specific course in the Course Portfolio (e.g. ?course_id=...).');
+        return;
+      }
+      document.getElementById('addModuleModal').classList.add('active');
+      document.getElementById('newModuleTitle').focus();
+    }
+
+    function closeAddModuleModal(e) {
+      if (e && e.target !== e.currentTarget && e.type === 'click') return;
+      document.getElementById('addModuleModal').classList.remove('active');
+      const feedback = document.getElementById('addModuleFeedback');
+      if (feedback) feedback.style.display = 'none';
+    }
+
+    async function loadCourseWorkspace() {
+      const urlParams = new URLSearchParams(window.location.search);
+      currentCourseId = urlParams.get('course_id');
+      if (!currentCourseId) return; // Keep static demo for standalone preview
+
+      try {
+        const res = await fetch(`/courses/${currentCourseId}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const course = await res.json();
+        currentCourseData = course;
+
+        // 1. Update Title & Banner
+        document.getElementById('courseBannerTitle').textContent = course.title;
+        document.getElementById('courseBannerMeta').innerHTML = `
+          <span>${(course.domain || 'ACADEMIC').toUpperCase()} CURRICULUM</span>
+          <span>•</span>
+          <span style="color: var(--color-horizon-bright);">FALL 2026</span>
+          <span>•</span>
+          <span id="bannerStudentCount">0 ENROLLED STUDENTS</span>
+        `;
+        document.getElementById('courseBannerDetails').innerHTML = `
+          <span>📖 Syllabus: <em>${course.syllabus_context || 'Curriculum initialized in PostgreSQL &amp; Neo4j.'}</em></span>
+          <span>•</span>
+          <span id="bannerModulesCount">🧬 Neo4j Prerequisite DAG: ${(course.modules ? course.modules.length : 0)} Modules Configured</span>
+        `;
+        document.getElementById('btnCoPilotAssignment').href = `assignment_designer.html?course_id=${currentCourseId}`;
+
+        // 2. Render Modules
+        renderModulesList(course.modules || []);
+
+        // 3. Load Roster
+        try {
+          const rosterRes = await fetch(`/courses/${currentCourseId}/roster`);
+          if (rosterRes.ok) {
+            const roster = await rosterRes.json();
+            document.getElementById('bannerStudentCount').textContent = `${roster.total_students} ENROLLED STUDENTS`;
+            document.getElementById('tabRoster').innerHTML = `<span>👥</span> Cohort Roster &amp; Autonomy Diagnostics (${roster.total_students} Students)`;
+
+            if (roster.total_students === 0) {
+              document.getElementById('rosterTableBody').innerHTML = `
+                <tr>
+                  <td colspan="7" style="text-align: center; padding: 36px; color: var(--color-slate-muted); font-style: italic;">
+                    No students enrolled in this cohort yet. Student profiles will populate automatically as learners log Socratic sessions.
+                  </td>
+                </tr>
+              `;
+            }
+          }
+        } catch (rErr) {
+          console.warn('Roster load note:', rErr);
+        }
+
+      } catch (err) {
+        console.warn('Using default demo view, course fetch note:', err);
+      }
+    }
+
+    function renderModulesList(modules) {
+      const container = document.getElementById('viewModules');
+      const tabBtn = document.getElementById('tabModules');
+      tabBtn.innerHTML = `<span>🗺️</span> Curriculum Architecture &amp; Sequencer (${modules.length} Units)`;
+
+      if (modules.length === 0) {
+        container.innerHTML = `
+          <div style="background: var(--card-gradient); border: 2px dashed var(--color-graphite-border); border-radius: var(--radius-lg); padding: 50px 32px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%;">
+            <div style="font-size: 42px;">🗺️</div>
+            <div style="font-family: var(--font-brand); font-size: 22px; font-weight: 700; color: #ffffff;">No Curriculum Modules Configured Yet</div>
+            <p style="color: var(--color-slate-light); max-width: 520px; font-size: 14px; line-height: 1.6;">
+              This workspace is active in the database. Add your first curriculum unit module below to start building prerequisite knowledge graphs.
+            </p>
+            <button class="btn btn-primary" onclick="openAddModuleModal()">+ Add First Curriculum Module</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      modules.sort((a, b) => a.position - b.position).forEach((m, idx) => {
+        const modEl = document.createElement('div');
+        modEl.className = 'module-card';
+        modEl.innerHTML = `
+          <div class="module-header">
+            <div class="module-title-group">
+              <span class="module-index-badge">UNIT 0${idx + 1}</span>
+              <div>
+                <div class="module-title">${m.title}</div>
+                <div style="font-size: 12px; color: var(--color-slate-light); margin-top: 2px;">
+                  ${m.description || 'Pedagogical scope and learning frontier'}
+                </div>
+              </div>
+            </div>
+            <span class="module-badge-status status-active">Active • Position ${m.position}</span>
+          </div>
+          ${m.learning_objectives && m.learning_objectives.length > 0 ? `
+            <div style="padding: 10px 18px; font-size: 12px; color: var(--color-slate-light); background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--color-graphite-border);">
+              <strong>Learning Objectives:</strong> ${m.learning_objectives.join(' • ')}
+            </div>
+          ` : ''}
+          <div class="assignments-list">
+            ${m.assignments && m.assignments.length > 0 ? m.assignments.map(a => `
+              <div class="assignment-row">
+                <div class="assignment-left">
+                  <span class="assignment-icon">📄</span>
+                  <div class="assignment-info">
+                    <div class="assignment-name">
+                      <span>${a.title || 'Assignment'}</span>
+                      <span class="badge badge-success">${a.status || 'Active'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="assignment-actions">
+                  <a href="assignment_designer.html?course_id=${currentCourseId}&assignment_id=${a.assignment_id}" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
+                    Designer ➔
+                  </a>
+                </div>
+              </div>
+            `).join('') : `
+              <div style="padding: 18px; font-size: 12.5px; color: var(--color-slate-muted); font-style: italic; display: flex; justify-content: space-between; align-items: center;">
+                <span>No assignments attached to this module yet.</span>
+                <a href="assignment_designer.html?course_id=${currentCourseId}&module_id=${m.module_id}" class="btn btn-secondary" style="font-size: 11.5px; padding: 4px 10px;">
+                  + Design Assignment
+                </a>
+              </div>
+            `}
+          </div>
+        `;
+        container.appendChild(modEl);
+      });
+    }
+
+    async function submitAddModule(event) {
+      event.preventDefault();
+      if (!currentCourseId) return;
+
+      const title = document.getElementById('newModuleTitle').value.trim();
+      const desc = document.getElementById('newModuleDescription').value.trim();
+      const objRaw = document.getElementById('newModuleObjectives').value.trim();
+      const objectives = objRaw ? objRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const btn = document.getElementById('btnSubmitModule');
+      const feedback = document.getElementById('addModuleFeedback');
+
+      if (!title) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Writing to Neo4j &amp; PostgreSQL...</span>';
+      feedback.style.display = 'none';
+
+      try {
+        const nextPos = (currentCourseData && currentCourseData.modules ? currentCourseData.modules.length : 0) + 1;
+        const res = await fetch(`/courses/${currentCourseId}/modules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            description: desc || null,
+            learning_objectives: objectives,
+            position: nextPos
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error('Server returned HTTP ' + res.status);
+        }
+
+        const newModule = await res.json();
+        if (!currentCourseData.modules) currentCourseData.modules = [];
+        currentCourseData.modules.push(newModule);
+
+        // Re-render
+        renderModulesList(currentCourseData.modules);
+        document.getElementById('bannerModulesCount').textContent = `🧬 Neo4j Prerequisite DAG: ${currentCourseData.modules.length} Modules Configured`;
+
+        document.getElementById('addModuleForm').reset();
+        closeAddModuleModal();
+
+        alert(`Module "${newModule.title}" created successfully!\nPosition: Unit 0${newModule.position}\nNeo4j node initialized.`);
+
+      } catch (err) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'rgba(239, 68, 68, 0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        feedback.textContent = 'Failed to add module: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>+ Add Unit to Curriculum</span>';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadCourseWorkspace);
   </script>
 
 </body>
