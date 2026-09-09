@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -17,6 +18,7 @@ class Neo4jClient:
     """
     _instance: Self | None = None
     _driver: AsyncDriver | None = None
+    _loop: asyncio.AbstractEventLoop | None = None
 
     def __new__(cls) -> Self:
         if cls._instance is None:
@@ -25,11 +27,17 @@ class Neo4jClient:
 
     @property
     def driver(self) -> AsyncDriver:
-        if self._driver is None:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if self._driver is None or (self._loop is not None and self._loop is not current_loop):
             self._driver = AsyncGraphDatabase.driver(
                 settings.NEO4J_URI,
                 auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
             )
+            self._loop = current_loop
         return self._driver
 
     @asynccontextmanager
