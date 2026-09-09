@@ -208,5 +208,215 @@
     "severity": "moderate",
     "frequency_percentile": 78,
     "source": "literature"
+  },
+  {
+    "misconception_id": "MISC_HIST_006",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_FRENCH_DEBT",
+    "related_knowledge_components": ["KC_HIST_CAUSE_AND_EFFECT", "KC_HIST_ANCIEN_REGIME"],
+    "label": "Attributing French Crown bankruptcy solely to royal personal extravagance",
+    "description": "Student believes Marie Antoinette's jewelry and royal palace living at Versailles were the primary cause of France's 1789 insolvency, ignoring the catastrophic structural costs of financing foreign wars (Seven Years' War and American Revolutionary War) and a regressive tax system with noble exemptions.",
+    "common_trigger": "Questions about the financial crisis of 1789 or causes of the French Revolution",
+    "example_student_error": "France went broke because Marie Antoinette spent all the tax money on dresses, parties, and diamond necklaces.",
+    "example_correct_response": "While royal expenditure was politically toxic and fueled public outrage, France's debt crisis was primarily structural: over 50% of royal revenues went to servicing debt incurred from financing wars (notably the Seven Years' War and French intervention in the American Revolution), compounded by tax exemptions for the clergy and nobility.",
+    "flawed_rule": "Personal royal luxury was the primary expenditure that bankrupted the French state in 1789.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Did the royal household expenses account for most of the state budget, or were there much larger national expenditures like wars?"},
+      {"level": 1, "hint_text": "Look at where royal tax revenue actually went: by 1788, over half of state revenue was consumed solely by interest payments on sovereign debt."},
+      {"level": 2, "hint_text": "Consider which international conflicts France had recently financed on borrowed money. How did the American Revolutionary War impact French state debt?"},
+      {"level": 3, "hint_text": "For example: Court and palace expenses amounted to roughly 6% of the royal budget, while over 50% was dedicated to servicing debt from foreign conflicts such as the Seven Years' War and the American War of Independence."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 92,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_007",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_THREE_ESTATES",
+    "related_knowledge_components": ["KC_HIST_ANCIEN_REGIME", "KC_HIST_POPULAR_SOV"],
+    "label": "Conflating the Third Estate exclusively with impoverished rural peasants",
+    "description": "Student assumes the Third Estate consisted only of poor rural farmers and laborers, erasing the wealthy educated bourgeoisie (lawyers, merchants, financiers, doctors) who actually articulated the political demands and led the National Assembly.",
+    "common_trigger": "Social structure of the Ancien Régime or composition of the Estates-General",
+    "example_student_error": "The Third Estate was just starving peasants who had no education and attacked Versailles.",
+    "example_correct_response": "Although rural peasants made up roughly 80-85% of France's population and bore heavy tax burdens, the Third Estate legally encompassed everyone who was neither clergy nor noble (roughly 98% of the kingdom). This included the wealthy urban bourgeoisie—lawyers, merchants, officials, and intellectuals—who led the political transformation.",
+    "flawed_rule": "The Third Estate was a homogeneous class of uneducated peasants.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Was everyone outside the nobility and clergy poor? Who were the merchants, bankers, and lawyers in French cities?"},
+      {"level": 1, "hint_text": "The Third Estate included everyone not in the First (clergy) or Second (nobility) Estate. That meant roughly 98% of the population, ranging from peasants to wealthy urban professionals."},
+      {"level": 2, "hint_text": "Consider who represented the Third Estate at Versailles in 1789: almost all delegates were educated bourgeoisie—lawyers, magistrates, and merchants—not manual laborers."},
+      {"level": 3, "hint_text": "For example: Figures like Maximilien Robespierre were practicing lawyers, and Emmanuel-Joseph Sieyès was a clergyman writing on behalf of the educated middle-class leadership of the Third Estate."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 89,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_008",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_BASTILLE_FALL",
+    "related_knowledge_components": ["KC_HIST_CAUSE_AND_EFFECT"],
+    "label": "Believing the Bastille was stormed primarily to liberate hundreds of political prisoners",
+    "description": "Student believes the Parisian crowd stormed the Bastille primarily as a jailbreak to free a large population of tortured political dissidents, rather than to seize the massive stockpile of gunpowder stored there to arm the citizen militia against encircling royal troops.",
+    "common_trigger": "Analysis of July 14, 1789 or popular mobilization in Paris",
+    "example_student_error": "The people stormed the Bastille because the fortress was overflowing with hundreds of innocent political prisoners whom the King had tortured.",
+    "example_correct_response": "On July 14, 1789, the Bastille held only seven prisoners (none political dissidents). The crowd stormed the medieval fortress primarily to secure 250 barrels of gunpowder needed for the muskets seized earlier from the Invalides, and to dismantle a towering symbol of royal despotism threatening Paris.",
+    "flawed_rule": "The primary objective of the storming of the Bastille was liberating political prisoners held inside.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What physical weapon or ammunition did the Parisian militia urgently need after seizing muskets from the Invalides?"},
+      {"level": 1, "hint_text": "While the Bastille was a hated symbol of royal arbitrariness, the immediate military objective was gunpowder stored within its armory."},
+      {"level": 2, "hint_text": "Historians have confirmed that on July 14, 1789, only seven prisoners were housed in the entire fortress, including four forgers and two mental patients."},
+      {"level": 3, "hint_text": "For example: Having seized nearly 30,000 muskets from the Hôtel des Invalides without powder, the crowd marched to the Bastille specifically to capture its 250 barrels of gunpowder and neutralize royal artillery aimed at the city."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 86,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_009",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_ESTATES_GENERAL",
+    "related_knowledge_components": ["KC_HIST_ANCIEN_REGIME", "KC_HIST_TENNIS_COURT_OATH"],
+    "label": "Misunderstanding Estates-General voting rules (voting by order vs. voting by head)",
+    "description": "Student fails to understand why doubling the Third Estate's representation was meaningless without changing the voting procedure from voting by order (each estate cast one collective vote, enabling 1st and 2nd estates to outvote 3rd 2-to-1) to voting by head (individual delegate voting).",
+    "common_trigger": "The deadlock at the Estates-General in May-June 1789",
+    "example_student_error": "When Louis XVI doubled the Third Estate's delegates to 600, they could easily outvote the nobility and clergy.",
+    "example_correct_response": "Doubling the Third Estate's delegate count was inconsequential under traditional voting by order: each of the three orders had exactly one collective vote, meaning the clergy and nobility could always combine 2-to-1 against the Third Estate. Only by demanding voting by head (one delegate = one vote) could the Third Estate and reform-minded nobles/curés form a working majority.",
+    "flawed_rule": "Having more delegates in the Estates-General automatically meant having more voting power.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "How were votes counted in the Estates-General? Did each individual delegate vote, or did each entire Estate have one vote?"},
+      {"level": 1, "hint_text": "Under 'vote par ordre' (voting by order), each of the three estates met in separate chambers and cast a single vote as an entire block."},
+      {"level": 2, "hint_text": "If the Clergy voted against a reform (1 vote) and the Nobility voted against it (1 vote), what would happen even if all 600 Third Estate members voted for it (1 vote)?"},
+      {"level": 3, "hint_text": "For example: The Third Estate insisted on 'vote par tête' (voting by head in a single combined chamber), which would allow their 600 delegates plus sympathetic liberal nobles and poor parish priests to achieve an absolute majority."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 91,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_010",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_TENNIS_COURT_OATH",
+    "related_knowledge_components": ["KC_HIST_ESTATES_GENERAL", "KC_HIST_POPULAR_SOV"],
+    "label": "Assuming the Tennis Court Oath abolished the monarchy",
+    "description": "Student assumes the Tennis Court Oath in June 1789 aimed to overthrow Louis XVI and establish a republic, rather than to assert constituent constitutional authority to draft a written constitution for a constitutional monarchy.",
+    "common_trigger": "Significance of the Tennis Court Oath (June 20, 1789)",
+    "example_student_error": "At the Tennis Court Oath, the National Assembly voted to abolish King Louis XVI and declare France a republic.",
+    "example_correct_response": "The Tennis Court Oath was not an anti-monarchical declaration. Almost all delegates in June 1789 remained loyal royalists; their oath swore not to disband until they had established a written constitution that placed royal authority under the rule of law, creating a constitutional monarchy.",
+    "flawed_rule": "The early French revolutionaries intended from the beginning to overthrow the monarchy.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Did the delegates in June 1789 want to remove the King, or did they want a written constitution that limited his arbitrary powers?"},
+      {"level": 1, "hint_text": "The text of the Oath committed the deputies 'never to separate... until the constitution of the kingdom is established.' It did not call for a republic."},
+      {"level": 2, "hint_text": "France did not become a republic until September 1792, more than three years after the Tennis Court Oath, following the King's flight to Varennes and the outbreak of foreign war."},
+      {"level": 3, "hint_text": "For example: In 1789, deputies sought a constitutional monarchy modeled loosely on Great Britain, where Louis XVI would rule as a constitutional monarch subject to statutory laws passed by an elected assembly."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 87,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_011",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_DECL_RIGHTS_MAN",
+    "related_knowledge_components": ["KC_HIST_POPULAR_SOV", "KC_HIST_PERSPECTIVE_AND_BIAS"],
+    "label": "Assuming the Declaration of the Rights of Man immediately granted universal civil equality",
+    "description": "Student assumes the August 1789 Declaration immediately granted equal political rights to women, enslaved people in French colonies, and propertyless men, ignoring the 'active' vs. 'passive' citizen distinction, the exclusion of women (prompting Olympe de Gouges' Declaration), and the continuation of colonial slavery until the Haitian Revolution forced emancipation.",
+    "common_trigger": "Analysis of the Declaration of the Rights of Man and of the Citizen (1789)",
+    "example_student_error": "The Declaration of the Rights of Man gave all people in France and its colonies equal voting and human rights in 1789.",
+    "example_correct_response": "While universalist in its philosophical language ('men are born and remain free and equal in rights'), the revolutionary legislation created a distinction between 'active citizens' (wealthier property-owning men who could vote) and 'passive citizens' (poorer men). Furthermore, women were excluded from political rights, and slavery in French Caribbean colonies was preserved until the 1793–1794 Haitian Revolution.",
+    "flawed_rule": "The 1789 Declaration immediately established universal political equality for all inhabitants of the French realm.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Did the Declaration immediately allow women to vote, or free enslaved individuals working on French Caribbean sugar plantations?"},
+      {"level": 1, "hint_text": "Distinguish between universal philosophical principles and the actual political legislation enacted in the 1791 Constitution."},
+      {"level": 2, "hint_text": "Examine the concept of 'active citizens': only adult males paying direct taxes equal to at least three days of labor were granted voting rights."},
+      {"level": 3, "hint_text": "For example: Olympe de Gouges wrote the 'Declaration of the Rights of Woman and of the Female Citizen' in 1791 specifically to protest the systematic exclusion of women from the rights declared in 1789."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 88,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_012",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_ANCIEN_REGIME",
+    "related_knowledge_components": ["KC_HIST_CAUSE_AND_EFFECT", "KC_HIST_FRENCH_DEBT"],
+    "label": "Equating absolutism with total totalitarian control",
+    "description": "Student imagines Louis XVI had total, unchecked totalitarian control over every aspect of French society, ignoring the severe institutional constraints on the crown: provincial parlements refusing to register royal edicts, autonomous Catholic church estates, and regional corporate privileges.",
+    "common_trigger": "Nature of Absolute Monarchy in pre-revolutionary France",
+    "example_student_error": "Louis XVI was an absolute dictator who had total power to pass any law or tax he wanted without anyone being able to resist.",
+    "example_correct_response": "Although theoretically 'absolute by divine right', the Bourbon monarchy was crippled by institutional gridlock. Sovereign courts (parlements) routinely refused to register royal tax reforms, regional estates held tax immunities, and the crown lacked modern administrative or surveillance machinery.",
+    "flawed_rule": "Absolutism in early modern Europe was equivalent to 20th-century totalitarian dictatorship.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "If Louis XVI had unlimited absolute control, why was he forced to convene the Estates-General to approve new taxes?"},
+      {"level": 1, "hint_text": "Absolute monarchy meant the king was not legally accountable to an elected parliament, but his power was constrained by tradition, corporate privileges, and regional parlements."},
+      {"level": 2, "hint_text": "When royal ministers Calonne and Brienne attempted to tax the nobility, the Parlement of Paris successfully blocked the edicts, asserting that only the Estates-General could consent to new universal taxes."},
+      {"level": 3, "hint_text": "For example: In 1787–1788, the 'noble revolt' in the parlements paralyzed the crown's ability to borrow or tax, directly triggering the bankruptcy that forced the King to call the Estates-General."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 83,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_013",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_POPULAR_SOV",
+    "related_knowledge_components": ["KC_HIST_DECL_RIGHTS_MAN", "KC_HIST_HISTORICAL_ARGUMENT"],
+    "label": "Confusing the Enlightenment with an organized revolutionary conspiracy",
+    "description": "Student treats the Enlightenment philosophers (Voltaire, Rousseau, Montesquieu) as direct revolutionary plotters who organized and planned the 1789 revolution, rather than as diverse thinkers whose critical concepts of rights and sovereignty were selectively repurposed when the financial crisis struck.",
+    "common_trigger": "The role of Enlightenment ideas in causing the French Revolution",
+    "example_student_error": "Voltaire and Rousseau created a secret plan to start the revolution and told the people when to attack.",
+    "example_correct_response": "Voltaire died in 1778 and Rousseau died in 1778, eleven years before the revolution. Neither advocated violent overthrow. The Enlightenment was a decentralized cultural and intellectual movement; its ideas provided the vocabulary (liberty, contract, sovereignty) that revolutionaries used to interpret and resolve the fiscal-political crisis of 1789.",
+    "flawed_rule": "Philosophers caused the revolution by actively orchestrating a political revolt.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Were Enlightenment thinkers alive in 1789? Did their writings prescribe violent revolution or gradual intellectual reform?"},
+      {"level": 1, "hint_text": "Major figures like Montesquieu, Voltaire, and Rousseau had all died over a decade before 1789 and held starkly divergent political views from one another."},
+      {"level": 2, "hint_text": "Ideas do not act on their own: the Enlightenment provided a critical vocabulary and mental framework that educated elites drew upon when concrete financial and institutional breakdown occurred."},
+      {"level": 3, "hint_text": "For example: Montesquieu favored aristocratic constitutional checks on monarchy, while Rousseau argued for popular sovereignty; neither plotted a revolution, but deputies in the National Assembly cited both to justify constitutional overhaul."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 80,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_014",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_CAUSE_AND_EFFECT",
+    "related_knowledge_components": ["KC_HIST_FRENCH_DEBT", "KC_HIST_ANCIEN_REGIME"],
+    "label": "Attributing the revolution solely to bad harvests and bread prices (economic reductionism)",
+    "description": "Student treats bad weather and grain price spikes in 1788–1789 as the complete and sufficient cause of the revolution, failing to explain why subsistence crises in previous decades (like 1709 or 1775) did not dismantle the Ancien Régime.",
+    "common_trigger": "The role of the 1788-1789 harvest crisis",
+    "example_student_error": "The French Revolution happened purely because the hail destroyed the wheat in 1788 and people couldn't buy bread.",
+    "example_correct_response": "The harvest crisis of 1788–1789 created severe popular desperation that mobilized the urban and rural masses, but famine conditions had occurred repeatedly in French history without triggering a revolution. What made 1789 revolutionary was the simultaneous collapse of royal state finances and the political confrontation between the crown and the Estates-General.",
+    "flawed_rule": "Economic hardship on its own is enough to produce an institutional revolution.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "Did bad harvests occur in earlier centuries under French kings without destroying the monarchy?"},
+      {"level": 1, "hint_text": "Subsistence crises were common in early modern Europe. To understand why 1789 became a revolution, examine what was happening simultaneously at the top of the state."},
+      {"level": 2, "hint_text": "A revolution requires both popular grievance (fuel) and institutional/fiscal paralysis (the spark). The harvest crisis catalyzed the popular mobilization while the crown was already bankrupt and divided."},
+      {"level": 3, "hint_text": "For example: The 1775 'Flour War' saw widespread bread riots across northern France, but it did not overthrow the regime because the royal treasury, military loyalty, and sovereign courts remained functional at that time."}
+    ],
+    "severity": "foundational",
+    "frequency_percentile": 85,
+    "source": "curriculum"
+  },
+  {
+    "misconception_id": "MISC_HIST_015",
+    "domain": "history",
+    "knowledge_component": "KC_HIST_PRIMARY_SOURCE_ANALYSIS",
+    "related_knowledge_components": ["KC_HIST_PERSPECTIVE_AND_BIAS", "KC_HIST_ESTATES_GENERAL"],
+    "label": "Treating Cahiers de Doléances as radical demands for revolution",
+    "description": "Student reads the 1789 Cahiers de Doléances (grievance lists) as manifestos calling for the overthrow of the social order and execution of the monarch, rather than as loyal petitions requesting tax reform, uniform laws, and redress within the existing monarchy.",
+    "common_trigger": "Document analysis of the Cahiers de Doléances (spring 1789)",
+    "example_student_error": "The Cahiers de Doléances prove that all French people wanted to execute the King and destroy the Catholic Church in 1789.",
+    "example_correct_response": "The vast majority of Cahiers from all three orders expressed genuine affection and reverence for Louis XVI ('the father of the people'). They demanded fiscal equity, abolition of abusive seigneurial dues, and regular convocation of the Estates-General, not the abolition of the monarchy or religion.",
+    "flawed_rule": "Historical grievance lists (cahiers) were revolutionary manifestos aimed at overthrowing the regime.",
+    "remediation_hints": [
+      {"level": 0, "hint_text": "What tone did ordinary subjects use when writing to the King in early 1789? Did they attack the monarchy itself?"},
+      {"level": 1, "hint_text": "The Cahiers were drafted within traditional legal channels by parish assemblies and urban corporations requesting royal redress."},
+      {"level": 2, "hint_text": "Analyze the specific grievances: they focused on practical burdens—internal trade tariffs, the salt tax (gabelle), hunting rights—rather than philosophical republicanism."},
+      {"level": 3, "hint_text": "For example: Over 95% of Third Estate cahiers began with expressions of loyalty to Louis XVI, requesting that he partner with the Estates-General to reform tax administration fairly."}
+    ],
+    "severity": "moderate",
+    "frequency_percentile": 81,
+    "source": "curriculum"
   }
 ]
