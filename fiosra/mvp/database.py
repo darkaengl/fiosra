@@ -2,7 +2,6 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 
 from fiosra.mvp.config import settings
 
@@ -10,7 +9,9 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=(settings.LOG_LEVEL == "DEBUG"),
     future=True,
-    poolclass=NullPool,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(
