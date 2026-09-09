@@ -192,5 +192,23 @@ class EventStore:
                     session_dict[key] = session_dict[key].isoformat()
             return session_dict
 
+    async def get_session(self, session_id: UUID | str) -> dict[str, Any] | None:
+        """Alias for get_session_details."""
+        return await self.get_session_details(session_id)
+
+    async def complete_session(self, session_id: UUID | str) -> None:
+        """Marks a session as completed with timestamp."""
+        update_sql = text("""
+            UPDATE student_sessions
+            SET status = 'completed',
+                completed_at = NOW(),
+                last_activity_at = NOW()
+            WHERE session_id = :session_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            await session.execute(update_sql, {"session_id": str(session_id)})
+            await session.commit()
+
 
 event_store = EventStore()
+

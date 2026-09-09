@@ -8,18 +8,22 @@ logger = logging.getLogger(__name__)
 
 # Patterns attempting to elicit ground-truth solutions or execute jailbreaks
 ADVERSARIAL_PATTERNS = [
-    r"\b(?:give|tell|show|reveal|hand)\s+(?:me\s+)?(?:the\s+)?(?:final\s+)?(?:answer|solution|result|key)\b",
-    r"\bjust\s+(?:tell|give|show)\s+(?:me)?\b",
-    r"\bwhat\s+(?:is|are)\s+the\s+(?:exact\s+)?(?:final\s+)?(?:answer|solution)\b",
+    r"\b(?:give|tell|show|reveal|hand|output|write)\s+(?:me\s+)?(?:the\s+)?(?:exact\s+)?(?:final\s+)?(?:answer|solution|result|key|thesis\s+statement)\b",
+    r"\bjust\s+(?:tell|give|show|write)\s+(?:me)?\b",
+    r"\bwhat\s+(?:is|are)\s+the\s+(?:exact\s+)?(?:final\s+)?(?:answer|solution|rubric|key)\b",
     r"\bsolve\s+(?:it|this)\s+(?:for\s+me)?\b",
     r"\bdo\s+(?:the\s+)?(?:math|calculation|essay|writing)\s+for\s+me\b",
-    r"\bignore\s+(?:all\s+)?(?:previous|prior)\s+(?:instructions|rules|constraints)\b",
+    r"\b(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)\s+(?:instructions|rules|constraints|guidelines)\b",
     r"\byou\s+are\s+now\s+in\s+dan\s+mode\b",
     r"\brepeat\s+(?:the\s+)?(?:system\s+prompt|prompt\s+above)\b",
+    r"\bdump\s+(?:all\s+)?(?:hidden\s+)?(?:prompt|instructions|keys|answers)\b",
+    r"\b(?:admin|administrator|teacher|superintendent)\s+mode\b",
+    r"\bi\s+am\s+(?:your\s+)?(?:teacher|instructor|professor|evaluator)\b",
     r"\bbypass\s+(?:safety|rules|guardrails)\b",
 ]
 
 ADVERSARIAL_REGEX = re.compile("|".join(ADVERSARIAL_PATTERNS), re.IGNORECASE)
+
 
 
 class SocraticDialogueEngine:
@@ -34,7 +38,17 @@ class SocraticDialogueEngine:
         """Checks whether the student is attempting to force-extract solutions or jailbreak constraints."""
         return bool(ADVERSARIAL_REGEX.search(student_input.strip()))
 
+    def generate_hint_ladder(self, question_prompt: str) -> list[dict[str, Any]]:
+        """Generates a default 4-rung Socratic hint ladder for a question."""
+        return [
+            {"rung": 0, "label": "Orientation", "text": "What are the core concepts or actors identified in the prompt?"},
+            {"rung": 1, "label": "Conceptual Anchor", "text": "Consider the structural incentives and fiscal constraints at play."},
+            {"rung": 2, "label": "Mechanistic Bridge", "text": "Trace how the state debt service impacted royal options."},
+            {"rung": 3, "label": "Target Synthesis", "text": "Synthesize the interaction between war debt and tax exemptions."},
+        ]
+
     def build_adversarial_rejection(
+
         self,
         question_prompt: str,
         current_rung: int = 0,
