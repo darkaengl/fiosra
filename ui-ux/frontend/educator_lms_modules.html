@@ -331,6 +331,55 @@
     .score-fill.high { background: var(--color-signal-green); }
     .score-fill.medium { background: var(--color-amber); }
     .score-fill.low { background: var(--color-rose); }
+
+    /* Modal Overlay & Box */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(10, 12, 16, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .modal-overlay.active {
+      display: flex !important;
+    }
+
+    .modal-box {
+      background: var(--color-graphite);
+      border: 1px solid var(--color-graphite-border);
+      border-radius: var(--radius-lg);
+      width: 620px;
+      max-width: 92vw;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--color-graphite-border);
+      padding-bottom: 14px;
+    }
+
+    .modal-title {
+      font-family: var(--font-brand);
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
@@ -343,7 +392,7 @@
       <div class="breadcrumb-trail">
         <span>Curriculum Hub</span>
         <span>/</span>
-        <a href="educator_lms_courses.html" style="color: var(--color-slate-light); text-decoration: none;">HIST-201</a>
+        <a id="breadcrumbCourseCode" href="educator_lms_courses.html" style="color: var(--color-slate-light); text-decoration: none;">HIST-201</a>
         <span>/</span>
         <span style="color:#ffffff;">Curriculum Architecture</span>
       </div>
@@ -799,8 +848,11 @@
         const course = await res.json();
         currentCourseData = course;
 
-        // 1. Update Title & Banner
+        // 1. Update Title, Breadcrumb & Banner
         document.getElementById('courseBannerTitle').textContent = course.title;
+        const breadcrumb = document.getElementById('breadcrumbCourseCode');
+        if (breadcrumb) breadcrumb.textContent = course.title;
+
         document.getElementById('courseBannerMeta').innerHTML = `
           <span>${(course.domain || 'ACADEMIC').toUpperCase()} CURRICULUM</span>
           <span>•</span>
@@ -823,10 +875,11 @@
           const rosterRes = await fetch(`/courses/${currentCourseId}/roster`);
           if (rosterRes.ok) {
             const roster = await rosterRes.json();
-            document.getElementById('bannerStudentCount').textContent = `${roster.total_students} ENROLLED STUDENTS`;
-            document.getElementById('tabRoster').innerHTML = `<span>👥</span> Cohort Roster &amp; Autonomy Diagnostics (${roster.total_students} Students)`;
+            const totalCount = roster.total_enrolled ?? (roster.students ? roster.students.length : 0);
+            document.getElementById('bannerStudentCount').textContent = `${totalCount} ENROLLED STUDENTS`;
+            document.getElementById('tabRoster').innerHTML = `<span>👥</span> Cohort Roster &amp; Autonomy Diagnostics (${totalCount} Students)`;
 
-            if (roster.total_students === 0) {
+            if (totalCount === 0 || !roster.students || roster.students.length === 0) {
               document.getElementById('rosterTableBody').innerHTML = `
                 <tr>
                   <td colspan="7" style="text-align: center; padding: 36px; color: var(--color-slate-muted); font-style: italic;">
@@ -834,6 +887,49 @@
                   </td>
                 </tr>
               `;
+            } else {
+              document.getElementById('rosterTableBody').innerHTML = roster.students.map(stu => {
+                const autonomyPct = Math.round((stu.average_autonomy_score || 0) * 100);
+                const meterClass = autonomyPct >= 80 ? 'high' : autonomyPct >= 60 ? 'medium' : 'low';
+                const meterColor = autonomyPct >= 80 ? 'var(--color-signal-green)' : autonomyPct >= 60 ? 'var(--color-amber)' : 'var(--color-rose)';
+                const initials = stu.student_id.substring(0, 2).toUpperCase();
+                return `
+                  <tr>
+                    <td>
+                      <div class="student-cell">
+                        <div class="student-avatar" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6);">${initials}</div>
+                        <div>
+                          <div style="font-weight: 600; color: #fff;">${stu.student_id}</div>
+                          <div style="font-size: 11px; color: var(--color-slate-muted);">${stu.session_count} Sessions Logged</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>${stu.completed_assignments > 0 ? `${stu.completed_assignments} Assignments Completed` : 'Canvas Active'}</td>
+                    <td>
+                      <div class="score-meter">
+                        <div class="score-bar"><div class="score-fill ${meterClass}" style="width: ${autonomyPct}%;"></div></div>
+                        <span style="font-weight: 700; color: ${meterColor};">${autonomyPct}%</span>
+                      </div>
+                    </td>
+                    <td><code style="color: var(--color-slate-bright);">${stu.hint_consumption_rate || 0.0}</code></td>
+                    <td>
+                      ${stu.active_struggle && stu.struggling_kcs.length > 0 
+                        ? `<span style="color: var(--color-rose); font-weight: 600;">⚠️ ${stu.struggling_kcs.join(', ')}</span>`
+                        : `<span style="color: var(--color-signal-green);">None Detected</span>`}
+                    </td>
+                    <td>
+                      <span class="badge ${stu.active_struggle ? 'badge-warning' : 'badge-success'}">
+                        ${stu.active_struggle ? 'Needs Scaffolding' : 'Progressing'}
+                      </span>
+                    </td>
+                    <td>
+                      <a href="student_trace.html?student_id=${stu.student_id}&course_id=${currentCourseId}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;">
+                        Trace ↗
+                      </a>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
             }
           }
         } catch (rErr) {
