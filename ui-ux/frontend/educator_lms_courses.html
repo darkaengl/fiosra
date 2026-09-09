@@ -447,7 +447,7 @@
         <button class="btn btn-secondary" onclick="openModal()">
           📄 Ingest Syllabus Corpus
         </button>
-        <button class="btn btn-primary" onclick="alert('Creating new course workspace...')">
+        <button class="btn btn-primary" onclick="openCreateCourseModal()">
           + Create New Course
         </button>
       </div>
@@ -461,8 +461,8 @@
           <span>📚</span>
         </div>
         <div class="stat-value-row">
-          <span class="stat-value">3</span>
-          <span class="stat-trend neutral">1 Archived</span>
+          <span id="activeCoursesCount" class="stat-value">3</span>
+          <span class="stat-trend neutral">Live Synced</span>
         </div>
       </div>
 
@@ -514,7 +514,7 @@
         </div>
       </div>
 
-      <div class="courses-grid">
+      <div id="coursesGrid" class="courses-grid">
         
         <!-- Course Card 1: HIST-201 -->
         <div class="course-card">
@@ -713,7 +713,73 @@
     </div>
   </div>
 
+  <!-- Create New Course Modal -->
+  <div id="createCourseModal" class="modal-overlay" onclick="closeCreateCourseModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()" style="width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title">🏛️ Create New Course Workspace</div>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeCreateCourseModal()">✕</button>
+      </div>
+
+      <p style="font-size: 13px; color: var(--color-slate-light); line-height: 1.5;">
+        Configure a new academic course workspace. Once initialized in PostgreSQL and Neo4j, you can sequence prerequisite modules, ground syllabi, and monitor student reasoning cohorts.
+      </p>
+
+      <form id="createCourseForm" onsubmit="submitCreateCourse(event)" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+            Course Code &amp; Title <span style="color: var(--color-rose);">*</span>
+          </label>
+          <input id="newCourseTitle" type="text" placeholder="e.g. HIST-302: Revolutions in the Atlantic World" required
+                 style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13.5px;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Academic Domain <span style="color: var(--color-rose);">*</span>
+            </label>
+            <select id="newCourseDomain" style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13.5px;">
+              <option value="History">History</option>
+              <option value="Philosophy">Philosophy</option>
+              <option value="Computer Science">Computer Science</option>
+              <option value="Physics">Physics</option>
+              <option value="Economics">Economics</option>
+              <option value="Literature">Literature</option>
+            </select>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+              Lead Instructor
+            </label>
+            <input id="newCourseInstructor" type="text" value="Dr. Vance"
+                   style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13.5px;">
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light);">
+            Introductory Syllabus Context &amp; Objectives (Optional)
+          </label>
+          <textarea id="newCourseSyllabus" rows="3" placeholder="Key topics, preliminary reading units, or foundational pedagogical scope..."
+                    style="background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; resize: vertical;"></textarea>
+        </div>
+
+        <div id="createCourseFeedback" style="display: none; font-size: 12px; padding: 8px 12px; border-radius: var(--radius-xs);"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--color-graphite-border); padding-top: 16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateCourseModal()">Cancel</button>
+          <button type="submit" id="btnSubmitCourse" class="btn btn-primary">
+            <span>+ Create Course Workspace</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
+    // Ingestion Modal Controls
     function openModal() {
       document.getElementById('ingestionModal').classList.add('active');
     }
@@ -723,6 +789,140 @@
     function simulateUpload() {
       alert('Syllabus Corpus Grounded Successfully! 14 Knowledge Components and 32 Vector Chunks indexed into Neo4j and pgvector.');
       closeModal();
+    }
+
+    // Create Course Modal Controls & Live API Integration
+    function openCreateCourseModal() {
+      document.getElementById('createCourseModal').classList.add('active');
+      document.getElementById('newCourseTitle').focus();
+    }
+
+    function closeCreateCourseModal(e) {
+      if (e && e.target !== e.currentTarget && e.type === 'click') return;
+      document.getElementById('createCourseModal').classList.remove('active');
+      const feedback = document.getElementById('createCourseFeedback');
+      if (feedback) feedback.style.display = 'none';
+    }
+
+    function renderCourseCard(course) {
+      const card = document.createElement('div');
+      card.className = 'course-card';
+      card.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+      card.style.boxShadow = '0 0 16px rgba(59, 130, 246, 0.15)';
+
+      const domain = course.domain || 'Academic';
+      const modulesCount = course.modules ? course.modules.length : 0;
+      const assignmentsCount = course.assignments_count || 0;
+      const instructor = course.created_by || 'Dr. Vance';
+
+      card.innerHTML = `
+        <div class="course-card-top">
+          <div>
+            <span class="course-code-badge" style="background: rgba(59, 130, 246, 0.15); color: var(--color-horizon-bright);">${domain.toUpperCase()} • NEW WORKSPACE</span>
+            <h3 class="course-name">${course.title}</h3>
+          </div>
+          <span class="grounding-status-pill">
+            <span>●</span> Neo4j Grounded
+          </span>
+        </div>
+
+        <p class="course-description">
+          ${course.syllabus_context || 'Curriculum workspace initialized. Ready for syllabus ingestion and prerequisite DAG module sequencing.'}
+        </p>
+
+        <div class="course-metrics">
+          <div class="metric-item">
+            <span class="metric-val">${modulesCount}</span>
+            <span class="metric-lbl">Modules</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-val">${assignmentsCount}</span>
+            <span class="metric-lbl">Assignments</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-val" style="color: var(--color-signal-green);">0%</span>
+            <span class="metric-lbl">Leakage</span>
+          </div>
+        </div>
+
+        <div class="card-footer">
+          <div style="font-size: 12px; color: var(--color-slate-muted);">
+            Instructor: <strong style="color: #ffffff;">${instructor}</strong>
+          </div>
+          <a href="educator_lms_modules.html?course_id=${course.course_id}" class="course-link">
+            <span>Manage Modules</span>
+            <span>→</span>
+          </a>
+        </div>
+      `;
+      return card;
+    }
+
+    async function submitCreateCourse(event) {
+      event.preventDefault();
+      const title = document.getElementById('newCourseTitle').value.trim();
+      const domain = document.getElementById('newCourseDomain').value;
+      const instructor = document.getElementById('newCourseInstructor').value.trim() || 'Dr. Vance';
+      const syllabus = document.getElementById('newCourseSyllabus').value.trim();
+      const btn = document.getElementById('btnSubmitCourse');
+      const feedback = document.getElementById('createCourseFeedback');
+
+      if (!title) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Creating in PostgreSQL &amp; Neo4j...</span>';
+      feedback.style.display = 'none';
+
+      try {
+        const response = await fetch('/courses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            domain: domain,
+            created_by: instructor,
+            syllabus_context: syllabus || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Server returned HTTP ' + response.status);
+        }
+
+        const newCourse = await response.json();
+
+        // Render card at the top of the grid
+        const grid = document.getElementById('coursesGrid');
+        const newCard = renderCourseCard(newCourse);
+        if (grid.firstChild) {
+          grid.insertBefore(newCard, grid.firstChild);
+        } else {
+          grid.appendChild(newCard);
+        }
+
+        // Increment active course count
+        const countEl = document.getElementById('activeCoursesCount');
+        if (countEl) {
+          const current = parseInt(countEl.textContent, 10) || 3;
+          countEl.textContent = current + 1;
+        }
+
+        // Reset and close
+        document.getElementById('createCourseForm').reset();
+        closeCreateCourseModal();
+
+        alert(`Course "${newCourse.title}" created successfully!\n\nWorkspace ID: ${newCourse.course_id}\nDatabase Record: PostgreSQL + Neo4j Synced.`);
+
+      } catch (err) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'rgba(239, 68, 68, 0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        feedback.textContent = 'Failed to create course: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>+ Create Course Workspace</span>';
+      }
     }
   </script>
 
