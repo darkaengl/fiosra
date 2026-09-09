@@ -1,7 +1,13 @@
 import uuid
-from typing import Dict, Any, List
-from fiosra.mvp.assignment_designer.schemas import QuestionDraftRequest, QuestionSpec, HintRung, ScaffoldingStep
-from fiosra.mvp.assignment_designer.distractor_engine import DistractorEngine
+from typing import Any
+
+from fiosra.mvp.assignment_designer.schemas import (
+    HintRung,
+    QuestionDraftRequest,
+    QuestionSpec,
+    ScaffoldingStep,
+)
+
 
 class AssignmentGenerator:
     """
@@ -12,8 +18,8 @@ class AssignmentGenerator:
     async def draft_question(
         cls, 
         req: QuestionDraftRequest,
-        prerequisite_kcs: List[str],
-        common_misconceptions: List[Dict[str, Any]]
+        prerequisite_kcs: list[str],
+        common_misconceptions: list[dict[str, Any]]
     ) -> QuestionSpec:
         # Generate question spec grounded in curriculum DAG & misconceptions
         q_id = f"Q_{uuid.uuid4().hex[:8].upper()}"
@@ -33,7 +39,7 @@ class AssignmentGenerator:
 
         return QuestionSpec(
             question_id=q_id,
-            prompt=f"Solve the linear equation for x: 4*(2*x - 3) = 20",
+            prompt="Solve the linear equation for x: 4*(2*x - 3) = 20",
             domain=req.domain,
             target_kcs=prerequisite_kcs or ["KC_LINEAR_EQUATION_ISOLATION"],
             subproblems=subproblems,
