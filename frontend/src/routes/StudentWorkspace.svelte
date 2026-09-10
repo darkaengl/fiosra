@@ -217,6 +217,21 @@
     }
   }
 
+  function toggleQuestions() {
+    if (isQuestionDrawerOpen) {
+      isQuestionDrawerOpen = false;
+    } else {
+      const current = activeProbe();
+      if (current) activeProbeId = current.probe_id;
+      isQuestionDrawerOpen = true;
+      probeNotice = '';
+    }
+  }
+
+  function closeQuestions() {
+    isQuestionDrawerOpen = false;
+  }
+
   function openQuestions() {
     const current = activeProbe();
     if (current) activeProbeId = current.probe_id;
@@ -269,6 +284,14 @@
   onDestroy(() => clearTimeout(probeTimer));
 </script>
 
+<svelte:window onkeydown={(e) => {
+  if (e.key === 'Escape') {
+    if (isQuestionDrawerOpen) isQuestionDrawerOpen = false;
+    if (isBriefOpen) isBriefOpen = false;
+    if (isQuickPromptOpen) isQuickPromptOpen = false;
+  }
+}} />
+
 {#if isLoading}
   <main class="loading-view">
     <div class="spinner"></div>
@@ -319,7 +342,7 @@
         </button>
 
         {#if probes.length}
-          <button class="question-control" onclick={openQuestions} aria-label={`Open ${probes.length} evidence question${probes.length === 1 ? '' : 's'}`}>
+          <button class="question-control" onclick={toggleQuestions} aria-label={`Toggle ${probes.length} evidence question${probes.length === 1 ? '' : 's'}`}>
             Socratic Probes <span>{probes.length}</span>
           </button>
         {/if}
@@ -369,9 +392,14 @@
         disabled={sessionStatus !== 'active'}
         onSync={syncDocument}
         onSynced={scheduleProbeEvaluation}
-        onOpenQuestions={openQuestions}
+        onOpenQuestions={toggleQuestions}
         probeCount={probes.length}
       />
+    {/if}
+
+    <!-- Backdrop for Question Drawer -->
+    {#if isQuestionDrawerOpen}
+      <div class="drawer-backdrop" onclick={closeQuestions} aria-hidden="true"></div>
     {/if}
 
     <!-- Socratic Questions Side Drawer -->
@@ -381,7 +409,7 @@
           <span class="eyebrow">Socratic Inquiry</span>
           <h2>Evidence & Probes</h2>
         </div>
-        <button class="close-btn" onclick={() => isQuestionDrawerOpen = false} aria-label="Close evidence questions">✕</button>
+        <button class="close-btn" onclick={closeQuestions} aria-label="Close evidence questions" title="Close Panel (Esc)">✕</button>
       </header>
 
       {#if currentProbe}
@@ -424,6 +452,10 @@
           {/if}
         </div>
       {/if}
+
+      <div class="drawer-footer">
+        <button class="return-canvas-btn" onclick={closeQuestions}>✕ Close Panel (Esc)</button>
+      </div>
     </aside>
   </main>
 
@@ -891,6 +923,44 @@
     font-size: 11px;
     font-weight: 700;
     margin-top: 12px;
+  }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 69;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .drawer-footer {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-graphite-border);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .return-canvas-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .return-canvas-btn:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
   }
 
   /* Brief Modal */
