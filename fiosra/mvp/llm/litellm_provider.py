@@ -25,7 +25,7 @@ class LiteLLMProvider:
         elif provider == "openai":
             model = settings.OPENAI_MODEL
             api_key = settings.OPENAI_API_KEY
-            api_base = None
+            api_base = settings.OPENAI_API_BASE
         elif provider == "gemini":
             model = settings.GEMINI_MODEL
             api_key = settings.GEMINI_API_KEY
@@ -63,11 +63,17 @@ class LiteLLMProvider:
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
             ],
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
             "timeout": settings.OPENROUTER_TIMEOUT_SECONDS,
             "num_retries": 0,
         }
+        # GPT-5 models reject the legacy max_tokens/temperature combination.
+        # Other LiteLLM providers retain the OpenAI-compatible defaults.
+        if self.provider_name == "openai" and self.model.startswith("gpt-5"):
+            call_options["max_completion_tokens"] = request.max_tokens
+            call_options["reasoning_effort"] = "minimal"
+        else:
+            call_options["temperature"] = request.temperature
+            call_options["max_tokens"] = request.max_tokens
         if self.api_key:
             call_options["api_key"] = self.api_key
         if self.api_base:

@@ -12,7 +12,7 @@ The default configuration is `FIOSRA_LLM_PROVIDER=deterministic`. This is intent
 |---|---|---|---|
 | `deterministic` | No key or model runtime | `deterministic` | Default for tests, local development, and dependable fallback behavior. |
 | `openrouter` | `OPENROUTER_API_KEY` | `openrouter/openrouter/free` or `openrouter/nvidia/nemotron-3.5-lightning:free` | Provider-neutral experimentation and controlled evaluation of OpenRouter models. |
-| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | OpenAI-compatible hosted deployment approved by the institution. |
+| `openai` | `OPENAI_API_KEY`; optional `OPENAI_API_BASE` | `gpt-4o-mini` | OpenAI or an OpenAI-compatible hosted deployment approved by the institution. |
 | `gemini` | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | Google AI Studio deployment approved by the institution. |
 | `ollama` | A reachable Ollama server | `ollama/llama3.2` | Private/self-hosted deployment with a local or institution-operated model server. |
 
@@ -38,6 +38,8 @@ A live response is rejected if it is blank, over the configured response size, o
 ## Provider selection guidance
 
 Use `openrouter/openrouter/free` for local experimentation only. Free-model availability and rate limits vary, so it is not a production availability guarantee. Validate a named model with Fiosra’s frozen safety and relevance tests before using it as a production default. LiteLLM receives the model string directly, so a named OpenRouter model can be substituted without code changes.
+
+When an institution provides an OpenAI-compatible proxy rather than OpenAI’s public endpoint, set `OPENAI_API_BASE` to the proxy’s versioned base URL. The adapter detects GPT-5 model names and sends the current `max_completion_tokens` parameter with minimal reasoning effort instead of the legacy `max_tokens` field, which those models reject.
 
 Use Ollama for environments where source excerpts or student content must remain inside a private network, provided that the institution operates and governs the model host. Use OpenAI or Gemini only after the organization has approved the selected service, model, retention configuration, and student-data posture.
 

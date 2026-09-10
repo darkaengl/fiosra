@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
     OPENROUTER_MODEL: str = "openrouter/openrouter/free"
     OPENAI_API_KEY: str | None = None
+    OPENAI_API_BASE: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini/gemini-2.5-flash"

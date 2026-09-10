@@ -189,10 +189,11 @@ class SocraticDialogueEngine:
         generation = await llm_orchestrator.enhance(
             purpose="socratic_hint_rephrase",
             system_prompt=(
-                "You are a concise Socratic tutor. Rewrite only the supplied bounded hint as one supportive "
-                "question or invitation to reason. Preserve its instructional intent and stay within the public "
-                "assignment context. Never provide an answer, thesis, solution, grading judgment, rubric, or "
-                "reference material. Do not introduce people, events, evidence, or concepts absent from the input."
+                "You are a concise Socratic tutor. Output exactly one supportive question ending in a question "
+                "mark, with no preface, answer, explanation, list, or quotation. Rewrite only the supplied bounded "
+                "hint. Preserve its instructional intent and stay within the public assignment context. Never provide "
+                "an answer, thesis, solution, grading judgment, rubric, or reference material. Do not introduce people, "
+                "events, evidence, or concepts absent from the input."
             ),
             user_prompt=(
                 f"Public assignment context:\n{question_prompt}\n\n"

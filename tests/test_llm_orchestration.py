@@ -241,9 +241,13 @@ def test_litellm_provider_configuration_supports_named_provider_switches(monkeyp
         monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", provider)
         monkeypatch.setattr(settings, key_field, "test-key")
         monkeypatch.setattr(settings, model_field, model)
+        if provider == "openai":
+            monkeypatch.setattr(settings, "OPENAI_API_BASE", "https://llm-proxy.example/v1")
         configured = LiteLLMProvider.from_settings()
         assert configured.provider_name == provider
         assert configured.model == model
+        if provider == "openai":
+            assert configured.api_base == "https://llm-proxy.example/v1"
 
     monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "ollama")
     monkeypatch.setattr(settings, "OLLAMA_MODEL", "ollama/llama3.2")
@@ -289,3 +293,40 @@ async def test_litellm_adapter_uses_async_completion_with_normalized_configurati
     assert captured["api_key"] == "test-key"
     assert captured["user"] == "fiosra-opaque"
     assert captured["num_retries"] == 0
+
+
+@pytest.mark.asyncio
+async def test_litellm_adapter_uses_gpt5_completion_token_parameter(monkeypatch):
+    import litellm
+
+    captured: dict = {}
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Which detail supports that claim?"))],
+            model="gpt-5-nano",
+            usage=SimpleNamespace(prompt_tokens=5, completion_tokens=7, total_tokens=12),
+        )
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    provider = LiteLLMProvider(
+        provider_name="openai",
+        model="gpt-5-nano",
+        api_key="test-key",
+        api_base="https://llm-proxy.example/v1",
+    )
+    await provider.complete(
+        CompletionRequest(
+            system_prompt="System boundary",
+            user_prompt="Public source context",
+            purpose="socratic_hint_rephrase",
+            max_tokens=100,
+            metadata={"user": "fiosra-opaque"},
+        )
+    )
+
+    assert captured["max_completion_tokens"] == 100
+    assert captured["reasoning_effort"] == "minimal"
+    assert "max_tokens" not in captured
+    assert "temperature" not in captured
