@@ -21,6 +21,7 @@
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
   let isLoading = $state(true);
   let isBriefOpen = $state(false);
+  let isQuickPromptOpen = $state(false);
   let isQuestionDrawerOpen = $state(false);
   let activeProbeId = $state('');
   let probeResponse = $state('');
@@ -209,7 +210,7 @@
       evidenceSummary = result.evidence_summary || evidenceSummary;
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
-        probeNotice = 'A focused question is ready when you are. It tests this paragraph’s reasoning, not your grade.';
+        probeNotice = 'A focused Socratic question is ready. It tests this paragraph’s reasoning, not your grade.';
       }
     } catch (err) {
       probeNotice = err.message || 'Your writing is saved. A question could not be checked right now.';
@@ -269,7 +270,10 @@
 </script>
 
 {#if isLoading}
-  <main class="loading-view"><div class="spinner"></div><p>Opening your long-form writing workspace…</p></main>
+  <main class="loading-view">
+    <div class="spinner"></div>
+    <p>Opening your reasoning canvas…</p>
+  </main>
 {:else if error && !assignment}
   <main class="empty-view">
     <h1>Workspace unavailable</h1>
@@ -283,10 +287,8 @@
   </main>
 {:else if !assignment}
   <main class="empty-view">
-    <h1 style="color: var(--color-heading) !important; font-family: var(--font-brand); font-size: 26px; font-weight: 700; margin: 0;">
-      {courseId ? 'No published assignment in this course yet' : 'No active assignment selected'}
-    </h1>
-    <p style="color: var(--color-slate-light) !important; font-size: 14px; max-width: 540px; line-height: 1.5; margin: 0;">
+    <h1>{courseId ? 'No published assignment in this course yet' : 'No active assignment selected'}</h1>
+    <p>
       {courseId 
         ? 'Your instructor has not published an active reasoning assignment for this course yet.' 
         : 'Open an active milestone from your enrolled courses to start a protected reasoning session.'}
@@ -300,74 +302,765 @@
   </main>
 {:else}
   <main class="document-workspace">
+    <!-- Top Assignment Bar -->
     <header class="assignment-bar">
       <div class="assignment-identity">
-        <span class="eyebrow">Active writing</span>
-        <h1>{assignment.title || 'Reasoning assignment'}</h1>
-        <span class="document-type">Long-form document</span>
+        <span class="eyebrow">Reasoning Canvas</span>
+        <h1>{assignment.title || 'Reasoning Assignment'}</h1>
+        <span class="document-type">Claim–Evidence–Reasoning</span>
       </div>
+
       <div class="assignment-actions">
-        <button class="quiet-control" onclick={() => isBriefOpen = true}>View brief</button>
+        <button class="quiet-control" onclick={() => isQuickPromptOpen = !isQuickPromptOpen}>
+          {isQuickPromptOpen ? 'Hide Prompt ▲' : 'Prompt & Sources ▼'}
+        </button>
+        <button class="quiet-control" onclick={() => isBriefOpen = true}>
+          Full Brief
+        </button>
+
         {#if probes.length}
           <button class="question-control" onclick={openQuestions} aria-label={`Open ${probes.length} evidence question${probes.length === 1 ? '' : 's'}`}>
-            Questions <span>{probes.length}</span>
+            Socratic Probes <span>{probes.length}</span>
           </button>
         {/if}
+
+        <a class="trace-control" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>
+          Trace ↗
+        </a>
+
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
     </header>
 
-    <section class="workspace-intro">
-      <div><span class="eyebrow">Student writing space</span><h2>Build your argument in one document.</h2><p>Use headings to organize your ideas. There is no fixed page or essay limit; your work is saved as individual document blocks.</p></div>
-      <a class="trace-link" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>View reasoning trace ↗</a>
-    </section>
+    <!-- Collapsible Quick Prompt & Sources Accordion -->
+    {#if isQuickPromptOpen}
+      <section class="quick-prompt-banner">
+        <div class="prompt-col">
+          <span class="banner-tag">Assignment Prompt</span>
+          <p class="prompt-text">{assignment.prompt}</p>
+        </div>
+        {#if assignment.grounding_sources?.length}
+          <div class="sources-col">
+            <span class="banner-tag">Approved Evidence Sources</span>
+            <div class="source-chips">
+              {#each assignment.grounding_sources as source}
+                <div class="source-chip" title={source.excerpt || ''}>
+                  📜 {source.title || 'Course Material'}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </section>
+    {/if}
 
     {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-    {#if probeNotice && !isQuestionDrawerOpen}<button class="probe-notice" onclick={openQuestions}>{probeNotice}</button>{/if}
+    {#if probeNotice && !isQuestionDrawerOpen}
+      <button class="probe-notice" onclick={openQuestions}>
+        💡 {probeNotice}
+      </button>
+    {/if}
+
+    <!-- Long-Form Document Editor -->
     {#if learningDocument}
       <LongFormDocumentEditor
         {learningDocument}
+        {assignment}
         disabled={sessionStatus !== 'active'}
         onSync={syncDocument}
         onSynced={scheduleProbeEvaluation}
+        onOpenQuestions={openQuestions}
+        probeCount={probes.length}
       />
     {/if}
 
+    <!-- Socratic Questions Side Drawer -->
     <aside class:open={isQuestionDrawerOpen} class="question-drawer" aria-label="Evidence and questions" aria-hidden={!isQuestionDrawerOpen}>
       <header>
-        <div><span class="eyebrow">Evidence & questions</span><h2>Test your reasoning</h2></div>
-        <button onclick={() => isQuestionDrawerOpen = false} aria-label="Close evidence questions">×</button>
+        <div>
+          <span class="eyebrow">Socratic Inquiry</span>
+          <h2>Evidence & Probes</h2>
+        </div>
+        <button class="close-btn" onclick={() => isQuestionDrawerOpen = false} aria-label="Close evidence questions">✕</button>
       </header>
+
       {#if currentProbe}
-        <div class="question-context"><span>{currentProbe.section_label}</span><strong>{currentProbe.focus_type.replace('_', ' ')}</strong></div>
+        <div class="question-context">
+          <span>{currentProbe.section_label || 'Active paragraph'}</span>
+          <strong>{currentProbe.focus_type.replace(/_/g, ' ')}</strong>
+        </div>
         <p class="question-copy">{currentProbe.question}</p>
-        <p class="evidence-explainer">A response gives your evaluator evidence to consider. Choosing Later or Dismiss does not change a grade, but this claim remains without a response record.</p>
-        <label for="probe-response">Your reasoning</label>
-        <textarea id="probe-response" bind:value={probeResponse} disabled={isProbeBusy} placeholder="Explain the reasoning in your own words. This is separate from your essay."></textarea>
+        <div class="evidence-explainer">
+          <p>This question tests the causal reasoning in your saved paragraph. Your response is captured as student-authored evidence for your instructor to review.</p>
+        </div>
+
+        <label for="probe-response">Your Reasoning Explanation</label>
+        <textarea 
+          id="probe-response" 
+          bind:value={probeResponse} 
+          disabled={isProbeBusy} 
+          placeholder="Explain your causal reasoning in your own words. This is preserved as distinct student evidence."
+        ></textarea>
+
         {#if probeNotice}<p class="probe-message" role="status">{probeNotice}</p>{/if}
+
         <div class="question-actions">
-          <button class="primary-question-action" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>{isProbeBusy ? 'Saving…' : 'Save response'}</button>
-          <button onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>Later</button>
-          <button class="dismiss" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>Dismiss</button>
+          <button class="primary-question-action" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
+            {isProbeBusy ? 'Saving…' : 'Save Response (Evidence)'}
+          </button>
+          <button class="secondary-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
+            Later
+          </button>
+          <button class="dismiss-btn" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>
+            Dismiss
+          </button>
         </div>
       {:else}
-        <div class="empty-questions"><h3>No open questions</h3><p>Continue writing. When a saved paragraph contains reasoning worth testing, a question will appear here without interrupting your work.</p>{#if evidenceSummary.evidence_submitted}<span>{evidenceSummary.evidence_submitted} response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} saved for review</span>{/if}</div>
+        <div class="empty-questions">
+          <h3>No Open Questions</h3>
+          <p>Continue writing. When a saved paragraph contains reasoning worth testing, a targeted Socratic probe will appear here without interrupting your work.</p>
+          {#if evidenceSummary.evidence_submitted}
+            <span class="evidence-submitted-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
+          {/if}
+        </div>
       {/if}
     </aside>
   </main>
 
+  <!-- Full Assignment Brief Modal -->
   {#if isBriefOpen}
     <div class="brief-overlay" role="presentation" onclick={() => isBriefOpen = false}>
       <dialog class="brief-dialog" open aria-label="Assignment brief" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') isBriefOpen = false; }}>
-        <header><div><div class="eyebrow">Assignment brief</div><h2>{assignment.title || 'Reasoning assignment'}</h2></div><button onclick={() => isBriefOpen = false} aria-label="Close assignment brief">×</button></header>
-        <p class="brief-prompt">{assignment.prompt}</p>
-        <div class="brief-grid"><div><h3>Target knowledge components</h3>{#each assignment.target_kcs || [] as kc}<code>{kc}</code>{/each}</div><div><h3>Approved sources</h3>{#each assignment.grounding_sources || [] as source}<p><strong>{source.title || 'Course material'}</strong><span>{source.excerpt || ''}</span></p>{:else}<p>No source excerpts are available.</p>{/each}</div></div>
-        <footer><span>Questions test your reasoning and create transparent evidence; they do not provide answers or automatic grades.</span><button class="btn btn-primary" onclick={() => isBriefOpen = false}>Return to writing</button></footer>
+        <header>
+          <div>
+            <div class="eyebrow">Assignment Specification</div>
+            <h2>{assignment.title || 'Reasoning Assignment'}</h2>
+          </div>
+          <button class="close-btn" onclick={() => isBriefOpen = false} aria-label="Close assignment brief">✕</button>
+        </header>
+
+        <div class="brief-content">
+          <div class="brief-section">
+            <h3>Prompt & Task</h3>
+            <p class="brief-prompt">{assignment.prompt}</p>
+          </div>
+
+          <div class="brief-grid">
+            <div class="brief-card">
+              <h3>Target Knowledge Components</h3>
+              <div class="kc-list">
+                {#each assignment.target_kcs || [] as kc}
+                  <code class="kc-tag">{kc}</code>
+                {:else}
+                  <p class="empty-text">No target KCs specified.</p>
+                {/each}
+              </div>
+            </div>
+
+            <div class="brief-card">
+              <h3>Approved Course Sources ({assignment.grounding_sources?.length || 0})</h3>
+              <div class="sources-list-mini">
+                {#each assignment.grounding_sources || [] as source}
+                  <div class="source-item-mini">
+                    <strong>📜 {source.title || 'Course Evidence'}</strong>
+                    <span>{source.excerpt || ''}</span>
+                  </div>
+                {:else}
+                  <p class="empty-text">No primary source excerpts attached.</p>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer>
+          <span>Socratic questions test understanding and capture reviewable evidence; AI never writes answers or grades.</span>
+          <button class="btn btn-primary" onclick={() => isBriefOpen = false}>Return to Canvas</button>
+        </footer>
       </dialog>
     </div>
   {/if}
 {/if}
 
 <style>
-  .document-workspace{background:var(--color-obsidian);color:var(--color-slate-bright);min-height:calc(100vh - 56px);padding:0 clamp(18px,5vw,76px) 70px}.assignment-bar{align-items:center;border-bottom:1px solid var(--color-graphite-border);display:flex;gap:18px;justify-content:space-between;min-height:82px}.assignment-identity{align-items:baseline;display:flex;gap:11px;min-width:0}.eyebrow{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.assignment-identity h1{color:#fff;font-family:var(--font-brand);font-size:16px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.document-type{color:var(--color-horizon-bright);font-size:11px;font-weight:700;white-space:nowrap}.assignment-actions{align-items:center;display:flex;gap:8px}.quiet-control,.question-control{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:11px;font-weight:700;padding:8px 10px}.quiet-control:hover,.question-control:hover{border-color:var(--color-horizon-bright);color:#fff}.question-control{border-color:rgba(96,165,250,.55);color:#dbeafe}.question-control span{background:var(--color-horizon-blue);border-radius:99px;color:#fff;margin-left:5px;padding:1px 5px}.session-badge{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:99px;color:#34d399;font-size:10px;font-weight:700;padding:5px 9px;text-transform:capitalize}.session-badge.submitted{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:var(--color-amber)}.workspace-intro{align-items:flex-end;display:flex;gap:25px;justify-content:space-between;margin:clamp(28px,6vh,64px) auto 0;max-width:920px}.workspace-intro h2{color:#fff;font-family:var(--font-brand);font-size:clamp(27px,3.6vw,42px);letter-spacing:-.7px;margin:6px 0 8px}.workspace-intro p{color:var(--color-slate-light);font-size:14px;line-height:1.6;margin:0;max-width:655px}.trace-link{border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#bae6fd;flex:0 0 auto;font-size:11px;font-weight:700;padding:9px 11px;text-decoration:none}.trace-link:hover{border-color:var(--color-horizon-blue);color:#fff}.error-banner{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:#fca5a5;font-size:12px;margin:20px auto 0;max-width:920px;padding:10px 12px}.probe-notice{background:rgba(59,130,246,.1);border:1px solid rgba(96,165,250,.32);border-radius:var(--radius-sm);color:#bfdbfe;cursor:pointer;display:block;font:600 12px var(--font-ui);margin:18px auto -10px;max-width:920px;padding:9px 12px;text-align:left;width:100%}.probe-notice:hover{background:rgba(59,130,246,.17);border-color:var(--color-horizon-bright)}.question-drawer{background:#111b27;border-left:1px solid var(--color-graphite-border);box-shadow:-22px 0 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:15px;height:100%;padding:22px;position:fixed;right:0;top:0;transform:translateX(105%);transition:transform .24s ease;visibility:hidden;width:min(420px,100vw);z-index:70}.question-drawer.open{transform:translateX(0);visibility:visible}.question-drawer header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:15px}.question-drawer h2{color:#fff;font-family:var(--font-brand);font-size:22px;margin:4px 0 0}.question-drawer header button{background:transparent;border:0;color:var(--color-slate-light);cursor:pointer;font-size:27px;line-height:1}.question-context{align-items:center;display:flex;gap:8px}.question-context span{color:#94a3b8;font-size:11px}.question-context strong{background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.28);border-radius:99px;color:#c4b5fd;font-size:10px;padding:3px 7px;text-transform:capitalize}.question-copy{color:#f8fafc;font-family:var(--font-brand);font-size:18px;line-height:1.5;margin:0}.evidence-explainer{background:#161f2a;border-left:2px solid var(--color-horizon-blue);color:#cbd5e1;font-size:12px;line-height:1.55;margin:0;padding:10px 12px}.question-drawer label{color:#e2e8f0;font-size:12px;font-weight:700;margin-top:2px}.question-drawer textarea{background:#0e151e;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#f8fafc;font:14px/1.55 var(--font-ui);min-height:145px;outline:none;padding:11px;resize:vertical}.question-drawer textarea:focus{border-color:var(--color-horizon-bright);box-shadow:0 0 0 3px rgba(59,130,246,.12)}.probe-message{color:#bae6fd;font-size:12px;line-height:1.45;margin:0}.question-actions{display:flex;flex-wrap:wrap;gap:8px}.question-actions button{background:#182433;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#cbd5e1;cursor:pointer;font-size:12px;font-weight:700;padding:9px 11px}.question-actions button:hover:not(:disabled){border-color:var(--color-horizon-bright);color:#fff}.question-actions button:disabled{cursor:not-allowed;opacity:.55}.question-actions .primary-question-action{background:var(--color-horizon-blue);border-color:var(--color-horizon-blue);color:#fff}.question-actions .dismiss{color:#fbbf24}.empty-questions{background:#161f2a;border:1px solid var(--color-graphite-border);border-radius:var(--radius-md);margin-top:5px;padding:17px}.empty-questions h3{color:#fff;font-size:15px;margin:0 0 6px}.empty-questions p{color:#94a3b8;font-size:12px;line-height:1.55;margin:0}.empty-questions span{color:#86efac;display:block;font-size:11px;margin-top:12px}.brief-overlay{align-items:center;background:rgba(2,6,23,.75);display:flex;inset:0;justify-content:center;padding:24px;position:fixed;z-index:80}.brief-dialog{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);box-shadow:0 24px 70px rgba(0,0,0,.5);max-width:820px;padding:24px;width:min(100%,820px)}.brief-dialog header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:14px}.brief-dialog h2{color:#fff;font-size:20px;margin:4px 0 0}.brief-dialog header button{background:none;border:0;color:#94a3b8;cursor:pointer;font-size:25px;line-height:1}.brief-prompt{color:#e2e8f0;font-size:14px;line-height:1.65;margin:18px 0}.brief-grid{display:grid;gap:15px;grid-template-columns:.8fr 1.2fr}.brief-grid>div{background:#111b27;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:7px;padding:13px}.brief-grid h3{color:#e2e8f0;font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase}.brief-grid code{color:#c4b5fd;font-size:10px;overflow-wrap:anywhere}.brief-grid p{color:#94a3b8;font-size:11px;line-height:1.4;margin:0}.brief-grid p strong{color:#bae6fd;display:block;font-size:11px}.brief-grid p span{display:block;margin-top:3px}.brief-dialog footer{align-items:center;color:#94a3b8;display:flex;font-size:11px;gap:14px;justify-content:space-between;margin-top:17px}.loading-view,.empty-view{align-items:center;background:var(--color-obsidian);color:var(--color-slate-light);display:flex;flex-direction:column;gap:14px;justify-content:center;min-height:calc(100vh - 56px);padding:24px;text-align:center}.empty-view h1{color:var(--color-heading);font-family:var(--font-brand);font-size:26px;margin:0}.empty-view p{color:var(--color-slate-light);max-width:540px;line-height:1.5;margin:0}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:32px;width:32px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:780px){.document-workspace{padding:0 16px 56px}.assignment-bar{align-items:flex-start;flex-direction:column;gap:10px;padding:14px 0}.assignment-identity{align-items:flex-start;flex-wrap:wrap}.assignment-actions{width:100%}.quiet-control,.question-control{flex:1}.workspace-intro{align-items:flex-start;flex-direction:column;margin-top:30px}.brief-grid{grid-template-columns:1fr}.brief-dialog footer{align-items:stretch;flex-direction:column}.brief-dialog footer .btn{width:100%}.question-drawer{width:100%}}@media(max-width:480px){.workspace-intro h2{font-size:29px}}
+  .document-workspace {
+    background: var(--color-obsidian);
+    color: var(--color-slate-bright);
+    min-height: calc(100vh - 56px);
+    padding: 0 clamp(16px, 4vw, 48px) 60px;
+    transition: background 0.2s ease;
+  }
+
+  .assignment-bar {
+    align-items: center;
+    border-bottom: 1px solid var(--color-graphite-border);
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    min-height: 72px;
+    padding: 12px 0;
+  }
+
+  .assignment-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .eyebrow {
+    color: var(--color-horizon-blue);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+
+  .assignment-identity h1 {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .document-type {
+    color: var(--color-slate-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .assignment-actions {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .quiet-control, .trace-control {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 11px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .quiet-control:hover, .trace-control:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+    border-color: var(--color-slate-subtle);
+  }
+
+  .question-control {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: var(--radius-sm);
+    color: #8b5cf6;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .question-control span {
+    background: #8b5cf6;
+    color: #fff;
+    border-radius: 99px;
+    padding: 1px 6px;
+    font-size: 10px;
+  }
+
+  .session-badge {
+    background: var(--color-signal-green-bg);
+    border: 1px solid rgba(5, 150, 105, 0.25);
+    border-radius: 99px;
+    color: var(--color-signal-green);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
+    text-transform: capitalize;
+  }
+
+  .session-badge.submitted {
+    background: var(--color-amber-bg);
+    border-color: rgba(217, 119, 6, 0.25);
+    color: var(--color-amber);
+  }
+
+  /* Quick Prompt Banner */
+  .quick-prompt-banner {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    box-shadow: var(--shadow-sm);
+    animation: slideDown 0.15s ease-out;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .banner-tag {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-horizon-blue);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .prompt-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--color-slate-bright);
+  }
+
+  .source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .source-chip {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    color: var(--color-slate-bright);
+    padding: 4px 8px;
+    font-weight: 600;
+  }
+
+  .error-banner {
+    background: var(--color-rose-bg);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--color-rose);
+    font-size: 12px;
+    margin: 16px 0;
+    padding: 10px 14px;
+  }
+
+  .probe-notice {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-sm);
+    color: #8b5cf6;
+    cursor: pointer;
+    display: block;
+    font: 600 13px var(--font-ui);
+    margin: 14px 0 -4px;
+    padding: 10px 14px;
+    text-align: left;
+    width: 100%;
+    transition: all 0.15s ease;
+  }
+
+  .probe-notice:hover {
+    background: rgba(139, 92, 246, 0.16);
+  }
+
+  /* Socratic Question Drawer */
+  .question-drawer {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border-left: 1px solid var(--color-graphite-border);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+    padding: 24px;
+    position: fixed;
+    right: 0;
+    top: 0;
+    transform: translateX(105%);
+    transition: transform 0.24s ease;
+    visibility: hidden;
+    width: min(440px, 100vw);
+    z-index: 70;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  .question-drawer.open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .question-drawer header {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--color-graphite-border);
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 14px;
+  }
+
+  .question-drawer h2 {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 20px;
+    font-weight: 700;
+    margin: 4px 0 0;
+  }
+
+  .close-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-slate-subtle);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius-xs);
+  }
+  .close-btn:hover {
+    color: var(--color-heading);
+    background: var(--color-graphite-hover);
+  }
+
+  .question-context {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .question-context span {
+    color: var(--color-slate-muted);
+    font-size: 12px;
+  }
+
+  .question-context strong {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.28);
+    border-radius: 99px;
+    color: #8b5cf6;
+    font-size: 10px;
+    padding: 2px 8px;
+    text-transform: capitalize;
+  }
+
+  .question-copy {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 17px;
+    line-height: 1.5;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .evidence-explainer {
+    background: var(--color-bone-muted);
+    border-left: 3px solid var(--color-aurora);
+    padding: 10px 12px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  .evidence-explainer p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-slate-light);
+    line-height: 1.45;
+  }
+
+  .question-drawer label {
+    color: var(--color-heading);
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+
+  .question-drawer textarea {
+    background: var(--input-bg, var(--color-graphite));
+    border: 1px solid var(--input-border, var(--color-graphite-border));
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-bright);
+    font: 14px/1.55 var(--font-ui);
+    min-height: 140px;
+    outline: none;
+    padding: 12px;
+    resize: vertical;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .question-drawer textarea:focus {
+    border-color: var(--color-horizon-blue);
+    box-shadow: 0 0 0 2px var(--color-horizon-glow);
+  }
+
+  .probe-message {
+    color: var(--color-horizon-blue);
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .question-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .primary-question-action {
+    background: var(--color-horizon-blue);
+    border: 1px solid var(--color-horizon-bright);
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    cursor: pointer;
+    flex: 1;
+  }
+  .primary-question-action:hover:not(:disabled) {
+    background: var(--color-horizon-bright);
+  }
+
+  .secondary-btn {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .secondary-btn:hover:not(:disabled) {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+  }
+
+  .dismiss-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--color-slate-subtle);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+  .dismiss-btn:hover:not(:disabled) {
+    color: var(--color-amber);
+  }
+
+  .empty-questions {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    text-align: center;
+  }
+
+  .empty-questions h3 {
+    color: var(--color-heading);
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+
+  .empty-questions p {
+    color: var(--color-slate-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .evidence-submitted-badge {
+    color: var(--color-signal-green);
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 12px;
+  }
+
+  /* Brief Modal */
+  .brief-overlay {
+    align-items: center;
+    background: var(--modal-overlay-bg, rgba(25, 28, 33, 0.6));
+    backdrop-filter: blur(4px);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 24px;
+    position: fixed;
+    z-index: 80;
+  }
+
+  .brief-dialog {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 800px;
+    padding: 24px;
+    width: min(100%, 800px);
+    color: var(--color-slate-bright);
+  }
+
+  .brief-dialog header {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--color-graphite-border);
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 14px;
+  }
+
+  .brief-dialog h2 {
+    color: var(--color-heading);
+    font-size: 20px;
+    margin: 4px 0 0;
+  }
+
+  .brief-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 18px 0;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .brief-prompt {
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .brief-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: 1fr 1.2fr;
+  }
+
+  .brief-card {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .brief-card h3 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-slate-muted);
+  }
+
+  .kc-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .kc-tag {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    color: var(--color-horizon-blue);
+  }
+
+  .sources-list-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .source-item-mini strong {
+    display: block;
+    font-size: 12px;
+    color: var(--color-heading);
+  }
+
+  .source-item-mini span {
+    font-size: 11px;
+    color: var(--color-slate-muted);
+    line-height: 1.4;
+    display: block;
+  }
+
+  .brief-dialog footer {
+    align-items: center;
+    border-top: 1px solid var(--color-graphite-border);
+    color: var(--color-slate-muted);
+    display: flex;
+    font-size: 11px;
+    gap: 14px;
+    justify-content: space-between;
+    padding-top: 16px;
+  }
+
+  /* Empty / Loading Views */
+  .loading-view, .empty-view {
+    align-items: center;
+    background: var(--color-obsidian);
+    color: var(--color-slate-light);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+    min-height: calc(100vh - 56px);
+    padding: 24px;
+    text-align: center;
+  }
+
+  .empty-view h1 {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 24px;
+    margin: 0;
+  }
+
+  .empty-view p {
+    color: var(--color-slate-light);
+    max-width: 520px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .spinner {
+    animation: spin 0.8s linear infinite;
+    border: 3px solid rgba(217, 119, 6, 0.2);
+    border-radius: 50%;
+    border-top-color: var(--color-horizon-blue);
+    height: 32px;
+    width: 32px;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 780px) {
+    .document-workspace { padding: 0 14px 40px; }
+    .assignment-bar { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .quick-prompt-banner { grid-template-columns: 1fr; }
+    .brief-grid { grid-template-columns: 1fr; }
+    .question-drawer { width: 100%; }
+  }
 </style>

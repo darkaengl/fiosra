@@ -6,9 +6,14 @@
 
   let {
     learningDocument = null,
+    assignment = null,
     disabled = false,
     onSync = async () => null,
     onSynced = () => null,
+    onOpenSources = () => null,
+    onOpenAssist = () => null,
+    onOpenQuestions = () => null,
+    probeCount = 0,
   } = $props();
 
   const blockTypes = {
@@ -19,6 +24,7 @@
     orderedList: 'ordered_list',
   };
   const supportedTopLevelTypes = new Set(Object.keys(blockTypes));
+
   const BlockIdentity = Extension.create({
     name: 'fiosraBlockIdentity',
     addGlobalAttributes() {
@@ -67,8 +73,18 @@
   let isDirty = $state(false);
   let saveError = $state('');
   let wordCount = $state(0);
+  let readingTimeMin = $derived(Math.max(1, Math.ceil(wordCount / 200)));
   let saveTimer;
   let loadedDocumentId = '';
+
+  // Outline and tool states
+  let isOutlineOpen = $state(false);
+  let isSlashMenuOpen = $state(false);
+  let isAssistPaletteOpen = $state(false);
+  let isSourceDrawerOpen = $state(false);
+  let sourceSearchQuery = $state('');
+
+  let documentHeadings = $state([]);
 
   function createBlockId() {
     return crypto.randomUUID();
@@ -130,6 +146,28 @@
       .trim()
       .split(/\s+/)
       .filter(Boolean).length;
+    extractHeadings();
+  }
+
+  function extractHeadings() {
+    if (!editor) return;
+    const headings = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading') {
+        headings.push({
+          pos,
+          level: node.attrs.level || 2,
+          text: node.textContent || 'Untitled section',
+          blockId: node.attrs.blockId,
+        });
+      }
+    });
+    documentHeadings = headings;
+  }
+
+  function scrollToHeading(pos) {
+    if (!editor) return;
+    editor.chain().focus().setTextSelection(pos).scrollIntoView().run();
   }
 
   function initialiseEditor(state) {
@@ -165,6 +203,7 @@
 
   function updateEditorMetrics() {
     wordCount = editor?.getText().trim().split(/\s+/).filter(Boolean).length || 0;
+    extractHeadings();
   }
 
   function scheduleSync() {
@@ -206,14 +245,14 @@
     }
   }
 
-  function addSection() {
+  function addSection(title = 'New Section') {
     if (!editor || disabled) return;
     const sectionId = `section_${Date.now().toString(36)}`;
     editor.chain().focus('end').insertContent([
       {
         type: 'heading',
         attrs: { blockId: createBlockId(), sectionId, authorType: 'student', level: 2 },
-        content: [{ type: 'text', text: 'New section' }],
+        content: [{ type: 'text', text: title }],
       },
       {
         type: 'paragraph',
@@ -225,6 +264,76 @@
   function setBlock(type, attrs = {}) {
     editor?.chain().focus().setNode(type, attrs).run();
   }
+
+  function toggleMark(mark) {
+    if (!editor || disabled) return;
+    if (mark === 'bold') editor.chain().focus().toggleBold().run();
+    if (mark === 'italic') editor.chain().focus().toggleItalic().run();
+  }
+
+  function insertSourceQuote(source) {
+    if (!editor || disabled) return;
+    const title = source.title || 'Course Evidence';
+    const excerpt = source.excerpt || '';
+    editor.chain().focus().insertContent([
+      {
+        type: 'blockquote',
+        attrs: { blockId: createBlockId(), authorType: 'student' },
+        content: [{
+          type: 'paragraph',
+          content: [{ type: 'text', text: `“${excerpt}” — [Source: ${title}]` }]
+        }]
+      },
+      {
+        type: 'paragraph',
+        attrs: { blockId: createBlockId(), authorType: 'student' },
+        content: [{ type: 'text', text: 'Based on this evidence, ' }]
+      }
+    ]).run();
+    isSourceDrawerOpen = false;
+  }
+
+  function insertWritingFrame(frameType) {
+    if (!editor || disabled) return;
+    let title = 'Working Claim';
+    let prompt = 'State your clear, defensible provisional claim.';
+    if (frameType === 'evidence') {
+      title = 'Source Observations';
+      prompt = 'Record what the approved primary source directly demonstrates before drawing an inference.';
+    } else if (frameType === 'reasoning') {
+      title = 'Reasoning & Causal Mechanism';
+      prompt = 'Explain how the specific source evidence connects to and justifies your main claim.';
+    } else if (frameType === 'alternative') {
+      title = 'Alternative Explanation';
+      prompt = 'Consider an alternative interpretation or counter-evidence that could qualify your thesis.';
+    } else if (frameType === 'reflection') {
+      title = 'Revision Reflection';
+      prompt = 'Reflect on how your argument evolved in response to evidence and Socratic questions.';
+    }
+
+    const sectionId = `section_${Date.now().toString(36)}`;
+    editor.chain().focus('end').insertContent([
+      {
+        type: 'heading',
+        attrs: { blockId: createBlockId(), sectionId, authorType: 'student_edited_assistance', level: 2 },
+        content: [{ type: 'text', text: title }],
+      },
+      {
+        type: 'paragraph',
+        attrs: { blockId: createBlockId(), sectionId, authorType: 'student_edited_assistance' },
+        content: [{ type: 'text', text: prompt }],
+      },
+    ]).run();
+    isAssistPaletteOpen = false;
+  }
+
+  let filteredSources = $derived(
+    (assignment?.grounding_sources || []).filter((s) => {
+      if (!sourceSearchQuery) return true;
+      const q = sourceSearchQuery.toLowerCase();
+      return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
+    })
+  );
 
   onMount(() => {
     editor = new Editor({
@@ -249,7 +358,10 @@
         editorState = { editor };
         scheduleSync();
       },
-      onTransaction: () => editorState = { editor },
+      onTransaction: () => {
+        editorState = { editor };
+        extractHeadings();
+      },
     });
     editorState = { editor };
     if (learningDocument) initialiseEditor(learningDocument);
@@ -268,36 +380,1054 @@
 </script>
 
 <section class="document-shell" aria-label="Long-form reasoning document">
+  <!-- Top Editor Toolbar -->
   <header class="document-toolbar">
-    <div class="toolbar-primary">
-      <span class="document-label">Long-form document</span>
-      <span class="save-state" class:saving={isSaving} class:problem={saveError}>
-        {#if saveError}Save needs attention{:else if isSaving}Saving…{:else if isDirty}Unsaved changes{:else}Saved{/if}
-      </span>
+    <div class="toolbar-left">
+      <button 
+        class="tool-btn outline-toggle-btn"
+        class:active={isOutlineOpen}
+        onclick={() => isOutlineOpen = !isOutlineOpen}
+        title="Toggle Document Outline Navigator"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+        <span>Outline ({documentHeadings.length})</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Formatting Tools -->
+      <div class="format-group" role="group" aria-label="Text formatting">
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('paragraph')} 
+          onclick={() => setBlock('paragraph')} 
+          disabled={disabled}
+          title="Normal paragraph text"
+        >
+          P
+        </button>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('heading', { level: 1 })} 
+          onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 1 }).run()} 
+          disabled={disabled}
+          title="Heading 1"
+        >
+          H1
+        </button>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('heading', { level: 2 })} 
+          onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 2 }).run()} 
+          disabled={disabled}
+          title="Heading 2 (Section Title)"
+        >
+          H2
+        </button>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('heading', { level: 3 })} 
+          onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 3 }).run()} 
+          disabled={disabled}
+          title="Heading 3 (Sub-heading)"
+        >
+          H3
+        </button>
+        <div class="divider-subtle"></div>
+        <button 
+          class="tool-btn font-bold" 
+          class:active={editorState.editor?.isActive('bold')} 
+          onclick={() => toggleMark('bold')} 
+          disabled={disabled}
+          title="Bold (Cmd+B)"
+        >
+          B
+        </button>
+        <button 
+          class="tool-btn font-italic" 
+          class:active={editorState.editor?.isActive('italic')} 
+          onclick={() => toggleMark('italic')} 
+          disabled={disabled}
+          title="Italic (Cmd+I)"
+        >
+          I
+        </button>
+        <div class="divider-subtle"></div>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('bulletList')} 
+          onclick={() => editorState.editor?.chain().focus().toggleBulletList().run()} 
+          disabled={disabled}
+          title="Bullet list"
+        >
+          • List
+        </button>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('orderedList')} 
+          onclick={() => editorState.editor?.chain().focus().toggleOrderedList().run()} 
+          disabled={disabled}
+          title="Numbered list"
+        >
+          1. List
+        </button>
+        <button 
+          class="tool-btn" 
+          class:active={editorState.editor?.isActive('blockquote')} 
+          onclick={() => editorState.editor?.chain().focus().toggleBlockquote().run()} 
+          disabled={disabled}
+          title="Blockquote citation"
+        >
+          “ ”
+        </button>
+      </div>
     </div>
-    <div class="format-controls" aria-label="Document formatting">
-      <button onclick={() => setBlock('paragraph')} class:active={editorState.editor?.isActive('paragraph')} disabled={disabled}>Text</button>
-      <button onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 2 }).run()} class:active={editorState.editor?.isActive('heading', { level: 2 })} disabled={disabled}>Heading</button>
-      <button onclick={() => editorState.editor?.chain().focus().toggleBulletList().run()} class:active={editorState.editor?.isActive('bulletList')} disabled={disabled}>List</button>
-      <button onclick={() => editorState.editor?.chain().focus().toggleBlockquote().run()} class:active={editorState.editor?.isActive('blockquote')} disabled={disabled}>Quote</button>
-      <button class="add-section" onclick={addSection} disabled={disabled}>+ Add section</button>
+
+    <!-- Right Side Tools: Sources, Assist, Probes -->
+    <div class="toolbar-right">
+      <button 
+        class="tool-btn source-btn"
+        class:active={isSourceDrawerOpen}
+        onclick={() => { isSourceDrawerOpen = !isSourceDrawerOpen; isAssistPaletteOpen = false; }}
+        disabled={disabled}
+        title="Search & cite approved course sources (@)"
+      >
+        <span class="at-symbol">@</span>
+        <span>Sources ({assignment?.grounding_sources?.length || 0})</span>
+      </button>
+
+      <button 
+        class="tool-btn assist-btn"
+        class:active={isAssistPaletteOpen}
+        onclick={() => { isAssistPaletteOpen = !isAssistPaletteOpen; isSourceDrawerOpen = false; }}
+        disabled={disabled}
+        title="Bounded Socratic writing tools & frames (/)"
+      >
+        <span class="slash-symbol">/</span>
+        <span>AI Tools</span>
+      </button>
+
+      {#if probeCount > 0}
+        <button 
+          class="tool-btn probe-badge-btn"
+          onclick={onOpenQuestions}
+          title="View active Socratic evidence probes"
+        >
+          <span class="probe-dot"></span>
+          <span>Probes</span>
+          <span class="probe-count-pill">{probeCount}</span>
+        </button>
+      {/if}
+
+      <button 
+        class="tool-btn add-sec-btn" 
+        onclick={() => addSection('New Section')} 
+        disabled={disabled}
+        title="Add a new structured section heading"
+      >
+        + Add Section
+      </button>
     </div>
   </header>
 
-  <div class="document-page">
-    <div class="document-guidance">
-      <strong>Write in your own words.</strong> Organize a continuous document with headings and paragraphs. The assignment outline is your starting point, not a character limit.
+  <!-- Interactive AI Tools & Bounded Assistance Palette Drawer -->
+  {#if isAssistPaletteOpen}
+    <div class="assist-palette" role="dialog" aria-label="Bounded AI Assistance Palette">
+      <div class="palette-header">
+        <div>
+          <h4>Bounded Reasoning Tools</h4>
+          <p>AI helps question, structure, and inspect your work. It will never write your answer for you.</p>
+        </div>
+        <button class="close-mini-btn" onclick={() => isAssistPaletteOpen = false}>✕</button>
+      </div>
+      <div class="palette-grid">
+        <button class="palette-card" onclick={() => insertWritingFrame('claim')}>
+          <div class="palette-icon">🎯</div>
+          <div>
+            <strong>/frame: Working Claim</strong>
+            <span>Insert a structured section to articulate your provisional thesis.</span>
+          </div>
+        </button>
+
+        <button class="palette-card" onclick={() => insertWritingFrame('evidence')}>
+          <div class="palette-icon">📜</div>
+          <div>
+            <strong>/frame: Source Observations</strong>
+            <span>Insert an evidence section to document direct observations.</span>
+          </div>
+        </button>
+
+        <button class="palette-card" onclick={() => insertWritingFrame('reasoning')}>
+          <div class="palette-icon">⚡</div>
+          <div>
+            <strong>/frame: Causal Mechanism</strong>
+            <span>Insert an analytical section connecting evidence to claims.</span>
+          </div>
+        </button>
+
+        <button class="palette-card" onclick={() => insertWritingFrame('alternative')}>
+          <div class="palette-icon">🔄</div>
+          <div>
+            <strong>/frame: Alternative Explanation</strong>
+            <span>Consider competing hypotheses or historical counter-arguments.</span>
+          </div>
+        </button>
+
+        <button class="palette-card" onclick={() => { onOpenQuestions(); isAssistPaletteOpen = false; }}>
+          <div class="palette-icon">❓</div>
+          <div>
+            <strong>/check-understanding: Socratic Probes</strong>
+            <span>Open Socratic questions testing the claims in your saved paragraphs.</span>
+          </div>
+        </button>
+      </div>
     </div>
-    <div bind:this={editorElement}></div>
+  {/if}
+
+  <!-- Interactive Approved Primary Sources Picker Drawer -->
+  {#if isSourceDrawerOpen}
+    <div class="sources-drawer" role="dialog" aria-label="Approved Course Evidence Sources">
+      <div class="sources-header">
+        <div>
+          <h4>Approved Assignment Sources</h4>
+          <p>Ground your argument in verified primary course materials. 1-click cite into active document.</p>
+        </div>
+        <button class="close-mini-btn" onclick={() => isSourceDrawerOpen = false}>✕</button>
+      </div>
+      <div class="source-search-wrap">
+        <input 
+          type="text" 
+          placeholder="Filter sources by title or keyword..."
+          bind:value={sourceSearchQuery}
+          class="source-search-input"
+        />
+      </div>
+      <div class="sources-list">
+        {#each filteredSources as source}
+          <div class="source-card">
+            <div class="source-card-header">
+              <span class="source-tag">Approved Primary Source</span>
+              <h5>{source.title || 'Course Material'}</h5>
+            </div>
+            <blockquote class="source-excerpt">{source.excerpt || 'No excerpt available.'}</blockquote>
+            <div class="source-card-actions">
+              <button class="cite-btn" onclick={() => insertSourceQuote(source)}>
+                <span>+ Insert as Blockquote Citation</span>
+              </button>
+            </div>
+          </div>
+        {:else}
+          <div class="empty-sources">
+            <p>No sources match your search. {assignment?.grounding_sources?.length ? '' : 'No approved course sources attached to this assignment.'}</p>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Main Canvas Workspace Layout (with collapsible outline) -->
+  <div class="canvas-workspace-grid" class:with-outline={isOutlineOpen}>
+    {#if isOutlineOpen}
+      <aside class="outline-sidebar" aria-label="Document Section Outline">
+        <div class="outline-header">
+          <h5>Document Outline</h5>
+          <span class="heading-count">{documentHeadings.length} sections</span>
+        </div>
+        <nav class="outline-nav">
+          {#each documentHeadings as heading, i}
+            <button 
+              class="outline-item level-{heading.level}"
+              onclick={() => scrollToHeading(heading.pos)}
+            >
+              <span class="outline-num">{i + 1}</span>
+              <span class="outline-text">{heading.text}</span>
+            </button>
+          {:else}
+            <div class="empty-outline">
+              <p>Add headings to build your document outline.</p>
+              <button class="btn-subtle" onclick={() => addSection('Working Claim')}>+ Add First Section</button>
+            </div>
+          {/each}
+        </nav>
+      </aside>
+    {/if}
+
+    <!-- Document Sheet -->
+    <div class="document-page">
+      <div class="document-guidance-bar">
+        <div class="guidance-left">
+          <span class="guidance-badge">Writer-First Canvas</span>
+          <p>Organize your claim, primary evidence, and causal reasoning in a continuous long-form essay.</p>
+        </div>
+        <div class="guidance-shortcuts">
+          <span class="shortcut-pill"><code>/</code> AI tools</span>
+          <span class="shortcut-pill"><code>@</code> Cite sources</span>
+        </div>
+      </div>
+
+      <div bind:this={editorElement} class="tiptap-container"></div>
+    </div>
   </div>
 
+  <!-- Document Status & Metrics Footer -->
   <footer class="document-status">
-    <span>{wordCount.toLocaleString()} words · unlimited document length</span>
-    <button class="save-now" onclick={syncNow} disabled={disabled || isSaving || !isDirty}>{isSaving ? 'Saving…' : 'Save now'}</button>
+    <div class="status-metrics">
+      <span class="metric-pill">
+        <strong>{wordCount.toLocaleString()}</strong> words
+      </span>
+      <span class="metric-pill">
+        ~<strong>{readingTimeMin}</strong> min read
+      </span>
+      <span class="metric-pill">
+        <strong>{documentHeadings.length}</strong> sections
+      </span>
+      <span class="save-state-pill" class:saving={isSaving} class:problem={saveError} class:dirty={isDirty}>
+        {#if saveError}
+          ⚠️ {saveError}
+        {:else if isSaving}
+          🔄 Saving document blocks…
+        {:else if isDirty}
+          ✏️ Unsaved changes (autosaving)
+        {:else}
+          ✓ All blocks saved
+        {/if}
+      </span>
+    </div>
+
+    <button 
+      class="save-now-btn" 
+      onclick={syncNow} 
+      disabled={disabled || isSaving || !isDirty}
+    >
+      {isSaving ? 'Saving…' : isDirty ? 'Save Now (Cmd+S)' : 'Saved'}
+    </button>
   </footer>
-  {#if saveError}<p class="save-error" role="alert">{saveError}</p>{/if}
 </section>
 
 <style>
-  .document-shell{margin:32px auto 0;max-width:920px}.document-toolbar{align-items:center;display:flex;gap:16px;justify-content:space-between;margin-bottom:12px}.toolbar-primary,.format-controls{align-items:center;display:flex;gap:7px}.document-label{color:#e2e8f0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.35px}.save-state{color:#86efac;font-size:11px}.save-state.saving{color:#bae6fd}.save-state.problem{color:#fca5a5}.format-controls{flex-wrap:wrap;justify-content:flex-end}.format-controls button,.save-now{background:#111b27;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#cbd5e1;cursor:pointer;font-size:11px;font-weight:700;padding:7px 9px}.format-controls button:hover:not(:disabled),.format-controls button.active{border-color:var(--color-horizon-blue);color:#fff}.format-controls button:disabled,.save-now:disabled{cursor:not-allowed;opacity:.5}.format-controls .add-section,.save-now{background:rgba(59,130,246,.14);border-color:rgba(96,165,250,.42);color:#dbeafe}.document-page{background:#101923;border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);box-shadow:0 24px 70px rgba(0,0,0,.16);min-height:680px;padding:clamp(26px,6vw,72px)}.document-guidance{border-bottom:1px solid var(--color-graphite-border);color:#94a3b8;font-size:12px;line-height:1.55;margin-bottom:28px;padding-bottom:18px}.document-guidance strong{color:#bae6fd}.document-page :global(.long-form-prosemirror){color:#f8fafc;font-family:var(--font-body);font-size:17px;line-height:1.82;min-height:560px;outline:none}.document-page :global(.long-form-prosemirror h1),.document-page :global(.long-form-prosemirror h2),.document-page :global(.long-form-prosemirror h3){color:#fff;font-family:var(--font-brand);letter-spacing:-.35px;margin:2.1em 0 .55em}.document-page :global(.long-form-prosemirror h1){font-size:2em}.document-page :global(.long-form-prosemirror h2){font-size:1.48em}.document-page :global(.long-form-prosemirror h3){font-size:1.2em}.document-page :global(.long-form-prosemirror p){margin:0 0 1.1em}.document-page :global(.long-form-prosemirror p.is-editor-empty:first-child::before){color:#64748b;content:'Begin writing your argument here…';float:left;height:0;pointer-events:none}.document-page :global(.long-form-prosemirror blockquote){border-left:3px solid var(--color-horizon-blue);color:#cbd5e1;margin:1.4em 0;padding-left:18px}.document-page :global(.long-form-prosemirror ul),.document-page :global(.long-form-prosemirror ol){margin:0 0 1.1em;padding-left:1.45em}.document-page :global(.long-form-prosemirror li p){margin:0}.document-status{align-items:center;color:var(--color-slate-muted);display:flex;font-size:11px;justify-content:space-between;padding:12px 2px}.save-error{color:#fca5a5;font-size:12px;margin:0}.active{border-color:var(--color-horizon-blue)}@media(max-width:780px){.document-shell{margin-top:22px}.document-toolbar{align-items:flex-start;flex-direction:column}.format-controls{justify-content:flex-start}.document-page{border-radius:var(--radius-md);min-height:560px;padding:26px 20px}.document-page :global(.long-form-prosemirror){font-size:16px;min-height:470px}.document-status{align-items:flex-start;flex-direction:column;gap:10px}.save-now{width:100%}}@media print{.document-toolbar,.document-status,.document-guidance{display:none}.document-shell{max-width:none}.document-page{border:0;box-shadow:none;min-height:0;padding:0}.document-page :global(.long-form-prosemirror){color:#111;font-size:11pt;line-height:1.5}}
+  .document-shell {
+    margin: 24px auto 0;
+    max-width: 1060px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Top Toolbar */
+  .document-toolbar {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .divider {
+    width: 1px;
+    height: 22px;
+    background: var(--color-graphite-border);
+    margin: 0 4px;
+  }
+
+  .divider-subtle {
+    width: 1px;
+    height: 16px;
+    background: var(--color-graphite-border);
+    margin: 0 2px;
+    opacity: 0.6;
+  }
+
+  .format-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .tool-btn {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 9px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+    min-height: 30px;
+  }
+
+  .tool-btn:hover:not(:disabled) {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+    border-color: var(--color-slate-subtle);
+  }
+
+  .tool-btn.active {
+    background: var(--pill-active-bg, rgba(217, 119, 6, 0.12));
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  .tool-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .font-bold { font-weight: 800; }
+  .font-italic { font-style: italic; }
+
+  .outline-toggle-btn {
+    color: var(--color-slate-bright);
+    font-weight: 700;
+  }
+
+  .source-btn {
+    background: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.3);
+    color: var(--color-aurora, #0284c7);
+  }
+  .source-btn:hover:not(:disabled), .source-btn.active {
+    background: rgba(2, 132, 199, 0.16);
+    border-color: var(--color-aurora);
+    color: var(--color-aurora);
+  }
+  .at-symbol {
+    font-weight: 800;
+    font-size: 13px;
+  }
+
+  .assist-btn {
+    background: rgba(217, 119, 6, 0.08);
+    border-color: rgba(217, 119, 6, 0.3);
+    color: var(--color-horizon-blue);
+  }
+  .assist-btn:hover:not(:disabled), .assist-btn.active {
+    background: rgba(217, 119, 6, 0.16);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+  .slash-symbol {
+    font-weight: 800;
+    font-size: 13px;
+  }
+
+  .probe-badge-btn {
+    background: rgba(139, 92, 246, 0.12);
+    border-color: rgba(139, 92, 246, 0.35);
+    color: #8b5cf6;
+    animation: pulseGlow 2.5s infinite;
+  }
+  .probe-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #8b5cf6;
+  }
+  .probe-count-pill {
+    background: #8b5cf6;
+    color: #fff;
+    border-radius: 99px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .add-sec-btn {
+    background: var(--color-bone-muted);
+    border-color: var(--color-graphite-border);
+    color: var(--color-heading);
+    font-weight: 700;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.2); }
+    50% { box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2); }
+  }
+
+  /* Assist Palette Drawer */
+  .assist-palette, .sources-drawer {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    animation: slideDown 0.18s ease-out;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .palette-header, .sources-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .palette-header h4, .sources-header h4 {
+    margin: 0 0 4px;
+    font-family: var(--font-brand);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .palette-header p, .sources-header p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-slate-muted);
+    line-height: 1.4;
+  }
+
+  .close-mini-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-slate-subtle);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+  }
+  .close-mini-btn:hover {
+    color: var(--color-heading);
+    background: var(--color-graphite-hover);
+  }
+
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+
+  .palette-card {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 11px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .palette-card:hover {
+    border-color: var(--color-horizon-blue);
+    background: var(--color-graphite-hover);
+    transform: translateY(-1px);
+  }
+
+  .palette-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .palette-card strong {
+    display: block;
+    font-size: 12px;
+    color: var(--color-heading);
+    margin-bottom: 2px;
+  }
+
+  .palette-card span {
+    display: block;
+    font-size: 11px;
+    color: var(--color-slate-muted);
+    line-height: 1.35;
+  }
+
+  /* Sources Drawer */
+  .source-search-input {
+    width: 100%;
+    background: var(--input-bg, var(--color-graphite));
+    border: 1px solid var(--input-border, var(--color-graphite-border));
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--color-slate-bright);
+    outline: none;
+    box-sizing: border-box;
+  }
+  .source-search-input:focus {
+    border-color: var(--color-aurora);
+    box-shadow: 0 0 0 2px var(--color-aurora-glow);
+  }
+
+  .sources-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .source-card {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .source-card-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .source-tag {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(2, 132, 199, 0.1);
+    color: var(--color-aurora);
+    padding: 2px 6px;
+    border-radius: 99px;
+  }
+
+  .source-card-header h5 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .source-excerpt {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-slate-light);
+    background: var(--color-bone-muted);
+    border-left: 3px solid var(--color-aurora);
+    padding: 6px 10px;
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  }
+
+  .source-card-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .cite-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-aurora);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .cite-btn:hover {
+    background: var(--color-aurora);
+    color: #fff;
+    border-color: var(--color-aurora);
+  }
+
+  .empty-sources {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-slate-muted);
+    font-size: 12px;
+  }
+
+  /* Grid Layout: Outline + Document */
+  .canvas-workspace-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .canvas-workspace-grid.with-outline {
+    grid-template-columns: 240px 1fr;
+  }
+
+  /* Outline Sidebar */
+  .outline-sidebar {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .outline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .outline-header h5 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .heading-count {
+    font-size: 10px;
+    color: var(--color-slate-subtle);
+  }
+
+  .outline-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .outline-item {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-xs);
+    padding: 6px 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-slate-light);
+    font-size: 12px;
+    transition: all 0.12s ease;
+    width: 100%;
+  }
+
+  .outline-item:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+  }
+
+  .outline-item.level-3 {
+    padding-left: 20px;
+    font-size: 11px;
+    opacity: 0.85;
+  }
+
+  .outline-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-horizon-blue);
+    min-width: 14px;
+  }
+
+  .outline-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty-outline {
+    text-align: center;
+    padding: 16px 0;
+    color: var(--color-slate-muted);
+    font-size: 11px;
+  }
+
+  .btn-subtle {
+    background: transparent;
+    border: 1px dashed var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-horizon-blue);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 10px;
+    margin-top: 8px;
+    cursor: pointer;
+  }
+
+  /* Clean Academic Sheet Page */
+  .document-page {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    min-height: 680px;
+    padding: clamp(24px, 5vw, 56px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  .document-guidance-bar {
+    border-bottom: 1px solid var(--color-graphite-border);
+    padding-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .guidance-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .guidance-badge {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--pill-bg);
+    border: 1px solid var(--pill-border);
+    color: var(--color-heading);
+    padding: 2px 8px;
+    border-radius: 99px;
+  }
+
+  .guidance-left p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-slate-light);
+  }
+
+  .guidance-shortcuts {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .shortcut-pill {
+    font-size: 11px;
+    color: var(--color-slate-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .shortcut-pill code {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    padding: 1px 5px;
+    border-radius: var(--radius-xs);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  /* ProseMirror / Tiptap styling with design tokens */
+  .tiptap-container :global(.long-form-prosemirror) {
+    color: var(--color-slate-bright);
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.8;
+    min-height: 520px;
+    outline: none;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror h1) {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 1.85em;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin: 1.6em 0 0.4em;
+    border-bottom: 1px solid var(--color-graphite-border);
+    padding-bottom: 6px;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror h2) {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 1.45em;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin: 1.4em 0 0.4em;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror h3) {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 1.2em 0 0.3em;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror p) {
+    margin: 0 0 1.1em;
+    color: var(--color-slate-bright);
+  }
+
+  .tiptap-container :global(.long-form-prosemirror p.is-editor-empty:first-child::before) {
+    color: var(--color-slate-subtle);
+    content: 'Start writing your reasoning argument here... Type / for AI writing frames or @ to cite approved sources';
+    float: left;
+    height: 0;
+    pointer-events: none;
+    font-style: italic;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror blockquote) {
+    background: var(--color-bone-muted);
+    border-left: 3px solid var(--color-horizon-blue);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--color-slate-light);
+    margin: 1.3em 0;
+    padding: 10px 16px;
+    font-style: italic;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror ul),
+  .tiptap-container :global(.long-form-prosemirror ol) {
+    margin: 0 0 1.1em;
+    padding-left: 1.6em;
+    color: var(--color-slate-bright);
+  }
+
+  .tiptap-container :global(.long-form-prosemirror li) {
+    margin-bottom: 0.35em;
+  }
+
+  .tiptap-container :global(.long-form-prosemirror li p) {
+    margin: 0;
+  }
+
+  /* Status Footer */
+  .document-status {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+    flex-wrap: wrap;
+  }
+
+  .status-metrics {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .metric-pill {
+    font-size: 12px;
+    color: var(--color-slate-muted);
+  }
+
+  .metric-pill strong {
+    color: var(--color-heading);
+  }
+
+  .save-state-pill {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-signal-green, #059669);
+    background: var(--color-signal-green-bg, #ecfdf5);
+    border: 1px solid rgba(5, 150, 105, 0.2);
+    padding: 2px 8px;
+    border-radius: 99px;
+  }
+
+  .save-state-pill.saving {
+    color: var(--color-aurora, #0284c7);
+    background: rgba(2, 132, 199, 0.1);
+    border-color: rgba(2, 132, 199, 0.25);
+  }
+
+  .save-state-pill.dirty {
+    color: var(--color-amber, #d97706);
+    background: var(--color-amber-bg, #fef3c7);
+    border-color: rgba(217, 119, 6, 0.25);
+  }
+
+  .save-state-pill.problem {
+    color: var(--color-rose, #dc2626);
+    background: var(--color-rose-bg, #fef2f2);
+    border-color: rgba(220, 38, 38, 0.25);
+  }
+
+  .save-now-btn {
+    background: var(--color-horizon-blue);
+    border: 1px solid var(--color-horizon-bright);
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .save-now-btn:hover:not(:disabled) {
+    background: var(--color-horizon-bright);
+  }
+
+  .save-now-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 860px) {
+    .canvas-workspace-grid.with-outline {
+      grid-template-columns: 1fr;
+    }
+    .outline-sidebar {
+      position: static;
+      max-height: 200px;
+    }
+  }
+
+  @media print {
+    .document-toolbar, .document-status, .document-guidance-bar, .outline-sidebar {
+      display: none !important;
+    }
+    .document-shell {
+      margin: 0;
+      max-width: 100%;
+    }
+    .document-page {
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      min-height: 0;
+    }
+    .tiptap-container :global(.long-form-prosemirror) {
+      color: #000;
+      font-size: 12pt;
+      line-height: 1.6;
+    }
+  }
 </style>
