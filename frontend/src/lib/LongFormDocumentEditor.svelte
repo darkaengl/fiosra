@@ -13,6 +13,7 @@
     onOpenSources = () => null,
     onOpenAssist = () => null,
     onOpenQuestions = () => null,
+    onHeadingsChange = () => null,
     probeCount = 0,
   } = $props();
 
@@ -77,13 +78,7 @@
   let saveTimer;
   let loadedDocumentId = '';
 
-  // Outline and tool states
-  let isOutlineOpen = $state(false);
-  let isSlashMenuOpen = $state(false);
   let isAssistPaletteOpen = $state(false);
-  let isSourceDrawerOpen = $state(false);
-  let sourceSearchQuery = $state('');
-
   let documentHeadings = $state([]);
 
   function createBlockId() {
@@ -163,6 +158,7 @@
       }
     });
     documentHeadings = headings;
+    onHeadingsChange(headings);
   }
 
   export function scrollToHeading(pos) {
@@ -290,7 +286,6 @@
         content: [{ type: 'text', text: 'Based on this evidence, ' }]
       }
     ]).run();
-    isSourceDrawerOpen = false;
   }
 
   export function insertWritingFrame(frameType) {
@@ -326,14 +321,6 @@
     ]).run();
     isAssistPaletteOpen = false;
   }
-
-  let filteredSources = $derived(
-    (assignment?.grounding_sources || []).filter((s) => {
-      if (!sourceSearchQuery) return true;
-      const q = sourceSearchQuery.toLowerCase();
-      return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
-    })
-  );
 
   onMount(() => {
     editor = new Editor({
@@ -380,21 +367,9 @@
 </script>
 
 <section class="document-shell" aria-label="Long-form reasoning document">
-  <!-- Top Editor Toolbar -->
+  <!-- Clean Focused Formatting Toolbar -->
   <header class="document-toolbar">
     <div class="toolbar-left">
-      <button 
-        class="tool-btn outline-toggle-btn"
-        class:active={isOutlineOpen}
-        onclick={() => isOutlineOpen = !isOutlineOpen}
-        title="Toggle Document Outline Navigator"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
-        <span>Outline ({documentHeadings.length})</span>
-      </button>
-
-      <div class="divider"></div>
-
       <!-- Formatting Tools -->
       <div class="format-group" role="group" aria-label="Text formatting">
         <button 
@@ -483,41 +458,18 @@
       </div>
     </div>
 
-    <!-- Right Side Tools: Sources, Assist, Probes -->
+    <!-- Right Side Tools: AI Tools & Add Section -->
     <div class="toolbar-right">
-      <button 
-        class="tool-btn source-btn"
-        class:active={isSourceDrawerOpen}
-        onclick={() => { isSourceDrawerOpen = !isSourceDrawerOpen; isAssistPaletteOpen = false; }}
-        disabled={disabled}
-        title="Search & cite approved course sources (@)"
-      >
-        <span class="at-symbol">@</span>
-        <span>Sources ({assignment?.grounding_sources?.length || 0})</span>
-      </button>
-
       <button 
         class="tool-btn assist-btn"
         class:active={isAssistPaletteOpen}
-        onclick={() => { isAssistPaletteOpen = !isAssistPaletteOpen; isSourceDrawerOpen = false; }}
+        onclick={() => isAssistPaletteOpen = !isAssistPaletteOpen}
         disabled={disabled}
-        title="Bounded Socratic writing tools & frames (/)"
+        title="Bounded Socratic writing tools & frames"
       >
         <span class="slash-symbol">/</span>
         <span>AI Tools</span>
       </button>
-
-      {#if probeCount > 0}
-        <button 
-          class="tool-btn probe-badge-btn"
-          onclick={onOpenQuestions}
-          title="View active Socratic evidence probes"
-        >
-          <span class="probe-dot"></span>
-          <span>Probes</span>
-          <span class="probe-count-pill">{probeCount}</span>
-        </button>
-      {/if}
 
       <button 
         class="tool-btn add-sec-btn" 
@@ -530,13 +482,13 @@
     </div>
   </header>
 
-  <!-- Interactive AI Tools & Bounded Assistance Palette Drawer -->
+  <!-- Interactive AI Tools Palette Drawer -->
   {#if isAssistPaletteOpen}
     <div class="assist-palette" role="dialog" aria-label="Bounded AI Assistance Palette">
       <div class="palette-header">
         <div>
           <h4>Bounded Reasoning Tools</h4>
-          <p>AI helps question, structure, and inspect your work. It will never write your answer for you.</p>
+          <p>AI helps question and structure your work. It will never write your answer for you.</p>
         </div>
         <button class="close-mini-btn" onclick={() => isAssistPaletteOpen = false}>✕</button>
       </div>
@@ -584,89 +536,20 @@
     </div>
   {/if}
 
-  <!-- Interactive Approved Primary Sources Picker Drawer -->
-  {#if isSourceDrawerOpen}
-    <div class="sources-drawer" role="dialog" aria-label="Approved Course Evidence Sources">
-      <div class="sources-header">
-        <div>
-          <h4>Approved Assignment Sources</h4>
-          <p>Ground your argument in verified primary course materials. 1-click cite into active document.</p>
-        </div>
-        <button class="close-mini-btn" onclick={() => isSourceDrawerOpen = false}>✕</button>
+  <!-- Focused Academic Document Sheet -->
+  <div class="document-page">
+    <div class="document-guidance-bar">
+      <div class="guidance-left">
+        <span class="guidance-badge">Reasoning Document</span>
+        <p>Organize your claim, primary evidence, and causal reasoning in a continuous long-form essay.</p>
       </div>
-      <div class="source-search-wrap">
-        <input 
-          type="text" 
-          placeholder="Filter sources by title or keyword..."
-          bind:value={sourceSearchQuery}
-          class="source-search-input"
-        />
-      </div>
-      <div class="sources-list">
-        {#each filteredSources as source}
-          <div class="source-card">
-            <div class="source-card-header">
-              <span class="source-tag">Approved Primary Source</span>
-              <h5>{source.title || 'Course Material'}</h5>
-            </div>
-            <blockquote class="source-excerpt">{source.excerpt || 'No excerpt available.'}</blockquote>
-            <div class="source-card-actions">
-              <button class="cite-btn" onclick={() => insertSourceQuote(source)}>
-                <span>+ Insert as Blockquote Citation</span>
-              </button>
-            </div>
-          </div>
-        {:else}
-          <div class="empty-sources">
-            <p>No sources match your search. {assignment?.grounding_sources?.length ? '' : 'No approved course sources attached to this assignment.'}</p>
-          </div>
-        {/each}
+      <div class="guidance-shortcuts">
+        <span class="shortcut-pill"><code>/</code> AI tools</span>
+        <span class="shortcut-pill"><code>Sidebar</code> Sources & Outline</span>
       </div>
     </div>
-  {/if}
 
-  <!-- Main Canvas Workspace Layout (with collapsible outline) -->
-  <div class="canvas-workspace-grid" class:with-outline={isOutlineOpen}>
-    {#if isOutlineOpen}
-      <aside class="outline-sidebar" aria-label="Document Section Outline">
-        <div class="outline-header">
-          <h5>Document Outline</h5>
-          <span class="heading-count">{documentHeadings.length} sections</span>
-        </div>
-        <nav class="outline-nav">
-          {#each documentHeadings as heading, i}
-            <button 
-              class="outline-item level-{heading.level}"
-              onclick={() => scrollToHeading(heading.pos)}
-            >
-              <span class="outline-num">{i + 1}</span>
-              <span class="outline-text">{heading.text}</span>
-            </button>
-          {:else}
-            <div class="empty-outline">
-              <p>Add headings to build your document outline.</p>
-              <button class="btn-subtle" onclick={() => addSection('Working Claim')}>+ Add First Section</button>
-            </div>
-          {/each}
-        </nav>
-      </aside>
-    {/if}
-
-    <!-- Document Sheet -->
-    <div class="document-page">
-      <div class="document-guidance-bar">
-        <div class="guidance-left">
-          <span class="guidance-badge">Writer-First Canvas</span>
-          <p>Organize your claim, primary evidence, and causal reasoning in a continuous long-form essay.</p>
-        </div>
-        <div class="guidance-shortcuts">
-          <span class="shortcut-pill"><code>/</code> AI tools</span>
-          <span class="shortcut-pill"><code>@</code> Cite sources</span>
-        </div>
-      </div>
-
-      <div bind:this={editorElement} class="tiptap-container"></div>
-    </div>
+    <div bind:this={editorElement} class="tiptap-container"></div>
   </div>
 
   <!-- Document Status & Metrics Footer -->
@@ -706,8 +589,9 @@
 
 <style>
   .document-shell {
-    margin: 24px auto 0;
-    max-width: 1060px;
+    margin: 0 auto;
+    max-width: 960px;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -732,13 +616,6 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-  }
-
-  .divider {
-    width: 1px;
-    height: 22px;
-    background: var(--color-graphite-border);
-    margin: 0 4px;
   }
 
   .divider-subtle {
@@ -792,26 +669,6 @@
   .font-bold { font-weight: 800; }
   .font-italic { font-style: italic; }
 
-  .outline-toggle-btn {
-    color: var(--color-slate-bright);
-    font-weight: 700;
-  }
-
-  .source-btn {
-    background: rgba(2, 132, 199, 0.08);
-    border-color: rgba(2, 132, 199, 0.3);
-    color: var(--color-aurora, #0284c7);
-  }
-  .source-btn:hover:not(:disabled), .source-btn.active {
-    background: rgba(2, 132, 199, 0.16);
-    border-color: var(--color-aurora);
-    color: var(--color-aurora);
-  }
-  .at-symbol {
-    font-weight: 800;
-    font-size: 13px;
-  }
-
   .assist-btn {
     background: rgba(217, 119, 6, 0.08);
     border-color: rgba(217, 119, 6, 0.3);
@@ -827,27 +684,6 @@
     font-size: 13px;
   }
 
-  .probe-badge-btn {
-    background: rgba(139, 92, 246, 0.12);
-    border-color: rgba(139, 92, 246, 0.35);
-    color: #8b5cf6;
-    animation: pulseGlow 2.5s infinite;
-  }
-  .probe-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #8b5cf6;
-  }
-  .probe-count-pill {
-    background: #8b5cf6;
-    color: #fff;
-    border-radius: 99px;
-    padding: 1px 6px;
-    font-size: 10px;
-    font-weight: 800;
-  }
-
   .add-sec-btn {
     background: var(--color-bone-muted);
     border-color: var(--color-graphite-border);
@@ -855,13 +691,8 @@
     font-weight: 700;
   }
 
-  @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.2); }
-    50% { box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2); }
-  }
-
   /* Assist Palette Drawer */
-  .assist-palette, .sources-drawer {
+  .assist-palette {
     background: var(--color-graphite-card, var(--color-graphite));
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
@@ -878,14 +709,14 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .palette-header, .sources-header {
+  .palette-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
   }
 
-  .palette-header h4, .sources-header h4 {
+  .palette-header h4 {
     margin: 0 0 4px;
     font-family: var(--font-brand);
     font-size: 15px;
@@ -893,7 +724,7 @@
     color: var(--color-heading);
   }
 
-  .palette-header p, .sources-header p {
+  .palette-header p {
     margin: 0;
     font-size: 12px;
     color: var(--color-slate-muted);
@@ -956,219 +787,6 @@
     font-size: 11px;
     color: var(--color-slate-muted);
     line-height: 1.35;
-  }
-
-  /* Sources Drawer */
-  .source-search-input {
-    width: 100%;
-    background: var(--input-bg, var(--color-graphite));
-    border: 1px solid var(--input-border, var(--color-graphite-border));
-    border-radius: var(--radius-sm);
-    padding: 8px 12px;
-    font-size: 13px;
-    color: var(--color-slate-bright);
-    outline: none;
-    box-sizing: border-box;
-  }
-  .source-search-input:focus {
-    border-color: var(--color-aurora);
-    box-shadow: 0 0 0 2px var(--color-aurora-glow);
-  }
-
-  .sources-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 280px;
-    overflow-y: auto;
-  }
-
-  .source-card {
-    background: var(--color-graphite-card, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .source-card-header {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .source-tag {
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: rgba(2, 132, 199, 0.1);
-    color: var(--color-aurora);
-    padding: 2px 6px;
-    border-radius: 99px;
-  }
-
-  .source-card-header h5 {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .source-excerpt {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--color-slate-light);
-    background: var(--color-bone-muted);
-    border-left: 3px solid var(--color-aurora);
-    padding: 6px 10px;
-    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  }
-
-  .source-card-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .cite-btn {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    color: var(--color-aurora);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 5px 10px;
-    cursor: pointer;
-  }
-  .cite-btn:hover {
-    background: var(--color-aurora);
-    color: #fff;
-    border-color: var(--color-aurora);
-  }
-
-  .empty-sources {
-    padding: 16px;
-    text-align: center;
-    color: var(--color-slate-muted);
-    font-size: 12px;
-  }
-
-  /* Grid Layout: Outline + Document */
-  .canvas-workspace-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-    align-items: flex-start;
-  }
-
-  .canvas-workspace-grid.with-outline {
-    grid-template-columns: 240px 1fr;
-  }
-
-  /* Outline Sidebar */
-  .outline-sidebar {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    position: sticky;
-    top: 16px;
-    max-height: calc(100vh - 120px);
-    overflow-y: auto;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .outline-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--color-graphite-border);
-  }
-
-  .outline-header h5 {
-    margin: 0;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-heading);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .heading-count {
-    font-size: 10px;
-    color: var(--color-slate-subtle);
-  }
-
-  .outline-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .outline-item {
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-xs);
-    padding: 6px 8px;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    text-align: left;
-    cursor: pointer;
-    color: var(--color-slate-light);
-    font-size: 12px;
-    transition: all 0.12s ease;
-    width: 100%;
-  }
-
-  .outline-item:hover {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
-  }
-
-  .outline-item.level-3 {
-    padding-left: 20px;
-    font-size: 11px;
-    opacity: 0.85;
-  }
-
-  .outline-num {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-horizon-blue);
-    min-width: 14px;
-  }
-
-  .outline-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .empty-outline {
-    text-align: center;
-    padding: 16px 0;
-    color: var(--color-slate-muted);
-    font-size: 11px;
-  }
-
-  .btn-subtle {
-    background: transparent;
-    border: 1px dashed var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    color: var(--color-horizon-blue);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 6px 10px;
-    margin-top: 8px;
-    cursor: pointer;
   }
 
   /* Clean Academic Sheet Page */
@@ -1289,7 +907,7 @@
 
   .tiptap-container :global(.long-form-prosemirror p.is-editor-empty:first-child::before) {
     color: var(--color-slate-subtle);
-    content: 'Start writing your reasoning argument here... Type / for AI writing frames or @ to cite approved sources';
+    content: 'Start writing your reasoning argument here... Type / for AI writing frames or cite sources from the left sidebar';
     float: left;
     height: 0;
     pointer-events: none;
@@ -1400,18 +1018,8 @@
     cursor: not-allowed;
   }
 
-  @media (max-width: 860px) {
-    .canvas-workspace-grid.with-outline {
-      grid-template-columns: 1fr;
-    }
-    .outline-sidebar {
-      position: static;
-      max-height: 200px;
-    }
-  }
-
   @media print {
-    .document-toolbar, .document-status, .document-guidance-bar, .outline-sidebar {
+    .document-toolbar, .document-status, .document-guidance-bar {
       display: none !important;
     }
     .document-shell {

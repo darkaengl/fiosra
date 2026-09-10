@@ -20,11 +20,12 @@
   let probes = $state([]);
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
   let sessionEvents = $state([]);
+  let documentHeadings = $state([]);
   let isLoading = $state(true);
 
   // Sidebar and Panel Controls
   let isSidebarOpen = $state(true);
-  let activeSidebarTab = $state('scope'); // 'scope' | 'sources' | 'outline' | 'trace'
+  let activeSidebarTab = $state('scope'); // 'scope' | 'outline' | 'trace'
   let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
   let probeResponse = $state('');
@@ -230,7 +231,7 @@
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
         probeNotice = 'A Socratic probe is ready. It tests this paragraph’s reasoning.';
-        isTutorPanelOpen = true; // Automatically open tutor panel smoothly when a new probe arrives
+        isTutorPanelOpen = true;
       }
       await loadSessionEvents();
     } catch (err) {
@@ -289,6 +290,12 @@
   function addSectionFromSidebar(type) {
     if (editorRef?.insertWritingFrame) {
       editorRef.insertWritingFrame(type);
+    }
+  }
+
+  function handleHeadingJump(pos) {
+    if (editorRef?.scrollToHeading) {
+      editorRef.scrollToHeading(pos);
     }
   }
 
@@ -392,59 +399,57 @@
     <!-- 3-Zone Workspace Layout Container -->
     <div class="workspace-grid" class:sidebar-closed={!isSidebarOpen} class:tutor-open={isTutorPanelOpen}>
       
-      <!-- ZONE 1: LEFT MULTI-TAB SIDEBAR -->
+      <!-- ZONE 1: LEFT SIDEBAR WITH VERTICAL NAVIGATION -->
       {#if isSidebarOpen}
         <aside class="workspace-sidebar" aria-label="Learning Materials and Navigation Sidebar">
-          <!-- Sidebar Tabs Header -->
-          <div class="sidebar-tab-strip" role="tablist">
+          <!-- Vertically Stacked Navigation Switcher -->
+          <div class="sidebar-nav-stack" role="tablist">
             <button 
-              class="sidebar-tab" 
+              class="nav-item-btn" 
               class:active={activeSidebarTab === 'scope'}
               onclick={() => activeSidebarTab = 'scope'}
               role="tab"
               aria-selected={activeSidebarTab === 'scope'}
             >
-              <span class="tab-icon">📋</span>
-              <span class="tab-label">Scope</span>
+              <div class="nav-item-left">
+                <span class="nav-icon">📋</span>
+                <span class="nav-title">Scope & Evidence</span>
+              </div>
+              <span class="nav-badge">{assignment.grounding_sources?.length || 0} sources</span>
             </button>
 
             <button 
-              class="sidebar-tab" 
-              class:active={activeSidebarTab === 'sources'}
-              onclick={() => activeSidebarTab = 'sources'}
-              role="tab"
-              aria-selected={activeSidebarTab === 'sources'}
-            >
-              <span class="tab-icon">📚</span>
-              <span class="tab-label">Sources ({assignment.grounding_sources?.length || 0})</span>
-            </button>
-
-            <button 
-              class="sidebar-tab" 
+              class="nav-item-btn" 
               class:active={activeSidebarTab === 'outline'}
               onclick={() => activeSidebarTab = 'outline'}
               role="tab"
               aria-selected={activeSidebarTab === 'outline'}
             >
-              <span class="tab-icon">📑</span>
-              <span class="tab-label">Outline</span>
+              <div class="nav-item-left">
+                <span class="nav-icon">📑</span>
+                <span class="nav-title">Document Outline</span>
+              </div>
+              <span class="nav-badge">{documentHeadings.length} sec</span>
             </button>
 
             <button 
-              class="sidebar-tab" 
+              class="nav-item-btn" 
               class:active={activeSidebarTab === 'trace'}
               onclick={() => activeSidebarTab = 'trace'}
               role="tab"
               aria-selected={activeSidebarTab === 'trace'}
             >
-              <span class="tab-icon">⏱️</span>
-              <span class="tab-label">Trace</span>
+              <div class="nav-item-left">
+                <span class="nav-icon">⏱️</span>
+                <span class="nav-title">Reasoning Trace</span>
+              </div>
+              <span class="nav-badge">{sessionEvents.length} events</span>
             </button>
           </div>
 
-          <!-- Sidebar Tab Content Area -->
+          <!-- Active Sidebar View Body -->
           <div class="sidebar-tab-body">
-            <!-- TAB 1: SCOPE & BRIEF -->
+            <!-- VIEW 1: CONSOLIDATED SCOPE & ALLOWED SOURCES -->
             {#if activeSidebarTab === 'scope'}
               <div class="tab-panel scope-panel">
                 <div class="section-card">
@@ -463,58 +468,69 @@
                   </div>
                 </div>
 
-                <div class="section-card cert-card">
-                  <span class="card-eyebrow">Reasoning Standard</span>
-                  <p class="cert-text">
-                    Ground every claim in verified source evidence. AI is a Socratic examiner that questions your reasoning—it will not draft answers or grade work.
-                  </p>
+                <div class="section-card sources-section">
+                  <div class="sources-header-bar">
+                    <span class="card-eyebrow">Approved Primary Sources ({assignment.grounding_sources?.length || 0})</span>
+                  </div>
+                  
+                  <div class="source-search-box">
+                    <input 
+                      type="text" 
+                      placeholder="Filter allowed sources..."
+                      bind:value={sourceSearchQuery}
+                      class="sidebar-search-input"
+                    />
+                  </div>
+
+                  <div class="sources-stream">
+                    {#each filteredSources as source}
+                      <div class="source-evidence-card">
+                        <div class="source-top">
+                          <span class="source-tag">Primary Source</span>
+                          <h6>{source.title || 'Course Material'}</h6>
+                        </div>
+                        <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
+                        <div class="source-bottom">
+                          <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
+                            <span>+ Cite in Document</span>
+                          </button>
+                        </div>
+                      </div>
+                    {:else}
+                      <div class="empty-state">
+                        <p>No primary sources match your search.</p>
+                      </div>
+                    {/each}
+                  </div>
                 </div>
               </div>
 
-            <!-- TAB 2: LEARNING MATERIALS & APPROVED SOURCES -->
-            {:else if activeSidebarTab === 'sources'}
-              <div class="tab-panel sources-panel">
-                <div class="source-search-box">
-                  <input 
-                    type="text" 
-                    placeholder="Search approved course evidence..."
-                    bind:value={sourceSearchQuery}
-                    class="sidebar-search-input"
-                  />
-                </div>
-
-                <div class="sources-stream">
-                  {#each filteredSources as source}
-                    <div class="source-evidence-card">
-                      <div class="source-top">
-                        <span class="source-tag">Primary Source</span>
-                        <h6>{source.title || 'Course Material'}</h6>
-                      </div>
-                      <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
-                      <div class="source-bottom">
-                        <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
-                          <span>+ Cite in Document</span>
-                        </button>
-                      </div>
-                    </div>
-                  {:else}
-                    <div class="empty-state">
-                      <p>No primary sources match your query.</p>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-
-            <!-- TAB 3: OUTLINE & SECTIONS -->
+            <!-- VIEW 2: DOCUMENT OUTLINE & SECTION STEPS (Migrated from toolbar) -->
             {:else if activeSidebarTab === 'outline'}
               <div class="tab-panel outline-panel">
-                <div class="outline-intro">
-                  <span class="card-eyebrow">Document Structure</span>
-                  <p>Structured sections guide clear Claim–Evidence–Reasoning development.</p>
+                <div class="section-card">
+                  <span class="card-eyebrow">Active Document Outline</span>
+                  <p class="outline-hint">Click any heading to jump to that section in your draft.</p>
+                  
+                  <div class="headings-tree">
+                    {#each documentHeadings as heading, i}
+                      <button 
+                        class="outline-tree-item level-{heading.level}"
+                        onclick={() => handleHeadingJump(heading.pos)}
+                      >
+                        <span class="heading-num">{i + 1}</span>
+                        <span class="heading-label">{heading.text}</span>
+                      </button>
+                    {:else}
+                      <div class="empty-outline-box">
+                        <p>No headings in document yet.</p>
+                      </div>
+                    {/each}
+                  </div>
                 </div>
 
-                <div class="scaffold-presets">
-                  <span class="card-eyebrow">Add CER Section</span>
+                <div class="section-card">
+                  <span class="card-eyebrow">+ Add Structured CER Section</span>
                   <div class="preset-grid">
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('claim')}>
                       <span>🎯 Working Claim</span>
@@ -535,7 +551,7 @@
                 </div>
               </div>
 
-            <!-- TAB 4: REASONING TRACE & SESSIONS -->
+            <!-- VIEW 3: REASONING TRACE & LIVE PROVENANCE -->
             {:else if activeSidebarTab === 'trace'}
               <div class="tab-panel trace-panel">
                 <div class="trace-header">
@@ -587,12 +603,13 @@
             onSync={syncDocument}
             onSynced={scheduleProbeEvaluation}
             onOpenQuestions={toggleTutorPanel}
+            onHeadingsChange={(h) => documentHeadings = h}
             probeCount={probes.length}
           />
         {/if}
       </main>
 
-      <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout, below topbar) -->
+      <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout) -->
       {#if isTutorPanelOpen}
         <aside class="socratic-tutor-column" aria-label="Socratic Reasoning and Evidence Panel">
           <header class="tutor-header">
@@ -805,7 +822,7 @@
   /* Main 3-Zone Workspace Grid */
   .workspace-grid {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 340px 1fr;
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -817,7 +834,7 @@
   }
 
   .workspace-grid.tutor-open {
-    grid-template-columns: 320px 1fr 380px;
+    grid-template-columns: 340px 1fr 380px;
   }
 
   .workspace-grid.sidebar-closed.tutor-open {
@@ -834,43 +851,61 @@
     z-index: 5;
   }
 
-  .sidebar-tab-strip {
+  /* Vertical Navigation Menu */
+  .sidebar-nav-stack {
     display: flex;
-    border-bottom: 1px solid var(--color-graphite-border);
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
     background: var(--color-bone-muted);
-    padding: 4px 6px 0;
-    gap: 2px;
+    border-bottom: 1px solid var(--color-graphite-border);
   }
 
-  .sidebar-tab {
+  .nav-item-btn {
     background: transparent;
     border: 1px solid transparent;
-    border-bottom: none;
-    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-    padding: 7px 10px;
-    font-size: 11px;
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--color-slate-muted);
+    color: var(--color-slate-light);
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 4px;
+    justify-content: space-between;
     transition: all 0.12s ease;
   }
 
-  .sidebar-tab:hover {
-    color: var(--color-heading);
+  .nav-item-btn:hover {
     background: var(--color-graphite-hover);
+    color: var(--color-heading);
   }
 
-  .sidebar-tab.active {
+  .nav-item-btn.active {
     background: var(--color-graphite);
     border-color: var(--color-graphite-border);
     color: var(--color-heading);
     font-weight: 700;
+    box-shadow: var(--shadow-sm);
   }
 
-  .tab-icon { font-size: 13px; }
+  .nav-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-icon { font-size: 14px; }
+  .nav-title { font-size: 12px; }
+
+  .nav-badge {
+    font-size: 10px;
+    color: var(--color-slate-subtle);
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    padding: 1px 5px;
+    border-radius: 99px;
+  }
 
   .sidebar-tab-body {
     flex: 1;
@@ -894,7 +929,7 @@
     padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .card-eyebrow {
@@ -928,19 +963,13 @@
     padding: 2px 6px;
   }
 
-  .cert-card {
-    background: var(--color-bone-muted);
-    border-left: 3px solid var(--color-horizon-blue);
+  /* Sources section inside scope view */
+  .sources-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .cert-text {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--color-slate-light);
-  }
-
-  /* Sources Panel */
   .sidebar-search-input {
     width: 100%;
     background: var(--input-bg, var(--color-graphite));
@@ -960,6 +989,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    margin-top: 4px;
   }
 
   .source-evidence-card {
@@ -1021,6 +1051,69 @@
     background: var(--color-aurora);
     color: #fff;
     border-color: var(--color-aurora);
+  }
+
+  /* Outline View */
+  .outline-hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+
+  .headings-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .outline-tree-item {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    padding: 6px 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-slate-bright);
+    font-size: 12px;
+    transition: all 0.12s ease;
+    width: 100%;
+  }
+
+  .outline-tree-item:hover {
+    background: var(--color-graphite-hover);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  .outline-tree-item.level-3 {
+    margin-left: 14px;
+    width: calc(100% - 14px);
+    font-size: 11px;
+    opacity: 0.85;
+  }
+
+  .heading-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-horizon-blue);
+    min-width: 14px;
+  }
+
+  .heading-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty-outline-box {
+    text-align: center;
+    padding: 12px 0;
+    color: var(--color-slate-muted);
+    font-size: 11px;
   }
 
   /* Outline Presets */
@@ -1130,7 +1223,7 @@
     text-align: left;
     cursor: pointer;
     width: 100%;
-    max-width: 1060px;
+    max-width: 960px;
     margin: 0 auto;
   }
   .probe-alert-bar:hover {
@@ -1144,7 +1237,7 @@
     color: var(--color-rose);
     font-size: 12px;
     padding: 10px 14px;
-    max-width: 1060px;
+    max-width: 960px;
     margin: 0 auto;
     width: 100%;
   }
