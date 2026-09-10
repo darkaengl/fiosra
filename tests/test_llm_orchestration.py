@@ -138,6 +138,54 @@ async def test_provider_error_and_answer_leak_both_fall_back_deterministically(m
     assert leak_result.content == "Return to the source evidence."
     assert "prohibited answer-isolation" in leak_result.metadata.fallback_reason
 
+    class WorkedAnswerProvider:
+        async def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(
+                content="**Claim:** The drainage system proves centralized planning. **Evidence:** 1. The report states it.",
+                provider="ollama",
+                model="ollama/qwen2.5:0.5b",
+                latency_ms=10,
+            )
+
+    llm_orchestrator.reset_for_testing()
+    monkeypatch.setattr(LiteLLMProvider, "from_settings", classmethod(lambda cls: WorkedAnswerProvider()))
+    worked_answer_result = await llm_orchestrator.enhance(
+        purpose="assignment_scaffold_prompt",
+        system_prompt="system",
+        user_prompt="public prompt",
+        deterministic_fallback="Use the selected course source.",
+        pseudonymous_seed="assignment-id",
+        max_characters=1600,
+        max_tokens=240,
+    )
+
+    assert worked_answer_result.content == "Use the selected course source."
+    assert "resembled a worked answer" in worked_answer_result.metadata.fallback_reason
+
+    class DeclarativeProvider:
+        async def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(
+                content="Mohenjo-daro's drains prove a centralized urban administration.",
+                provider="ollama",
+                model="ollama/qwen2.5:0.5b",
+                latency_ms=10,
+            )
+
+    llm_orchestrator.reset_for_testing()
+    monkeypatch.setattr(LiteLLMProvider, "from_settings", classmethod(lambda cls: DeclarativeProvider()))
+    declarative_result = await llm_orchestrator.enhance(
+        purpose="assignment_scaffold_prompt",
+        system_prompt="system",
+        user_prompt="public prompt",
+        deterministic_fallback="Use the selected course source.",
+        pseudonymous_seed="assignment-id",
+        max_characters=1600,
+        max_tokens=240,
+    )
+
+    assert declarative_result.content == "Use the selected course source."
+    assert "imperative form" in declarative_result.metadata.fallback_reason
+
 
 @pytest.mark.asyncio
 async def test_missing_live_provider_credential_keeps_authoring_available(monkeypatch):
@@ -157,6 +205,30 @@ async def test_missing_live_provider_credential_keeps_authoring_available(monkey
     assert result.content == "Use the selected course source."
     assert result.metadata.used_live_provider is False
     assert "No API key is configured" in result.metadata.fallback_reason
+
+
+@pytest.mark.asyncio
+async def test_ungrounded_tutor_turns_never_call_a_live_provider(monkeypatch):
+    class ProhibitedProvider:
+        async def complete(self, request: CompletionRequest) -> CompletionResult:
+            raise AssertionError("Ungrounded tutor context must not be sent to a live provider.")
+
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "ollama")
+    monkeypatch.setattr(LiteLLMProvider, "from_settings", classmethod(lambda cls: ProhibitedProvider()))
+
+    result = await llm_orchestrator.enhance(
+        purpose="socratic_hint_rephrase",
+        system_prompt="system",
+        user_prompt="generic assignment context",
+        deterministic_fallback="Which observation supports your claim?",
+        pseudonymous_seed="assignment-id",
+        max_characters=420,
+        max_tokens=100,
+        allow_live=False,
+    )
+
+    assert result.content == "Which observation supports your claim?"
+    assert result.metadata.fallback_reason == "requires_course_grounding"
 
 
 def test_litellm_provider_configuration_supports_named_provider_switches(monkeypatch):

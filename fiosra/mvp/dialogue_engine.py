@@ -202,6 +202,7 @@ class SocraticDialogueEngine:
             pseudonymous_seed=f"dialogue:{question_prompt}:{active_rung}",
             max_characters=420,
             max_tokens=100,
+            allow_live=is_course_grounded,
         )
         response_text = generation.content
 

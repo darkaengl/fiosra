@@ -97,7 +97,8 @@ class AssignmentGenerator:
             purpose="assignment_scaffold_prompt",
             system_prompt=(
                 "You refine an educator-authored student task for a Socratic reasoning workspace. "
-                "Return only one concise student-facing prompt. Preserve the stated learning scope, use only "
+                "Return one or two concise prose sentences only: no markdown, headings, labels, bullets, "
+                "numbered lists, claims, or evidence examples. Preserve the stated learning scope, use only "
                 "the supplied public sources, require a bounded claim with evidence and uncertainty, and do "
                 "not supply an answer, thesis, rubric, solution, or grading judgment."
             ),

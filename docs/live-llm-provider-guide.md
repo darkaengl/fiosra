@@ -29,7 +29,7 @@ FIOSRA_LLM_COOLDOWN_SECONDS=60
 
 ## Runtime behavior
 
-Every live completion passes through `fiosra.mvp.llm.LLMOrchestrator`. Before the provider call, Fiosra selects the active assignment, public course context, permitted hint rung, and deterministic fallback. It sends the provider only public, answer-blind context. For student dialogue it sends the active prompt and the single server-selected hint, never the student identity, full event trace, answer-vault token, reference solution, or educator-only solution material.
+Every live completion passes through `fiosra.mvp.llm.LLMOrchestrator`. Before the provider call, Fiosra selects the active assignment, public course context, permitted hint rung, and deterministic fallback. It sends the provider only public, answer-blind context. Student dialogue is eligible for a live rephrase only when its active assignment is course-grounded; it sends the active prompt and the single server-selected hint, never the student identity, full event trace, answer-vault token, reference solution, or educator-only solution material. The live tutor response must remain a concise question or Fiosra returns the deterministic server-selected hint.
 
 The provider receives a pseudonymous hash in the OpenAI-compatible `user` field. Fiosra records only operational metadata in assignment specifications and dialogue event payloads: provider, resolved model, latency, token counts where supplied, whether a live provider was used, and a fallback reason if applicable. It does not persist raw provider prompts or raw responses beyond the approved student-visible wording already captured in the reasoning event.
 

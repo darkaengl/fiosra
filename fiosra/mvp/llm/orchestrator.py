@@ -15,6 +15,17 @@ ANSWER_LEAK_PATTERNS = re.compile(
     r"(?:answer\s*key|reference\s*solution|vault[_\s-]*token|bottom[- ]?out\s*(?:answer|solution))",
     re.IGNORECASE,
 )
+SOLUTION_STYLE_PATTERNS = re.compile(
+    r"(?:\*\*(?:student task|claim|evidence|direct observation|inference|thesis|answer|solution)\*\*\s*:|"
+    r"(?:^|\s)(?:student task|claim|evidence|direct observation|inference|thesis|answer|solution)\s*:|"
+    r"(?:^|\s)\d+\.\s|\b(?:the report|the source)\s+(?:mentions|states|notes|shows)\b)",
+    re.IGNORECASE,
+)
+ASSIGNMENT_DIRECTIVE_PATTERN = re.compile(
+    r"^(?:analyze|assess|compare|consider|construct|develop|determine|evaluate|examine|"
+    r"explain|formulate|identify|investigate|use|using|write)\b",
+    re.IGNORECASE,
+)
 WHITESPACE = re.compile(r"\s+")
 
 
@@ -69,7 +80,7 @@ class LLMOrchestrator:
         return f"fiosra-{hashlib.sha256(seed.encode()).hexdigest()[:20]}"
 
     @staticmethod
-    def _clean_candidate(content: str, max_characters: int) -> str:
+    def _clean_candidate(content: str, max_characters: int, purpose: str) -> str:
         cleaned = WHITESPACE.sub(" ", content).strip()
         if not cleaned:
             raise LLMProviderError("Provider returned empty text after normalization.")
@@ -77,6 +88,12 @@ class LLMOrchestrator:
             raise LLMProviderError("Provider response exceeded the configured safety limit.")
         if ANSWER_LEAK_PATTERNS.search(cleaned):
             raise LLMProviderError("Provider response contained prohibited answer-isolation language.")
+        if purpose == "assignment_scaffold_prompt" and SOLUTION_STYLE_PATTERNS.search(cleaned):
+            raise LLMProviderError("Provider response resembled a worked answer instead of a student task.")
+        if purpose == "assignment_scaffold_prompt" and not ASSIGNMENT_DIRECTIVE_PATTERN.search(cleaned):
+            raise LLMProviderError("Provider response did not preserve student-task imperative form.")
+        if purpose == "socratic_hint_rephrase" and not cleaned.endswith("?"):
+            raise LLMProviderError("Provider response did not preserve Socratic question form.")
         return cleaned
 
     @classmethod
@@ -113,6 +130,7 @@ class LLMOrchestrator:
         pseudonymous_seed: str,
         max_characters: int,
         max_tokens: int,
+        allow_live: bool = True,
     ) -> GuardedGeneration:
         """Return a validated live response or the supplied deterministic fallback.
 
@@ -128,6 +146,16 @@ class LLMOrchestrator:
                     provider="deterministic",
                     model="deterministic",
                     used_live_provider=False,
+                ),
+            )
+        if not allow_live:
+            return GuardedGeneration(
+                content=deterministic_fallback,
+                metadata=GenerationMetadata(
+                    provider="deterministic",
+                    model="deterministic",
+                    used_live_provider=False,
+                    fallback_reason="requires_course_grounding",
                 ),
             )
         if self._is_in_cooldown():
@@ -153,7 +181,7 @@ class LLMOrchestrator:
                     metadata={"user": self._pseudonymous_user(pseudonymous_seed)},
                 )
             )
-            content = self._clean_candidate(result.content, max_characters)
+            content = self._clean_candidate(result.content, max_characters, purpose)
             self._record_success()
             return GuardedGeneration(
                 content=content,
