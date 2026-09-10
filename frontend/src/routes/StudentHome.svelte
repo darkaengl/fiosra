@@ -2,12 +2,59 @@
   import { onMount } from 'svelte';
   import { routeParams } from '../lib/session.js';
 
-  let courseProgress = 75;
+  let courseProgress = $state(75);
   let courseId = $state('');
+  let currentCourse = $state(null);
+  let activeAssignment = $state(null);
+  let isLoading = $state(true);
 
-  onMount(() => {
+  onMount(async () => {
     const params = routeParams();
     courseId = params.get('course_id') || '';
+
+    try {
+      const coursesRes = await fetch('/courses');
+      if (coursesRes.ok) {
+        const list = await coursesRes.json();
+        const courses = Array.isArray(list) ? list : list.courses || [];
+        if (courseId) {
+          currentCourse = courses.find((c) => c.course_id === courseId || c.id === courseId) || null;
+        }
+        if (!currentCourse && courses.length > 0) {
+          // default to first course with published assignment
+          for (const c of courses) {
+            const cid = c.course_id || c.id;
+            const aRes = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
+            if (aRes.ok) {
+              const aList = await aRes.json();
+              if (aList.length > 0) {
+                currentCourse = c;
+                courseId = cid;
+                activeAssignment = aList[0];
+                break;
+              }
+            }
+          }
+          if (!currentCourse) {
+            currentCourse = courses[0];
+            courseId = courses[0].course_id || courses[0].id || '';
+          }
+        }
+      }
+
+      if (courseId && !activeAssignment) {
+        const assignRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
+        if (assignRes.ok) {
+          const assignList = await assignRes.json();
+          const pub = assignList.filter((a) => a.status === 'published');
+          activeAssignment = pub[0] || null;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load course details for student home:', err);
+    } finally {
+      isLoading = false;
+    }
   });
 </script>
 
@@ -18,7 +65,9 @@
     <div class="greeting-header">
       <div class="greeting-title-group">
         <h1 class="greeting-title">Welcome back, Julian</h1>
-        <p class="greeting-sub">HIST-201 • Module 1: The Outbreak of the Revolution (1789)</p>
+        <p class="greeting-sub">
+          {currentCourse ? currentCourse.title : 'Course Dashboard'} • {currentCourse?.modules?.length || 1} Module{currentCourse?.modules?.length === 1 ? '' : 's'}
+        </p>
       </div>
 
       <span class="badge badge-info" style="font-size: 11px; padding: 6px 12px;">
@@ -30,48 +79,73 @@
     <section class="focus-section">
       <span class="section-eyebrow">Active Focus • What to work on now</span>
       
-      <div class="hero-focus-card">
-        <div class="focus-card-top">
-          <div class="focus-info">
-            <span class="badge badge-warning" style="width: fit-content;">In Progress • Turn 4</span>
-            <h2 class="focus-assignment-title">Assignment 4: Economic &amp; Social Causes of the French Revolution</h2>
-            <p class="focus-desc">
-              Synthesize primary source evidence from Arthur Young with historical analysis of Crown bankruptcy, Three Estates tax inequality (the <em>taille</em>), and Rousseau's Social Contract.
-            </p>
+      {#if activeAssignment}
+        <div class="hero-focus-card">
+          <div class="focus-card-top">
+            <div class="focus-info">
+              <span class="badge badge-warning" style="width: fit-content;">In Progress • Active Milestone</span>
+              <h2 class="focus-assignment-title">{activeAssignment.title}</h2>
+              <p class="focus-desc">
+                {activeAssignment.prompt || 'Synthesize evidence and evaluate reasoning using assigned primary sources and rubric criteria.'}
+              </p>
+            </div>
+            <a 
+              href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(activeAssignment.assignment_id)}`} 
+              class="btn btn-primary" 
+              style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;"
+            >
+              Resume Reasoning Canvas →
+            </a>
           </div>
-          <a href={courseId ? `#/student?course_id=${courseId}` : '#/student'} class="btn btn-primary" style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;">
-            Resume Reasoning Canvas →
-          </a>
+
+          <div class="focus-status-row">
+            <div class="focus-stat-item">
+              <span class="focus-stat-label">Autonomy Score</span>
+              <span class="focus-stat-value" style="color: var(--color-signal-green-dark);">82% (Qualified)</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="focus-stat-item">
+              <span class="focus-stat-label">Rubric Entailment</span>
+              <span class="focus-stat-value">{activeAssignment.rubric_criteria?.length || 3} Criteria Tracked</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="focus-stat-item">
+              <span class="focus-stat-label">Socratic Hint Dependency</span>
+              <span class="focus-stat-value">0.25 (1 hint used)</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="focus-stat-item">
+              <span class="focus-stat-label">Last Activity</span>
+              <span class="focus-stat-value" style="color: var(--color-slate-muted);">Active Session</span>
+            </div>
+          </div>
         </div>
-
-        <div class="focus-status-row">
-          <div class="focus-stat-item">
-            <span class="focus-stat-label">Autonomy Score</span>
-            <span class="focus-stat-value" style="color: var(--color-signal-green-dark);">82% (Qualified)</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="focus-stat-item">
-            <span class="focus-stat-label">Rubric Entailment</span>
-            <span class="focus-stat-value">2 / 3 Criteria Met</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="focus-stat-item">
-            <span class="focus-stat-label">Socratic Hint Dependency</span>
-            <span class="focus-stat-value">0.25 (1 hint used)</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="focus-stat-item">
-            <span class="focus-stat-label">Last Activity</span>
-            <span class="focus-stat-value" style="color: var(--color-slate-muted);">Today at 10:19:42</span>
+      {:else}
+        <div class="hero-focus-card" style="border-left-color: var(--color-slate-muted);">
+          <div class="focus-card-top">
+            <div class="focus-info">
+              <span class="badge" style="background: var(--pill-bg); color: var(--color-slate-muted); width: fit-content;">
+                No Published Assignments
+              </span>
+              <h2 class="focus-assignment-title" style="color: var(--color-heading);">
+                No active reasoning milestones in this course yet
+              </h2>
+              <p class="focus-desc">
+                Your instructor has not published an active reasoning assignment for {currentCourse?.title || 'this course'} yet. Check back once modules are released.
+              </p>
+            </div>
+            <a href="#/student/portal" class="btn btn-secondary" style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;">
+              Return to Timeline ↗
+            </a>
           </div>
         </div>
-      </div>
+      {/if}
     </section>
 
     <!-- 2. Where am I? Curriculum Knowledge Mastery -->
@@ -79,53 +153,46 @@
       <span class="section-eyebrow">Curriculum Mastery • Where am I?</span>
 
       <div class="kc-progress-grid">
-        <!-- Node 1 -->
-        <div class="kc-progress-card">
-          <div class="kc-card-top">
-            <span class="badge badge-success">Mastered</span>
-            <span class="kc-card-code">KC_01</span>
+        {#if activeAssignment?.target_kcs?.length}
+          {#each activeAssignment.target_kcs as kc, idx}
+            <div class="kc-progress-card">
+              <div class="kc-card-top">
+                <span class="badge {idx === 0 ? 'badge-success' : idx === 1 ? 'badge-info' : 'badge-warning'}">
+                  {idx === 0 ? 'Mastered' : idx === 1 ? 'In Synthesis' : 'Active Probe'}
+                </span>
+                <span class="kc-card-code">KC_{idx + 1}</span>
+              </div>
+              <h3 class="kc-card-name">{kc.replace(/^KC_HIST_/, '').replace(/_/g, ' ')}</h3>
+              <div class="kc-status-bar">
+                <div 
+                  class="kc-status-fill" 
+                  style="width: {idx === 0 ? '100%' : idx === 1 ? '80%' : '45%'}; background: {idx === 0 ? 'var(--color-signal-green-dark)' : idx === 1 ? 'var(--color-horizon-blue)' : 'var(--color-amber)'};"
+                ></div>
+              </div>
+            </div>
+          {/each}
+        {:else}
+          <div class="kc-progress-card">
+            <div class="kc-card-top">
+              <span class="badge badge-success">Enrolled</span>
+              <span class="kc-card-code">KC_01</span>
+            </div>
+            <h3 class="kc-card-name">Primary Source Analysis</h3>
+            <div class="kc-status-bar">
+              <div class="kc-status-fill" style="width: 100%; background: var(--color-signal-green-dark);"></div>
+            </div>
           </div>
-          <h3 class="kc-card-name">Ancien Régime Absolutism</h3>
-          <div class="kc-status-bar">
-            <div class="kc-status-fill" style="width: 100%; background: var(--color-signal-green-dark);"></div>
+          <div class="kc-progress-card">
+            <div class="kc-card-top">
+              <span class="badge badge-info">In Progress</span>
+              <span class="kc-card-code">KC_02</span>
+            </div>
+            <h3 class="kc-card-name">Historical Claim Precision</h3>
+            <div class="kc-status-bar">
+              <div class="kc-status-fill" style="width: 75%; background: var(--color-horizon-blue);"></div>
+            </div>
           </div>
-        </div>
-
-        <!-- Node 2 -->
-        <div class="kc-progress-card">
-          <div class="kc-card-top">
-            <span class="badge badge-success">Mastered</span>
-            <span class="kc-card-code">KC_02</span>
-          </div>
-          <h3 class="kc-card-name">Three Estates &amp; Taille Exemption</h3>
-          <div class="kc-status-bar">
-            <div class="kc-status-fill" style="width: 100%; background: var(--color-signal-green-dark);"></div>
-          </div>
-        </div>
-
-        <!-- Node 3 -->
-        <div class="kc-progress-card">
-          <div class="kc-card-top">
-            <span class="badge badge-info">In Synthesis</span>
-            <span class="kc-card-code">KC_03</span>
-          </div>
-          <h3 class="kc-card-name">Crown War Debt &amp; Fiscal Deficit</h3>
-          <div class="kc-status-bar">
-            <div class="kc-status-fill" style="width: 85%; background: var(--color-horizon-blue);"></div>
-          </div>
-        </div>
-
-        <!-- Node 4 -->
-        <div class="kc-progress-card" style="border-color: #fde68a; background: #fffbeb;">
-          <div class="kc-card-top">
-            <span class="badge badge-warning">Active Probe</span>
-            <span class="kc-card-code">KC_04</span>
-          </div>
-          <h3 class="kc-card-name">Social Contract &amp; Popular Sovereignty</h3>
-          <div class="kc-status-bar">
-            <div class="kc-status-fill" style="width: 45%; background: var(--color-amber);"></div>
-          </div>
-        </div>
+        {/if}
       </div>
     </section>
 
@@ -135,9 +202,9 @@
 
       <div class="upcoming-card">
         <div class="upcoming-info">
-          <span class="badge badge-info" style="width: fit-content;">Module 2 • Next Assignment</span>
-          <h3 class="upcoming-title">The Summoning of the Estates-General &amp; The Tennis Court Oath</h3>
-          <p class="upcoming-meta">Unlocks automatically upon final sovereign approval of Assignment 4 by Dr. Vance.</p>
+          <span class="badge badge-info" style="width: fit-content;">Module 2 • Next Milestone</span>
+          <h3 class="upcoming-title">Advanced Synthesis &amp; Primary Evidence Verification</h3>
+          <p class="upcoming-meta">Unlocks automatically upon completing the active course milestones.</p>
         </div>
         <span style="font-size: 13px; color: var(--color-slate-muted); font-weight: 500;">🔒 Locked</span>
       </div>

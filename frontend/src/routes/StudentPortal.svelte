@@ -50,7 +50,8 @@
     if (course.modules) {
       for (const mod of course.modules) {
         if (mod.assignments && mod.assignments.length > 0) {
-          return mod.assignments[0];
+          const published = mod.assignments.find((a) => a.status === 'published');
+          if (published) return published;
         }
       }
     }
@@ -141,11 +142,11 @@
                   View Course Map →
                 </a>
                 <a 
-                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student?course_id=${c.course_id}`} 
+                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`} 
                   class="btn btn-primary" 
                   style="padding: 7px 14px; font-size: 12px;"
                 >
-                  Resume Reasoning Canvas →
+                  {firstAssign ? 'Resume Reasoning Canvas →' : 'Explore Course Map →'}
                 </a>
               </div>
             </div>

@@ -68,27 +68,24 @@
     if (assignmentId) {
       const response = await fetch(`/assignments/${assignmentId}`);
       if (!response.ok) throw new Error(await responseError(response, 'The requested assignment could not be loaded.'));
-      assignment = await response.json();
+      const found = await response.json();
+      if (found.status === 'published') {
+        assignment = found;
+      } else {
+        assignment = null;
+      }
     } else if (courseId) {
       const response = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
       if (response.ok) {
         const assignments = await response.json();
-        assignment = assignments[0] || null;
+        const pub = assignments.filter((a) => a.status === 'published');
+        assignment = pub[0] || null;
         assignmentId = assignment?.assignment_id || '';
-      }
-      if (!assignment) {
-        // try any assignment in this course
-        const anyRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}`);
-        if (anyRes.ok) {
-          const anyAssignments = await anyRes.json();
-          assignment = anyAssignments[0] || null;
-          assignmentId = assignment?.assignment_id || '';
-        }
       }
     }
 
     // Auto-discover active assignment across courses if neither assignment_id nor course_id was passed
-    if (!assignment) {
+    if (!assignment && !courseId) {
       try {
         const coursesRes = await fetch('/courses');
         if (coursesRes.ok) {
@@ -100,8 +97,9 @@
             const res = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
             if (res.ok) {
               const list = await res.json();
-              if (list.length > 0) {
-                assignment = list[0];
+              const pubList = list.filter((a) => a.status === 'published');
+              if (pubList.length > 0) {
+                assignment = pubList[0];
                 assignmentId = assignment.assignment_id;
                 courseId = cid;
                 break;
@@ -114,13 +112,14 @@
       }
     }
 
-    if (!assignment) {
+    if (!assignment && !courseId) {
       try {
         const directRes = await fetch('/assignments');
         if (directRes.ok) {
           const allList = await directRes.json();
-          if (allList.length > 0) {
-            assignment = allList[0];
+          const pubList = allList.filter((a) => a.status === 'published');
+          if (pubList.length > 0) {
+            assignment = pubList[0];
             assignmentId = assignment.assignment_id;
           }
         }
@@ -272,9 +271,33 @@
 {#if isLoading}
   <main class="loading-view"><div class="spinner"></div><p>Opening your long-form writing workspace…</p></main>
 {:else if error && !assignment}
-  <main class="empty-view"><h1>Workspace unavailable</h1><p>{error}</p><a class="btn btn-primary" href="#/courses">Return to courses</a></main>
+  <main class="empty-view">
+    <h1>Workspace unavailable</h1>
+    <p>{error}</p>
+    <div style="display: flex; gap: 12px; margin-top: 14px;">
+      {#if courseId}
+        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
+      {/if}
+      <a class="btn btn-primary" href="#/student/portal">Return to Timeline</a>
+    </div>
+  </main>
 {:else if !assignment}
-  <main class="empty-view"><h1>No published assignment selected</h1><p>Open a published assignment from a curriculum module to start a protected reasoning session.</p><a class="btn btn-primary" href="#/courses">Choose a course</a></main>
+  <main class="empty-view">
+    <h1 style="color: var(--color-heading) !important; font-family: var(--font-brand); font-size: 26px; font-weight: 700; margin: 0;">
+      {courseId ? 'No published assignment in this course yet' : 'No active assignment selected'}
+    </h1>
+    <p style="color: var(--color-slate-light) !important; font-size: 14px; max-width: 540px; line-height: 1.5; margin: 0;">
+      {courseId 
+        ? 'Your instructor has not published an active reasoning assignment for this course yet.' 
+        : 'Open an active milestone from your enrolled courses to start a protected reasoning session.'}
+    </p>
+    <div style="display: flex; gap: 12px; margin-top: 14px;">
+      {#if courseId}
+        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
+      {/if}
+      <a class="btn btn-primary" href="#/student/portal">Browse Student Timeline</a>
+    </div>
+  </main>
 {:else}
   <main class="document-workspace">
     <header class="assignment-bar">
@@ -346,5 +369,5 @@
 {/if}
 
 <style>
-  .document-workspace{background:var(--color-obsidian);color:var(--color-slate-bright);min-height:calc(100vh - 56px);padding:0 clamp(18px,5vw,76px) 70px}.assignment-bar{align-items:center;border-bottom:1px solid var(--color-graphite-border);display:flex;gap:18px;justify-content:space-between;min-height:82px}.assignment-identity{align-items:baseline;display:flex;gap:11px;min-width:0}.eyebrow{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.assignment-identity h1{color:#fff;font-family:var(--font-brand);font-size:16px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.document-type{color:var(--color-horizon-bright);font-size:11px;font-weight:700;white-space:nowrap}.assignment-actions{align-items:center;display:flex;gap:8px}.quiet-control,.question-control{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:11px;font-weight:700;padding:8px 10px}.quiet-control:hover,.question-control:hover{border-color:var(--color-horizon-bright);color:#fff}.question-control{border-color:rgba(96,165,250,.55);color:#dbeafe}.question-control span{background:var(--color-horizon-blue);border-radius:99px;color:#fff;margin-left:5px;padding:1px 5px}.session-badge{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:99px;color:#34d399;font-size:10px;font-weight:700;padding:5px 9px;text-transform:capitalize}.session-badge.submitted{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:var(--color-amber)}.workspace-intro{align-items:flex-end;display:flex;gap:25px;justify-content:space-between;margin:clamp(28px,6vh,64px) auto 0;max-width:920px}.workspace-intro h2{color:#fff;font-family:var(--font-brand);font-size:clamp(27px,3.6vw,42px);letter-spacing:-.7px;margin:6px 0 8px}.workspace-intro p{color:var(--color-slate-light);font-size:14px;line-height:1.6;margin:0;max-width:655px}.trace-link{border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#bae6fd;flex:0 0 auto;font-size:11px;font-weight:700;padding:9px 11px;text-decoration:none}.trace-link:hover{border-color:var(--color-horizon-blue);color:#fff}.error-banner{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:#fca5a5;font-size:12px;margin:20px auto 0;max-width:920px;padding:10px 12px}.probe-notice{background:rgba(59,130,246,.1);border:1px solid rgba(96,165,250,.32);border-radius:var(--radius-sm);color:#bfdbfe;cursor:pointer;display:block;font:600 12px var(--font-ui);margin:18px auto -10px;max-width:920px;padding:9px 12px;text-align:left;width:100%}.probe-notice:hover{background:rgba(59,130,246,.17);border-color:var(--color-horizon-bright)}.question-drawer{background:#111b27;border-left:1px solid var(--color-graphite-border);box-shadow:-22px 0 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:15px;height:100%;padding:22px;position:fixed;right:0;top:0;transform:translateX(105%);transition:transform .24s ease;visibility:hidden;width:min(420px,100vw);z-index:70}.question-drawer.open{transform:translateX(0);visibility:visible}.question-drawer header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:15px}.question-drawer h2{color:#fff;font-family:var(--font-brand);font-size:22px;margin:4px 0 0}.question-drawer header button{background:transparent;border:0;color:var(--color-slate-light);cursor:pointer;font-size:27px;line-height:1}.question-context{align-items:center;display:flex;gap:8px}.question-context span{color:#94a3b8;font-size:11px}.question-context strong{background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.28);border-radius:99px;color:#c4b5fd;font-size:10px;padding:3px 7px;text-transform:capitalize}.question-copy{color:#f8fafc;font-family:var(--font-brand);font-size:18px;line-height:1.5;margin:0}.evidence-explainer{background:#161f2a;border-left:2px solid var(--color-horizon-blue);color:#cbd5e1;font-size:12px;line-height:1.55;margin:0;padding:10px 12px}.question-drawer label{color:#e2e8f0;font-size:12px;font-weight:700;margin-top:2px}.question-drawer textarea{background:#0e151e;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#f8fafc;font:14px/1.55 var(--font-ui);min-height:145px;outline:none;padding:11px;resize:vertical}.question-drawer textarea:focus{border-color:var(--color-horizon-bright);box-shadow:0 0 0 3px rgba(59,130,246,.12)}.probe-message{color:#bae6fd;font-size:12px;line-height:1.45;margin:0}.question-actions{display:flex;flex-wrap:wrap;gap:8px}.question-actions button{background:#182433;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#cbd5e1;cursor:pointer;font-size:12px;font-weight:700;padding:9px 11px}.question-actions button:hover:not(:disabled){border-color:var(--color-horizon-bright);color:#fff}.question-actions button:disabled{cursor:not-allowed;opacity:.55}.question-actions .primary-question-action{background:var(--color-horizon-blue);border-color:var(--color-horizon-blue);color:#fff}.question-actions .dismiss{color:#fbbf24}.empty-questions{background:#161f2a;border:1px solid var(--color-graphite-border);border-radius:var(--radius-md);margin-top:5px;padding:17px}.empty-questions h3{color:#fff;font-size:15px;margin:0 0 6px}.empty-questions p{color:#94a3b8;font-size:12px;line-height:1.55;margin:0}.empty-questions span{color:#86efac;display:block;font-size:11px;margin-top:12px}.brief-overlay{align-items:center;background:rgba(2,6,23,.75);display:flex;inset:0;justify-content:center;padding:24px;position:fixed;z-index:80}.brief-dialog{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);box-shadow:0 24px 70px rgba(0,0,0,.5);max-width:820px;padding:24px;width:min(100%,820px)}.brief-dialog header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:14px}.brief-dialog h2{color:#fff;font-size:20px;margin:4px 0 0}.brief-dialog header button{background:none;border:0;color:#94a3b8;cursor:pointer;font-size:25px;line-height:1}.brief-prompt{color:#e2e8f0;font-size:14px;line-height:1.65;margin:18px 0}.brief-grid{display:grid;gap:15px;grid-template-columns:.8fr 1.2fr}.brief-grid>div{background:#111b27;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:7px;padding:13px}.brief-grid h3{color:#e2e8f0;font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase}.brief-grid code{color:#c4b5fd;font-size:10px;overflow-wrap:anywhere}.brief-grid p{color:#94a3b8;font-size:11px;line-height:1.4;margin:0}.brief-grid p strong{color:#bae6fd;display:block;font-size:11px}.brief-grid p span{display:block;margin-top:3px}.brief-dialog footer{align-items:center;color:#94a3b8;display:flex;font-size:11px;gap:14px;justify-content:space-between;margin-top:17px}.loading-view,.empty-view{align-items:center;background:var(--color-obsidian);color:var(--color-slate-light);display:flex;flex-direction:column;gap:14px;justify-content:center;min-height:calc(100vh - 56px);padding:24px;text-align:center}.empty-view h1{color:#fff;font-family:var(--font-brand);font-size:24px}.empty-view p{max-width:520px}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:32px;width:32px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:780px){.document-workspace{padding:0 16px 56px}.assignment-bar{align-items:flex-start;flex-direction:column;gap:10px;padding:14px 0}.assignment-identity{align-items:flex-start;flex-wrap:wrap}.assignment-actions{width:100%}.quiet-control,.question-control{flex:1}.workspace-intro{align-items:flex-start;flex-direction:column;margin-top:30px}.brief-grid{grid-template-columns:1fr}.brief-dialog footer{align-items:stretch;flex-direction:column}.brief-dialog footer .btn{width:100%}.question-drawer{width:100%}}@media(max-width:480px){.workspace-intro h2{font-size:29px}}
+  .document-workspace{background:var(--color-obsidian);color:var(--color-slate-bright);min-height:calc(100vh - 56px);padding:0 clamp(18px,5vw,76px) 70px}.assignment-bar{align-items:center;border-bottom:1px solid var(--color-graphite-border);display:flex;gap:18px;justify-content:space-between;min-height:82px}.assignment-identity{align-items:baseline;display:flex;gap:11px;min-width:0}.eyebrow{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.assignment-identity h1{color:#fff;font-family:var(--font-brand);font-size:16px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.document-type{color:var(--color-horizon-bright);font-size:11px;font-weight:700;white-space:nowrap}.assignment-actions{align-items:center;display:flex;gap:8px}.quiet-control,.question-control{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:11px;font-weight:700;padding:8px 10px}.quiet-control:hover,.question-control:hover{border-color:var(--color-horizon-bright);color:#fff}.question-control{border-color:rgba(96,165,250,.55);color:#dbeafe}.question-control span{background:var(--color-horizon-blue);border-radius:99px;color:#fff;margin-left:5px;padding:1px 5px}.session-badge{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:99px;color:#34d399;font-size:10px;font-weight:700;padding:5px 9px;text-transform:capitalize}.session-badge.submitted{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:var(--color-amber)}.workspace-intro{align-items:flex-end;display:flex;gap:25px;justify-content:space-between;margin:clamp(28px,6vh,64px) auto 0;max-width:920px}.workspace-intro h2{color:#fff;font-family:var(--font-brand);font-size:clamp(27px,3.6vw,42px);letter-spacing:-.7px;margin:6px 0 8px}.workspace-intro p{color:var(--color-slate-light);font-size:14px;line-height:1.6;margin:0;max-width:655px}.trace-link{border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#bae6fd;flex:0 0 auto;font-size:11px;font-weight:700;padding:9px 11px;text-decoration:none}.trace-link:hover{border-color:var(--color-horizon-blue);color:#fff}.error-banner{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:#fca5a5;font-size:12px;margin:20px auto 0;max-width:920px;padding:10px 12px}.probe-notice{background:rgba(59,130,246,.1);border:1px solid rgba(96,165,250,.32);border-radius:var(--radius-sm);color:#bfdbfe;cursor:pointer;display:block;font:600 12px var(--font-ui);margin:18px auto -10px;max-width:920px;padding:9px 12px;text-align:left;width:100%}.probe-notice:hover{background:rgba(59,130,246,.17);border-color:var(--color-horizon-bright)}.question-drawer{background:#111b27;border-left:1px solid var(--color-graphite-border);box-shadow:-22px 0 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:15px;height:100%;padding:22px;position:fixed;right:0;top:0;transform:translateX(105%);transition:transform .24s ease;visibility:hidden;width:min(420px,100vw);z-index:70}.question-drawer.open{transform:translateX(0);visibility:visible}.question-drawer header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:15px}.question-drawer h2{color:#fff;font-family:var(--font-brand);font-size:22px;margin:4px 0 0}.question-drawer header button{background:transparent;border:0;color:var(--color-slate-light);cursor:pointer;font-size:27px;line-height:1}.question-context{align-items:center;display:flex;gap:8px}.question-context span{color:#94a3b8;font-size:11px}.question-context strong{background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.28);border-radius:99px;color:#c4b5fd;font-size:10px;padding:3px 7px;text-transform:capitalize}.question-copy{color:#f8fafc;font-family:var(--font-brand);font-size:18px;line-height:1.5;margin:0}.evidence-explainer{background:#161f2a;border-left:2px solid var(--color-horizon-blue);color:#cbd5e1;font-size:12px;line-height:1.55;margin:0;padding:10px 12px}.question-drawer label{color:#e2e8f0;font-size:12px;font-weight:700;margin-top:2px}.question-drawer textarea{background:#0e151e;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#f8fafc;font:14px/1.55 var(--font-ui);min-height:145px;outline:none;padding:11px;resize:vertical}.question-drawer textarea:focus{border-color:var(--color-horizon-bright);box-shadow:0 0 0 3px rgba(59,130,246,.12)}.probe-message{color:#bae6fd;font-size:12px;line-height:1.45;margin:0}.question-actions{display:flex;flex-wrap:wrap;gap:8px}.question-actions button{background:#182433;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#cbd5e1;cursor:pointer;font-size:12px;font-weight:700;padding:9px 11px}.question-actions button:hover:not(:disabled){border-color:var(--color-horizon-bright);color:#fff}.question-actions button:disabled{cursor:not-allowed;opacity:.55}.question-actions .primary-question-action{background:var(--color-horizon-blue);border-color:var(--color-horizon-blue);color:#fff}.question-actions .dismiss{color:#fbbf24}.empty-questions{background:#161f2a;border:1px solid var(--color-graphite-border);border-radius:var(--radius-md);margin-top:5px;padding:17px}.empty-questions h3{color:#fff;font-size:15px;margin:0 0 6px}.empty-questions p{color:#94a3b8;font-size:12px;line-height:1.55;margin:0}.empty-questions span{color:#86efac;display:block;font-size:11px;margin-top:12px}.brief-overlay{align-items:center;background:rgba(2,6,23,.75);display:flex;inset:0;justify-content:center;padding:24px;position:fixed;z-index:80}.brief-dialog{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);box-shadow:0 24px 70px rgba(0,0,0,.5);max-width:820px;padding:24px;width:min(100%,820px)}.brief-dialog header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:14px}.brief-dialog h2{color:#fff;font-size:20px;margin:4px 0 0}.brief-dialog header button{background:none;border:0;color:#94a3b8;cursor:pointer;font-size:25px;line-height:1}.brief-prompt{color:#e2e8f0;font-size:14px;line-height:1.65;margin:18px 0}.brief-grid{display:grid;gap:15px;grid-template-columns:.8fr 1.2fr}.brief-grid>div{background:#111b27;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:7px;padding:13px}.brief-grid h3{color:#e2e8f0;font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase}.brief-grid code{color:#c4b5fd;font-size:10px;overflow-wrap:anywhere}.brief-grid p{color:#94a3b8;font-size:11px;line-height:1.4;margin:0}.brief-grid p strong{color:#bae6fd;display:block;font-size:11px}.brief-grid p span{display:block;margin-top:3px}.brief-dialog footer{align-items:center;color:#94a3b8;display:flex;font-size:11px;gap:14px;justify-content:space-between;margin-top:17px}.loading-view,.empty-view{align-items:center;background:var(--color-obsidian);color:var(--color-slate-light);display:flex;flex-direction:column;gap:14px;justify-content:center;min-height:calc(100vh - 56px);padding:24px;text-align:center}.empty-view h1{color:var(--color-heading);font-family:var(--font-brand);font-size:26px;margin:0}.empty-view p{color:var(--color-slate-light);max-width:540px;line-height:1.5;margin:0}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:32px;width:32px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:780px){.document-workspace{padding:0 16px 56px}.assignment-bar{align-items:flex-start;flex-direction:column;gap:10px;padding:14px 0}.assignment-identity{align-items:flex-start;flex-wrap:wrap}.assignment-actions{width:100%}.quiet-control,.question-control{flex:1}.workspace-intro{align-items:flex-start;flex-direction:column;margin-top:30px}.brief-grid{grid-template-columns:1fr}.brief-dialog footer{align-items:stretch;flex-direction:column}.brief-dialog footer .btn{width:100%}.question-drawer{width:100%}}@media(max-width:480px){.workspace-intro h2{font-size:29px}}
 </style>
