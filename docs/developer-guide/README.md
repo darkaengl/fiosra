@@ -15,7 +15,7 @@ This developer guide is organized into six modular chapters covering the entire 
 | [**Chapter 3**](./03-frontend-architecture.md) | **Frontend Architecture (Svelte 5 SPA)** | Svelte 5 runes (`$state`, `$derived`, `$props`), hash-based SPA router (`/ui/#/`), Educator Studio views, Student Workspace, reusable component library, and design tokens. |
 | [**Chapter 4**](./04-api-reference.md) | **Comprehensive API Reference** | Complete REST endpoint specifications, request/response schemas, path/query parameters, status codes, and JSON payloads. |
 | [**Chapter 5**](./05-development-workflows.md) | **Developer Workflows & Operations** | Prerequisites, local development environment, Docker Compose stack, test execution (`pytest`), Vite production build, database migrations, and debugging. |
-| [**Chapter 6**](./06-learning-canvas-and-assistance.md) | **Long-Form Learning Documents & Bounded Assistance** | Tiptap/ProseMirror writer-first documents, block-level persistence, session capabilities, legacy canvas import, long-document validation, and the safeguarded assistance roadmap. |
+| [**Chapter 6**](./06-learning-canvas-and-assistance.md) | **Long-Form Documents & Socratic Evidence** | Tiptap/ProseMirror writer-first documents, protected block persistence, proactive paragraph questions, evaluator-visible evidence, session capabilities, and the safeguarded assistance roadmap. |
 
 ---
 
@@ -49,7 +49,7 @@ This developer guide is organized into six modular chapters covering the entire 
 - **Backend**: Python 3.11+, [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy](https://www.sqlalchemy.org/) (Async engine), [Pydantic v2](https://docs.pydantic.dev/), [SymPy](https://www.sympy.org/) Computer Algebra System, [NetworkX](https://networkx.org/).
 - **Frontend**: [Svelte 5](https://svelte.dev/) (Modern Runes syntax), [Vite 8](https://vitejs.dev/), [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router), [Tiptap/ProseMirror](https://tiptap.dev/) for long-form student documents, and a custom Glassmorphic Design System (Vanilla CSS).
 - **Databases**: [PostgreSQL 16](https://www.postgresql.org/) with [`pgvector`](https://github.com/pgvector/pgvector) extension, [Neo4j Community 5](https://neo4j.com/).
-- **DevOps & Testing**: [Docker & Docker Compose](https://www.docker.com/), [uv](https://docs.astral.sh/uv/), [pytest](https://docs.pytest.org/) (73 passing tests in the current local validation suite), [Ruff](https://docs.astral.sh/ruff/).
+- **DevOps & Testing**: [Docker & Docker Compose](https://www.docker.com/), [uv](https://docs.astral.sh/uv/), [pytest](https://docs.pytest.org/) (76 passing tests in the current local validation suite), [Ruff](https://docs.astral.sh/ruff/).
 
 ---
 
@@ -86,3 +86,4 @@ Every engineer contributing to Fiosra must preserve four core tenets:
 2. **Deterministic Outranks Probabilistic**: SymPy CAS and exact unit tests always supersede LLM outputs.
 3. **Non-Manipulable Hint Ceilings**: Hint level progression is strictly computed from telemetry and attempt counts, never prompt injection.
 4. **Structured Evidence Trace ($Z$)**: Epistemic struggle is captured as typed JSON event logs rather than lossy summary embeddings.
+5. **Learner-Owned Socratic Evidence**: Proactive questions may test stable learner writing, but never interrupt composition, author prose, issue automatic grades, or treat an unanswered question as misconduct.

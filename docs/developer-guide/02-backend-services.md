@@ -52,6 +52,11 @@ fiosra/mvp/
 ├── dialogue_router.py          # /api/v1/dialogue endpoints
 ├── event_store.py              # Flight recorder append-only event engine
 ├── events_router.py            # /api/v1/events endpoints
+├── learning_document_service.py # Protected long-form document persistence
+├── learning_document_router.py  # /learning-documents document endpoints
+├── socratic_probe_service.py    # Canonical-block proactive probe lifecycle
+├── socratic_probe_router.py     # Capability-protected probe endpoints
+├── llm/                         # LiteLLM adapter, policy orchestration, deterministic fallback
 ├── seed_pipeline.py            # Seed script populating Neo4j KCs and PostgreSQL initial records
 │
 ├── courses/                    # LMS Curriculum & Portfolio Service
@@ -77,9 +82,12 @@ fiosra/mvp/
 │   └── text_claim.py           # Claim assertion validator & SymPy CAS interface
 │
 └── migrations/                 # DDL & Schema Migration SQL Scripts
-    ├── 001_initial_schema.sql  # Core event store & assignment tables
-    ├── 002_syllabus_chunks.sql # pgvector extension & vector tables
-    └── 004_module_resources.sql# Grounded syllabus resources table
+├── 001_initial_schema.sql  # Core event store & assignment tables
+├── 002_syllabus_chunks.sql # pgvector extension & vector tables
+├── 004_module_resources.sql# Grounded syllabus resources table
+├── 005_learning_canvas.sql # Legacy canvas drafts and session capability tables
+├── 006_long_form_document.sql # Long-form block persistence tables
+└── 007_proactive_socratic_probes.sql # Paragraph-bound question and response tables
 ```
 
 ---
@@ -96,8 +104,11 @@ Application settings are validated via `pydantic-settings`. Default environment 
 | `NEO4J_URI` | `str` | `bolt://localhost:7687` | Neo4j Bolt protocol URI |
 | `NEO4J_USER` | `str` | `"neo4j"` | Neo4j username |
 | `NEO4J_PASSWORD` | `str` | `"fiosra_neo4j"` | Neo4j password |
-| `OPENAI_API_KEY` | `SecretStr`| `""` | Key for embeddings and LLM calls |
-| `OPENAI_MODEL` | `str` | `"gpt-4o-mini"` | Default LLM engine |
+| `OPENAI_API_KEY` | `SecretStr`| `""` | Key for embeddings and the optional OpenAI-compatible LiteLLM provider |
+| `FIOSRA_LLM_PROVIDER` | `str` | `"deterministic"` | `deterministic`, `ollama`, `openrouter`, `openai`, or `gemini`; controls optional constrained rephrasing only |
+| `OLLAMA_MODEL` | `str` | provider-specific | Local model name used through LiteLLM when `FIOSRA_LLM_PROVIDER=ollama` |
+| `FIOSRA_PROBE_QUIET_SECONDS` | `int` | `5` | Minimum stable period after document sync before a canonical-block probe can be evaluated |
+| `FIOSRA_PROBE_SESSION_BUDGET` | `int` | `6` | Maximum automatic questions persisted for one learner session |
 
 ### 2. Async Database Session (`database.py`)
 ```python
@@ -110,6 +121,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 ```
+
+### 3. Proactive Socratic probe lifecycle
+
+`SocraticProbeService` is deliberately a **server-authoritative micro-workflow**, not an autonomous essay-writing agent. The browser invokes evaluation only after a successful document synchronization and five-second quiet period. The service re-reads the canonical block, verifies the capability-bound active session and public assignment, selects one allow-listed focus deterministically, and observes per-block/session limits. It stores the question and all learner dispositions in PostgreSQL, while the append-only event stream stores only IDs, focus, and prompt-free generation metadata.
+
+Only a bounded question rephrase may use `llm_orchestrator`. The provider sees reduced public context and may not select a focus, see a complete essay, access the Answer Vault, mutate a document, or decide a grade. The policy layer requires exactly one question and rejects answer language, conclusions, source inventions, and out-of-context vocabulary. A deterministic question is the final fallback.
 
 ---
 

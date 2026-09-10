@@ -100,7 +100,7 @@
     font-family: var(--font-brand);
     font-size: 24px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
     margin: 0;
     line-height: 1.25;
   }
@@ -119,10 +119,10 @@
     gap: 6px;
     font-size: 12px;
     color: var(--color-slate-light);
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--pill-bg);
     padding: 4px 10px;
     border-radius: var(--radius-xs);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--pill-border);
   }
 
   .chip-icon {

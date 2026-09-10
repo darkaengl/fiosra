@@ -4,7 +4,7 @@ Fiosra’s student workspace is now a **writer-first, long-form learning documen
 
 > **Core invariant:** Fiosra may help a learner clarify expression, investigate an idea, and demonstrate understanding. It may not silently author assessed work, disclose Answer Vault material, make a grading decision, or claim that a learner understands content without transparent evidence.
 
-This chapter documents the delivered **Slice 1 document foundation**. Proactive Socratic probes, answer-blind brainstorming, grammar/reformat patches, and evidence-gated drafting are planned capabilities; they are not available in the production workspace until their individually approved implementation slices ship.
+This chapter documents the delivered **Slice 1 document foundation** and **Slice 2 proactive Socratic probes**. Answer-blind brainstorming, grammar/reformat patches, and evidence-gated drafting remain planned capabilities; they are not available in the workspace until their individually approved implementation slices ship.
 
 ## 1. Student workspace architecture
 
@@ -17,6 +17,8 @@ This chapter documents the delivered **Slice 1 document foundation**. Proactive 
 | **Formatting controls** | Small peripheral toolbar | Applies paragraph, heading, list, quote, and add-section operations. | A generated block UUID is validated on each save; controls never grant new server permissions. |
 | **Save status** | Quiet status line | Displays saved, saving, unsaved, or recoverable error state. | Server document revision controls the authoritative saved state. |
 | **Assignment brief** | Modal, on request | Shows public prompt, target KCs, and approved-source excerpts. | No hidden educator prompt, answer key, vault token, provider configuration, or session credential is shown. |
+| **Questions indicator** | Small count in the assignment bar | Announces only that a paragraph-specific question is ready. | The client never supplies question text, focus, source data, or eligibility; the server evaluates canonical saved blocks. |
+| **Evidence & Questions drawer** | Closed right-side drawer | Lets the learner answer, defer, or dismiss one question without changing the essay. | Probe responses are separately stored as learner evidence, never inserted into document text, and never treated as an automatic grade. |
 | **Reasoning trace link** | Secondary navigation | Opens the existing protected trace review experience. | Append-only session evidence is separate from editable document content. |
 
 The editor initially imports the assignment’s five legacy canvas section definitions as headings and preserves every pre-existing `canvas_section_drafts` value as a paragraph below its matching heading. Legacy canvas data is retained as history and is never deleted by the import.
@@ -81,18 +83,41 @@ The Tiptap component converts the API’s canonical JSON into a `doc` node and r
 
 Do not bypass this component by treating arbitrary HTML as a persisted source of truth. HTML is an unsafe and lossy transport for provenance-sensitive learning work. The backend stores validated JSON, derives plaintext only for safe search/verification/rendering use, and the future evidence packet will snapshot this server-owned document model.
 
-## 5. Assistance roadmap and future safeguards
+## 5. Delivered proactive Socratic probes and assistance roadmap
 
-The approved long-form product design reserves the editor’s `@` and `/` interactions for bounded help without allowing AI to become the primary author.
+After a successful incremental document sync, the editor starts a five-second local quiet timer. A subsequent edit cancels that timer. When it expires, the browser asks the protected probe API to evaluate only the synchronized block IDs and document revision. The service independently re-reads the active session, published assignment, canonical blocks, block revisions, and prior probe history before it decides whether a question is warranted.
+
+The first probe planner is deterministic. It recognizes only five bounded focus types—direct observation, warrant, causal bridge, alternative explanation, and qualification—and selects its fallback question from a server-owned allow-list. LiteLLM may rephrase that question through a configured provider, but cannot decide the focus, change document text, see Answer Vault material, or create workflow state. A rephrase must be one question under 260 characters and pass answer-isolation, conclusion, and bounded-vocabulary checks; otherwise Fiosra presents the original deterministic question.
+
+The writer remains in control. The indicator and drawer never steal focus or block composition. A learner may answer a question in the separately labelled field, defer it, dismiss it, or continue writing. An answer becomes `evidence_submitted`, not demonstrated mastery or an automatic grade. Deferment and dismissal remain visible in the trace; they do not deduct marks automatically, but leave the associated claim without a response record for a human evaluator.
+
+| Delivered interaction | Trigger | Result | Non-negotiable safeguard |
+|---|---|---|---|
+| **Proactive Socratic probe** | A materially changed, learner-authored paragraph or quotation survives the five-second quiet period. | At most one compact question about a claim, source use, warrant, causal bridge, alternative, or qualification. | Non-blocking; answer-blind; capability-protected; server rate limited; learner response recorded separately and verbatim for review. |
+| **Question response / Later / Dismiss** | Learner action in the optional drawer. | Creates a transparent evidence, deferral, or dismissal record while leaving the essay editable. | Cannot alter the document or grade. A submitted session cannot receive a new question or mutation. |
+
+The long-form product design reserves the editor’s future `@` and `/` interactions for bounded help without allowing AI to become the primary author.
 
 | Planned interaction | Trigger | Permitted result | Non-negotiable safeguard |
 |---|---|---|---|
-| **Proactive Socratic probe** | A meaningful, stable learner-authored block after a server-side quiet period | One paragraph-specific question about a claim, source use, warrant, alternative, or qualification | Non-blocking; answer-blind; rate-limited; learner response recorded verbatim. A deferral leaves the claim not yet evidenced but does not trigger an automatic grade penalty. |
 | **`/brainstorm`** | Learner request | Three to five neutral inquiry prompts, evidence gaps, or counterargument categories | No thesis, conclusion, factual assertion, source interpretation/quotation, citation, or submission-ready prose. |
 | **`/grammar`, `/reformat`, `/clarify`** | Learner selects their own text | A reviewable meaning-preserving patch | Proposed diff only; it cannot add facts, named entities, numbers, citations, or source claims outside the selected context. |
 | **`/draft-from-evidence`** | Learner request with qualifying demonstrated-evidence records | A labelled proposed passage from that finite evidence bundle | Never enabled for unverified claims; must map every proposition to approved sources and the learner’s recorded demonstration; learner acceptance is explicit. |
 
-LiteLLM is the provider-neutral transport layer for any later live calls. The same server policy controls apply whether it routes to Ollama, OpenRouter, OpenAI-compatible endpoints, Gemini, or the deterministic fallback. Provider output is never a permission grant and never mutates document text without server validation plus learner acceptance.
+LiteLLM is the provider-neutral transport layer for the optional probe rephrasing call and any later approved live calls. The same server policy controls apply whether it routes to Ollama, OpenRouter, OpenAI-compatible endpoints, Gemini, or the deterministic fallback. Provider output is never a permission grant and never mutates document text without server validation plus learner acceptance.
+
+### Probe API sequence
+
+All probe requests require the opaque `X-Fiosra-Session-Token` capability. The public learner projection omits provider prompts and any hidden assignment or Answer Vault material.
+
+| Method and path | Purpose | Key lifecycle checks |
+|---|---|---|
+| `POST /learning-documents/sessions/{session_id}/probes/evaluate` | Evaluates up to 20 recently synchronized canonical block IDs after the quiet period. | Active authorized session, current document revision, ownership, material text, stability, one open probe per block revision, session budget, and cooldown. |
+| `GET /learning-documents/sessions/{session_id}/probes` | Restores only open or deferred questions and a small evidence count. | Capability and active published-assignment checks. |
+| `POST /learning-documents/sessions/{session_id}/probes/{probe_id}/responses` | Saves a learner’s 10–6,000-character explanation as evaluator evidence. | Session/probe/document ownership and open/deferred lifecycle state. |
+| `POST /learning-documents/sessions/{session_id}/probes/{probe_id}/defer` and `/dismiss` | Makes the learner’s non-blocking disposition explicit. | The essay and grade remain untouched; closed states are idempotent. |
+
+The educator evidence dossier adds `proactive_socratic_evidence`, an ordered record of the section label, focus, exact question, status, response (when supplied), timestamps, and prompt-free generation metadata. The AutoSCORE review screen renders this separately from the legacy rubric evidence, so a human evaluator can distinguish a learner’s document from their explanatory response.
 
 ## 6. Safe modification guidance
 
@@ -105,7 +130,8 @@ When extending the long-form workspace, preserve all of the following:
 5. Send and validate stable `blockId` values. Never accept a client-supplied unknown block type or arbitrary HTML as canonical content.
 6. Log document events without raw student prose. Evidence/provenance records must be scoped, versioned, and visible to the correct evaluator flow.
 7. Do not reinterpret a grammar patch or brainstorming card as proof of conceptual understanding.
-8. Do not release educator document/PDF access until course-scoped reviewer authorization from Issue #41 exists.
+8. Preserve the probe’s one-question, canonical-block, quiet-period, budget, cooldown, and vocabulary guardrails. Never let a provider manufacture question context or its own lifecycle state.
+9. Do not release educator document/PDF access until course-scoped reviewer authorization from Issue #41 exists.
 
 ## 7. Local validation workflow
 
@@ -114,10 +140,12 @@ Apply the migrations to an existing development database in order, rebuild the f
 ```bash
 # From the repository root
 psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/006_long_form_document.sql
+psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/007_proactive_socratic_probes.sql
 
 uv run ruff check fiosra tests
 uv run python -m compileall -q fiosra
 uv run pytest tests/test_learning_documents.py -q
+uv run pytest tests/test_socratic_probes.py tests/test_llm_orchestration.py -q
 uv run pytest tests -q
 
 cd frontend
@@ -133,9 +161,11 @@ Browser acceptance checks for this foundation:
 1. Open a published assignment with the student route and confirm a centred continuous editor is the primary visual surface.
 2. Confirm existing legacy canvas drafts appear under imported outline headings.
 3. Add a section, wait for **Saved**, and reload. Confirm the heading survives the reload.
-4. Confirm the assignment brief still exposes only public assignment context.
-5. Exercise an API test with a synthetic 125-paragraph document exceeding 200,000 characters. Confirm no document-wide character-limit error occurs.
-6. Submit the session and confirm further document edits are rejected with `409`.
+4. Save a meaningful paragraph, wait five seconds without editing, and confirm a compact **Questions** indicator appears without opening the drawer or moving the editor cursor.
+5. Open the drawer. Confirm the question is answer-blind, grounded to the assigned writing section, and does not insert or replace essay prose.
+6. Answer, defer, and dismiss through separate test sessions. Confirm these outcomes are chronologically visible in the trace and that only an answer appears as evaluator evidence.
+7. Exercise an API test with a synthetic 125-paragraph document exceeding 200,000 characters. Confirm no document-wide character-limit error occurs.
+8. Submit the session and confirm further document edits or probe actions are rejected with `409`.
 
 ## References
 

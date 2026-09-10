@@ -8,6 +8,7 @@
     learningDocument = null,
     disabled = false,
     onSync = async () => null,
+    onSynced = () => null,
   } = $props();
 
   const blockTypes = {
@@ -197,6 +198,7 @@
       if (!synced) return;
       syncBaseline(synced);
       isDirty = false;
+      onSynced(synced);
     } catch (error) {
       saveError = error?.message || 'This document could not be saved.';
     } finally {

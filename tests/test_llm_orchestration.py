@@ -186,6 +186,32 @@ async def test_provider_error_and_answer_leak_both_fall_back_deterministically(m
     assert declarative_result.content == "Use the selected course source."
     assert "imperative form" in declarative_result.metadata.fallback_reason
 
+    class InventedFactProbeProvider:
+        async def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(
+                content="Could Babylonian authorities prove this conclusion?",
+                provider="ollama",
+                model="ollama/qwen2.5:0.5b",
+                latency_ms=10,
+            )
+
+    llm_orchestrator.reset_for_testing()
+    monkeypatch.setattr(
+        LiteLLMProvider, "from_settings", classmethod(lambda cls: InventedFactProbeProvider())
+    )
+    invented_fact_result = await llm_orchestrator.enhance(
+        purpose="socratic_probe_rephrase",
+        system_prompt="Ask one question only.",
+        user_prompt="Public assignment prompt: explain drainage. Active heading: reasoning. Server-selected Socratic question: What mechanism connects drainage to this outcome?",
+        deterministic_fallback="What mechanism connects drainage to this outcome?",
+        pseudonymous_seed="assignment-id",
+        max_characters=260,
+        max_tokens=90,
+    )
+
+    assert invented_fact_result.content == "What mechanism connects drainage to this outcome?"
+    assert "introduced vocabulary" in invented_fact_result.metadata.fallback_reason
+
 
 @pytest.mark.asyncio
 async def test_missing_live_provider_credential_keeps_authoring_available(monkeypatch):

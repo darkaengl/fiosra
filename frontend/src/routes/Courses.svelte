@@ -443,7 +443,7 @@
     font-family: var(--font-brand);
     font-size: 26px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -453,8 +453,8 @@
   .term-pill {
     font-size: 11px;
     font-weight: 600;
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--pill-active-bg);
+    border: 1px solid var(--pill-active-border);
     color: var(--color-horizon-bright);
     padding: 3px 10px;
     border-radius: var(--radius-full);
@@ -519,7 +519,7 @@
     font-family: var(--font-brand);
     font-size: 28px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .stat-trend {
@@ -562,7 +562,7 @@
     background: transparent;
     border: none;
     outline: none;
-    color: #ffffff;
+    color: var(--color-slate-bright);
     font-size: 13px;
     font-family: var(--font-ui);
     width: 100%;
@@ -579,7 +579,7 @@
     font-size: 12px;
     padding: 2px 4px;
   }
-  .clear-search:hover { color: #fff; }
+  .clear-search:hover { color: var(--color-heading); }
 
   .filter-chips {
     display: flex;
@@ -599,12 +599,12 @@
     transition: all 0.15s ease;
   }
   .filter-chip:hover {
-    color: #ffffff;
+    color: var(--color-heading);
     border-color: var(--color-slate-subtle);
   }
   .filter-chip.active {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.4);
+    background: var(--pill-active-bg);
+    border-color: var(--pill-active-border);
     color: var(--color-horizon-bright);
     font-weight: 600;
   }
@@ -664,8 +664,8 @@
     opacity: 0.8;
   }
   .course-card:hover {
-    border-color: rgba(59, 130, 246, 0.4);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border-color: var(--color-horizon-blue);
+    box-shadow: var(--shadow-md);
     transform: translateY(-2px);
   }
 
@@ -681,7 +681,7 @@
     font-weight: 700;
     padding: 3px 8px;
     border-radius: var(--radius-xs);
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--pill-bg);
     color: var(--color-slate-bright);
     letter-spacing: 0.5px;
   }
@@ -690,7 +690,7 @@
     font-family: var(--font-brand);
     font-size: 17px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
     margin: 6px 0 0;
     line-height: 1.35;
   }
@@ -715,9 +715,9 @@
     font-weight: 600;
     padding: 3px 9px;
     border-radius: var(--radius-full);
-    background: rgba(16, 185, 129, 0.12);
-    border: 1px solid rgba(16, 185, 129, 0.25);
-    color: #34d399;
+    background: var(--color-signal-green-bg);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--color-signal-green);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -743,7 +743,7 @@
     font-family: var(--font-brand);
     font-size: 15px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .metric-sub {
@@ -767,7 +767,7 @@
     color: var(--color-slate-muted);
   }
   .last-active strong {
-    color: #ffffff;
+    color: var(--color-slate-bright);
   }
 
   .course-link {
@@ -785,7 +785,7 @@
   }
   .course-link:hover {
     gap: 9px;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .pagination-bar {
@@ -809,7 +809,7 @@
     transition: all 0.15s ease;
   }
   .page-btn:hover:not(:disabled) {
-    color: #ffffff;
+    color: var(--color-heading);
     border-color: var(--color-slate-subtle);
     background: var(--color-graphite-hover);
   }
@@ -840,7 +840,7 @@
     transition: all 0.15s ease;
   }
   .page-num:hover {
-    color: #ffffff;
+    color: var(--color-heading);
     border-color: var(--color-slate-subtle);
   }
   .page-num.active {
@@ -876,7 +876,7 @@
   }
   .empty-state h3 {
     margin: 0;
-    color: #fff;
+    color: var(--color-heading);
     font-family: var(--font-brand);
   }
   .empty-state p {
@@ -933,20 +933,20 @@
   }
 
   .field-input {
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    color: #ffffff;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--color-slate-bright);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
     font-size: 13.5px;
-    font-family: var(--font-body);
+    font-family: var(--font-ui);
     width: 100%;
     box-sizing: border-box;
     transition: border-color 0.15s;
   }
   .field-input:focus {
     outline: none;
-    border-color: var(--color-horizon-blue);
+    border-color: var(--input-focus-border);
   }
 
   textarea.field-input {
@@ -957,9 +957,9 @@
     font-size: 12px;
     padding: 8px 12px;
     border-radius: var(--radius-xs);
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--color-rose-bg);
+    color: var(--color-rose-text);
+    border: 1px solid var(--color-rose);
   }
 
   .modal-footer {
@@ -971,7 +971,7 @@
   }
 
   .pipeline-preview {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--pill-bg);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-sm);
     padding: 14px;
@@ -983,7 +983,7 @@
   }
   .pipeline-title {
     font-weight: 600;
-    color: #ffffff;
+    color: var(--color-heading);
   }
   .pipeline-step {
     display: flex;

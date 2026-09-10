@@ -38,7 +38,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(10, 12, 16, 0.85);
+    background: var(--modal-overlay-bg);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -56,7 +56,7 @@
     display: flex;
     flex-direction: column;
     gap: 18px;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-lg);
   }
 
   .modal-header {
@@ -71,7 +71,7 @@
     font-family: var(--font-brand);
     font-size: 18px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .btn-icon {

@@ -100,6 +100,9 @@ psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/005_learning_c
 
 # Apply protected long-form learning document tables
 psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/006_long_form_document.sql
+
+# Apply proactive paragraph-level Socratic probe and response tables
+psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/007_proactive_socratic_probes.sql
 ```
 
 ---
@@ -187,6 +190,9 @@ uv run pytest tests/test_learning_documents.py
 
 # Test session-capability authorization and assignment binding:
 uv run pytest tests/test_session_capability.py
+
+# Test proactive question authorization, lifecycle, policy fallback, and evaluator evidence:
+uv run pytest tests/test_socratic_probes.py tests/test_llm_orchestration.py -q
 ```
 
 ### Code Formatting & Linting

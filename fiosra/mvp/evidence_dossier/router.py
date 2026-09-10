@@ -8,6 +8,7 @@ from sqlalchemy import text
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
 from fiosra.mvp.evidence_dossier.synthesizer import evidence_dossier_synthesizer
+from fiosra.mvp.socratic_probe_service import socratic_probe_service
 
 router = APIRouter(prefix="/evidence", tags=["Evidence & AutoSCORE Dossier"])
 
@@ -74,7 +75,11 @@ async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     events = await event_store.get_session_events(session_id)
-    return evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
+    dossier = evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
+    dossier["proactive_socratic_evidence"] = [
+        record.model_dump(mode="json") for record in await socratic_probe_service.trace_records(session_id)
+    ]
+    return dossier
 
 
 @router.post("/dossier/{session_id}/finalise-grade", response_model=FinaliseGradeResponse)
@@ -134,6 +139,14 @@ async def get_student_reasoning_trace(session_id: UUID) -> dict[str, Any]:
             summary = f"Student applied and edited optional support in {payload.get('section_id', 'canvas')}."
         elif event_type == "canvas_suggestion_dismissed":
             summary = f"Student dismissed optional support in {payload.get('section_id', 'canvas')}."
+        elif event_type == "socratic_probe_offered":
+            summary = f"A proactive {payload.get('focus_type', 'reasoning')} question was offered for a saved paragraph."
+        elif event_type == "socratic_probe_response_submitted":
+            summary = "Student saved a response as evidence for educator review."
+        elif event_type == "socratic_probe_deferred":
+            summary = "Student deferred a proactive question for later."
+        elif event_type == "socratic_probe_dismissed":
+            summary = "Student dismissed a proactive question; the claim remains without a response record."
         trace_nodes.append(
             {
                 "event_id": event.get("event_id"),

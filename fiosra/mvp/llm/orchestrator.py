@@ -27,6 +27,14 @@ ASSIGNMENT_DIRECTIVE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 WHITESPACE = re.compile(r"\s+")
+WORD_PATTERN = re.compile(r"[a-z]+(?:'[a-z]+)?", re.IGNORECASE)
+PROBE_REPHRASE_FUNCTION_WORDS = frozenset(
+    {
+        "a", "an", "and", "are", "as", "at", "be", "before", "by", "can", "could", "does",
+        "for", "from", "how", "in", "is", "it", "of", "on", "or", "should", "that", "the",
+        "this", "to", "what", "which", "why", "with", "would", "you", "your",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -92,9 +100,25 @@ class LLMOrchestrator:
             raise LLMProviderError("Provider response resembled a worked answer instead of a student task.")
         if purpose == "assignment_scaffold_prompt" and not ASSIGNMENT_DIRECTIVE_PATTERN.search(cleaned):
             raise LLMProviderError("Provider response did not preserve student-task imperative form.")
-        if purpose == "socratic_hint_rephrase" and not cleaned.endswith("?"):
-            raise LLMProviderError("Provider response did not preserve Socratic question form.")
+        if purpose in {"socratic_hint_rephrase", "socratic_probe_rephrase"}:
+            if not cleaned.endswith("?") or cleaned.count("?") != 1:
+                raise LLMProviderError("Provider response did not preserve one-question Socratic form.")
+            if purpose == "socratic_probe_rephrase" and re.search(
+                r"\b(?:the answer is|you should conclude|your thesis is|the source proves)\b",
+                cleaned,
+                re.IGNORECASE,
+            ):
+                raise LLMProviderError("Provider response attempted to disclose a conclusion instead of a probe.")
         return cleaned
+
+    @staticmethod
+    def _validate_probe_rephrase_vocabulary(content: str, allowed_context: str) -> None:
+        """Reject provider-invented facts in an otherwise question-shaped probe."""
+        allowed_words = set(WORD_PATTERN.findall(allowed_context.lower())) | PROBE_REPHRASE_FUNCTION_WORDS
+        candidate_words = set(WORD_PATTERN.findall(content.lower()))
+        invented_words = candidate_words - allowed_words
+        if invented_words:
+            raise LLMProviderError("Provider response introduced vocabulary outside the bounded probe context.")
 
     @classmethod
     def _is_in_cooldown(cls) -> bool:
@@ -182,6 +206,8 @@ class LLMOrchestrator:
                 )
             )
             content = self._clean_candidate(result.content, max_characters, purpose)
+            if purpose == "socratic_probe_rephrase":
+                self._validate_probe_rephrase_vocabulary(content, user_prompt)
             self._record_success()
             return GuardedGeneration(
                 content=content,

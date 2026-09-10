@@ -5,8 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fiosra • Educator LMS &amp; Student Reasoning Architecture</title>
-    <script type="module" crossorigin src="./assets/index-Bd4cQ0m3.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-B754QeGR.css">
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('fiosra_theme');
+          var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-DSS2uZZ7.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dhwgi1_B.css">
   </head>
   <body>
     <div id="app"></div>

@@ -7,13 +7,40 @@
 
   let currentHash = $state(typeof window !== 'undefined' ? window.location.hash || '#/' : '#/');
   let courses = $state([]);
+  let currentTheme = $state('light');
 
   function handleHashChange() {
     currentHash = window.location.hash || '#/';
   }
 
+  function applyTheme(theme) {
+    currentTheme = theme;
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.body.setAttribute('data-theme', theme);
+    }
+  }
+
+  function toggleTheme() {
+    const nextTheme = currentTheme === 'light' ? 'dark' : 'light';
+    applyTheme(nextTheme);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fiosra_theme', nextTheme);
+    }
+  }
+
   onMount(async () => {
     window.addEventListener('hashchange', handleHashChange);
+
+    // Initialize theme from storage or system preference
+    const saved = localStorage.getItem('fiosra_theme');
+    if (saved === 'dark' || saved === 'light') {
+      applyTheme(saved);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      applyTheme('dark');
+    } else {
+      applyTheme('light');
+    }
 
     try {
       const res = await fetch('/courses');
@@ -59,11 +86,11 @@
       activeTab = 'modules';
     }
 
-    const isOnCourses = activeTab === 'courses';
-    const logoHref = isOnCourses ? `#/modules${courseQuery}` : '#/courses';
-    const logoTitle = isOnCourses ? 'Go to Curriculum Workspace' : 'Go to Course Portfolio';
+    const logoHref = isStudentView ? '#/student/portal' : '#/courses';
+    const logoTitle = isStudentView ? 'Return to Student Hub' : 'Return to Course Portfolio';
+    const isGlobalView = !isStudentView && activeTab === 'courses';
 
-    return { path, courseId, courseQuery, activeTab, isStudentView, logoHref, logoTitle };
+    return { path, courseId, courseQuery, activeTab, isStudentView, isGlobalView, logoHref, logoTitle };
   });
 
   let activeCourseLabel = $derived.by(() => {
@@ -90,7 +117,7 @@
         <span class="context-badge">LMS</span>
       {/if}
 
-      {#if activeCourseLabel && parsed.activeTab !== 'courses' && parsed.activeTab !== 'student-portal'}
+      {#if activeCourseLabel && !parsed.isGlobalView}
         <span class="context-separator">/</span>
         <a
           href={parsed.isStudentView ? `#/student/home${parsed.courseQuery}` : `#/modules${parsed.courseQuery}`}
@@ -103,73 +130,89 @@
     </div>
   </div>
 
-  <nav class="nav-segmented" aria-label="Main Navigation">
-    {#if parsed.isStudentView}
-      <a
-        href="#/student/portal"
-        class="nav-pill {parsed.activeTab === 'student-portal' ? 'active' : ''}"
-      >
-        Timeline
-      </a>
-      <a
-        href="#/student/home{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'student-home' ? 'active' : ''}"
-      >
-        Home
-      </a>
-      <a
-        href="#/student{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
-      >
-        Canvas
-      </a>
-      <a
-        href="#/student/trace{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
-      >
-        Trace
-      </a>
-    {:else}
-      <a
-        href="#/courses"
-        class="nav-pill {parsed.activeTab === 'courses' ? 'active' : ''}"
-      >
-        Portfolio
-      </a>
-      <a
-        href="#/modules{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'modules' ? 'active' : ''}"
-      >
-        Curriculum
-      </a>
-      <a
-        href="#/designer{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'designer' ? 'active' : ''}"
-      >
-        Designer
-      </a>
-      <a
-        href="#/review{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'review' ? 'active' : ''}"
-      >
-        AutoSCORE
-      </a>
-      <a
-        href="#/diagnostics{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'diagnostics' ? 'active' : ''}"
-      >
-        Cohort
-      </a>
-      <a
-        href="#/graph{parsed.courseQuery}"
-        class="nav-pill {parsed.activeTab === 'graph' ? 'active' : ''}"
-      >
-        Graph
-      </a>
-    {/if}
-  </nav>
+  {#if !parsed.isGlobalView}
+    <nav class="nav-segmented" aria-label="Main Navigation">
+      {#if parsed.isStudentView}
+        <a
+          href="#/student/portal{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'student-portal' ? 'active' : ''}"
+        >
+          Timeline
+        </a>
+        <a
+          href="#/student/home{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'student-home' ? 'active' : ''}"
+        >
+          Home
+        </a>
+        <a
+          href="#/student{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
+        >
+          Canvas
+        </a>
+        <a
+          href="#/student/trace{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
+        >
+          Trace
+        </a>
+      {:else}
+        <a
+          href="#/courses"
+          class="nav-pill {parsed.activeTab === 'courses' ? 'active' : ''}"
+        >
+          Portfolio
+        </a>
+        <a
+          href="#/modules{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'modules' ? 'active' : ''}"
+        >
+          Curriculum
+        </a>
+        <a
+          href="#/designer{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'designer' ? 'active' : ''}"
+        >
+          Designer
+        </a>
+        <a
+          href="#/review{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'review' ? 'active' : ''}"
+        >
+          AutoSCORE
+        </a>
+        <a
+          href="#/diagnostics{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'diagnostics' ? 'active' : ''}"
+        >
+          Cohort
+        </a>
+        <a
+          href="#/graph{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'graph' ? 'active' : ''}"
+        >
+          Graph
+        </a>
+      {/if}
+    </nav>
+  {:else}
+    <div class="header-center-placeholder"></div>
+  {/if}
 
   <div class="header-right">
+    <!-- Theme Toggle Button -->
+    <button
+      type="button"
+      class="theme-toggle-btn"
+      onclick={toggleTheme}
+      title={currentTheme === 'light' ? 'Switch to Dark Mode (🌙)' : 'Switch to Academic Light Mode (☀️)'}
+      aria-label="Toggle Light/Dark Theme"
+    >
+      <span class="theme-icon light-icon" class:active={currentTheme === 'light'}>☀️</span>
+      <span class="theme-icon dark-icon" class:active={currentTheme === 'dark'}>🌙</span>
+    </button>
+
     {#if parsed.isStudentView}
       <a href="#/modules{parsed.courseQuery}" class="role-switch-btn" title="Switch to Educator LMS">
         <span>Educator LMS</span>
@@ -180,12 +223,12 @@
         <span class="user-name">Julian Hayes</span>
       </div>
     {:else}
-      <div class="status-chip" title="Live Knowledge Graph Grounded (14 KCs Active)">
+      <div class="status-chip" title="Live Knowledge Graph Grounding Status">
         <span class="status-dot"></span>
         <span class="status-label">14 KCs Grounded</span>
       </div>
 
-      <a href="#/student{parsed.courseQuery}" class="role-switch-btn" title="Preview as Student">
+      <a href="#/student/portal" class="role-switch-btn" title="Preview as Student">
         <span>Student View</span>
         <span class="switch-icon">↗</span>
       </a>
@@ -201,10 +244,10 @@
 <style>
   .app-header {
     height: 56px;
-    background: rgba(14, 17, 23, 0.88);
+    background: var(--header-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid var(--header-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -212,7 +255,8 @@
     position: sticky;
     top: 0;
     z-index: 1000;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-sm);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
   /* Left Cluster */
@@ -228,9 +272,9 @@
     font-weight: 800;
     font-size: 18px;
     letter-spacing: -0.3px;
-    color: #ffffff;
+    color: var(--color-heading);
     text-decoration: none;
-    background: linear-gradient(135deg, #ffffff 45%, var(--color-horizon-bright));
+    background: linear-gradient(135deg, var(--color-heading) 45%, var(--color-horizon-bright));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     cursor: pointer;
@@ -248,7 +292,7 @@
   }
 
   .context-separator {
-    color: rgba(255, 255, 255, 0.18);
+    color: var(--color-slate-subtle);
     font-size: 13px;
     font-weight: 400;
   }
@@ -260,15 +304,15 @@
     letter-spacing: 0.8px;
     padding: 2px 7px;
     border-radius: var(--radius-xs);
-    background: rgba(59, 130, 246, 0.12);
+    background: var(--pill-active-bg);
     color: var(--color-horizon-bright);
-    border: 1px solid rgba(59, 130, 246, 0.28);
+    border: 1px solid var(--pill-active-border);
   }
 
   .context-badge.student {
-    background: rgba(16, 185, 129, 0.12);
+    background: var(--color-signal-green-bg);
     color: var(--color-signal-green);
-    border-color: rgba(16, 185, 129, 0.28);
+    border-color: rgba(78, 170, 122, 0.35);
   }
 
   .course-context-pill {
@@ -276,21 +320,25 @@
     font-weight: 600;
     color: var(--color-slate-bright);
     text-decoration: none;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--pill-bg);
+    border: 1px solid var(--pill-border);
     padding: 2px 9px;
     border-radius: var(--radius-full);
     transition: all 0.15s ease;
-    max-width: 140px;
+    max-width: 160px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .course-context-pill:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--color-heading);
+    background: var(--pill-hover);
+    border-color: var(--color-slate-subtle);
+  }
+
+  .header-center-placeholder {
+    flex: 1;
   }
 
   /* Center Segmented Navigation */
@@ -298,8 +346,8 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--pill-bg);
+    border: 1px solid var(--pill-border);
     border-radius: var(--radius-full);
     padding: 3px;
     backdrop-filter: blur(8px);
@@ -322,16 +370,16 @@
   }
 
   .nav-pill:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-heading);
+    background: var(--pill-hover);
   }
 
   .nav-pill.active {
-    color: #ffffff;
-    background: rgba(59, 130, 246, 0.18);
-    border-color: rgba(59, 130, 246, 0.4);
+    color: var(--pill-active-color);
+    background: var(--pill-active-bg);
+    border-color: var(--pill-active-border);
     font-weight: 600;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
 
   /* Right Cluster */
@@ -342,14 +390,49 @@
     flex-shrink: 0;
   }
 
+  /* Theme Toggle */
+  .theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px 5px;
+    border-radius: var(--radius-full);
+    background: var(--pill-bg);
+    border: 1px solid var(--pill-border);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    user-select: none;
+  }
+
+  .theme-toggle-btn:hover {
+    background: var(--pill-hover);
+    border-color: var(--color-slate-subtle);
+    transform: translateY(-1px);
+  }
+
+  .theme-icon {
+    font-size: 12px;
+    padding: 2px 5px;
+    border-radius: var(--radius-full);
+    opacity: 0.35;
+    transition: all 0.18s ease;
+    line-height: 1;
+  }
+
+  .theme-icon.active {
+    opacity: 1;
+    background: var(--pill-active-bg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
   .status-chip {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 4px 9px;
     border-radius: var(--radius-full);
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.22);
+    background: var(--color-signal-green-bg);
+    border: 1px solid rgba(78, 170, 122, 0.3);
     font-size: 11px;
     font-weight: 600;
     color: var(--color-signal-green);
@@ -372,17 +455,17 @@
     font-size: 11.5px;
     font-weight: 500;
     color: var(--color-slate-bright);
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--role-btn-bg);
+    border: 1px solid var(--role-btn-border);
     border-radius: var(--radius-sm);
     text-decoration: none;
     transition: all 0.15s ease;
   }
 
   .role-switch-btn:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--color-heading);
+    background: var(--role-btn-hover);
+    border-color: var(--color-slate-subtle);
   }
 
   .switch-icon {
@@ -395,8 +478,8 @@
     align-items: center;
     gap: 7px;
     padding: 3px 9px 3px 3px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--user-chip-bg);
+    border: 1px solid var(--user-chip-border);
     border-radius: var(--radius-full);
     cursor: default;
   }
@@ -405,17 +488,18 @@
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    background: linear-gradient(135deg, #e5a93c, #c68a25);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 9.5px;
     font-weight: 700;
-    color: white;
+    color: #121418;
   }
 
   .user-avatar.student-avatar {
-    background: linear-gradient(135deg, #10b981, #06b6d4);
+    background: linear-gradient(135deg, #4eaa7a, #38bdf8);
+    color: #121418;
   }
 
   .user-name {

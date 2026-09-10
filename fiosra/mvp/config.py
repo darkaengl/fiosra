@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     FIOSRA_LLM_PROVIDER: str = "deterministic"
     FIOSRA_LLM_FAILURES_BEFORE_COOLDOWN: int = 3
     FIOSRA_LLM_COOLDOWN_SECONDS: int = 60
+    FIOSRA_PROBE_QUIET_SECONDS: int = 5
+    FIOSRA_PROBE_MIN_MATERIAL_CHARACTERS: int = 100
+    FIOSRA_PROBE_SESSION_BUDGET: int = 6
+    FIOSRA_PROBE_COOLDOWN_SECONDS: int = 90
 
     # LiteLLM provider configuration. Model strings include the LiteLLM provider
     # prefix where required, allowing the application to switch without code changes.

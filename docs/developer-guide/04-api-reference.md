@@ -366,4 +366,76 @@ Saves an incremental block patch. The client sends `upserts` only for changed bl
 - **Response `200 OK`**: The complete current document state plus `changed_block_ids`.
 - **Important rejection cases**: `409 Conflict` for a stale `base_revision` or a submitted/completed session; `422 Unprocessable Content` for duplicate positions, block identity mismatch, malformed nested nodes, unsupported node types, or blocks above their safe transport limit.
 
-See [Chapter 6](./06-learning-canvas-and-assistance.md) for the Tiptap editor lifecycle, long-document size policy, migration steps, and the approved but not-yet-implemented assistance roadmap.
+See [Chapter 6](./06-learning-canvas-and-assistance.md) for the Tiptap editor lifecycle, long-document size policy, migration steps, delivered proactive-question workflow, and remaining assistance roadmap.
+
+---
+
+## 8. Proactive Socratic Evidence Questions (`/learning-documents/sessions/{session_id}/probes`)
+
+The proactive probe endpoints examine **only canonical, saved blocks**. They require the same opaque `X-Fiosra-Session-Token` session capability as document requests and are available only while the assignment-bound session is active. The browser may ask for evaluation after its quiet timer, but the server alone determines paragraph eligibility, focus type, question wording fallback, rate limits, and lifecycle transitions.
+
+> **Answer isolation:** These APIs never accept question text, claim text, source excerpts, answer keys, provider settings, or a grade from the learner client. A configured LiteLLM provider may rephrase a server-selected question only after policy validation; otherwise the deterministic question is returned.
+
+### `POST /learning-documents/sessions/{session_id}/probes/evaluate`
+
+Evaluates a bounded list of recently synchronized block IDs at the document revision returned by the preceding `PUT /learning-documents` operation. It can create at most one question for an eligible paragraph revision and returns open/deferred cards for the current session.
+
+```json
+{
+  "document_revision": 4,
+  "changed_block_ids": ["bb7d98ad-c253-48e6-bc58-50c852ff1c95"]
+}
+```
+
+- **Response `200 OK`**:
+
+```json
+{
+  "document_revision": 4,
+  "created": [{
+    "probe_id": "72fd7e1a-70fa-4d83-a62e-6362774f136d",
+    "document_id": "f7d839ca-7a4c-4a03-a12f-437177db52e0",
+    "block_id": "bb7d98ad-c253-48e6-bc58-50c852ff1c95",
+    "source_block_revision": 3,
+    "section_label": "Reasoning",
+    "focus_type": "causal_bridge",
+    "question": "What mechanism would need to connect the condition you describe to that outcome?",
+    "status": "offered",
+    "evidence_state": "unverified",
+    "offered_at": "2026-09-10T04:20:03Z",
+    "generation_metadata": {"provider": "deterministic", "model": "deterministic", "used_live_provider": false}
+  }],
+  "pending": [],
+  "evidence_summary": {"pending_questions": 1, "evidence_submitted": 0, "dismissed_questions": 0, "superseded_questions": 0}
+}
+```
+
+- **Rejection cases**: `403 Forbidden` for a bad/missing capability or a block outside the session document; `409 Conflict` for a stale document revision or inactive session; `422 Unprocessable Content` for an empty or oversized ID list. Ineligible blocks return a normal `200` with no created card.
+
+### `GET /learning-documents/sessions/{session_id}/probes`
+
+Restores only currently offered or deferred question cards and the small evidence-status summary needed for the compact learner indicator. It does not return closed historical cards, raw provider prompts, or unrelated learner evidence.
+
+### `POST /learning-documents/sessions/{session_id}/probes/{probe_id}/responses`
+
+Persists a learner-written explanation outside the essay document. The response must contain 10–6,000 characters and changes the card to `responded` with `evidence_state: evidence_submitted`.
+
+```json
+{
+  "response_text": "The alignment does not prove an institution, but coordinated construction implies shared decisions about standards and maintenance."
+}
+```
+
+The response is **evidence for the educator to consider**, not an automatic grade, mastery claim, or license for AI to add prose to the learner document.
+
+### `POST /learning-documents/sessions/{session_id}/probes/{probe_id}/defer`
+
+Records a transparent `deferred` status and applies the configured quiet cooldown. The document remains fully editable.
+
+### `POST /learning-documents/sessions/{session_id}/probes/{probe_id}/dismiss`
+
+Records an explicit `dismissed` status. It does not modify the document or calculate an automatic penalty. The event trace preserves that no response was supplied for that paragraph-level evidence request.
+
+### Educator dossier projection
+
+`GET /evidence/dossier/{session_id}` includes an ordered `proactive_socratic_evidence` list. Each record includes the section label, focus type, exact question, lifecycle status, learner response when supplied, timestamps, and prompt-free generation metadata. The AutoSCORE interface displays this record separately from rubric evidence to preserve the distinction between document authorship, AI support, and learner explanation.
