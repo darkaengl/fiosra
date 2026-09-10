@@ -120,18 +120,27 @@ async def get_student_reasoning_trace(session_id: UUID) -> dict[str, Any]:
     trace_nodes = []
     for event in events:
         payload = event.get("payload", {})
+        event_type = event.get("event_type")
+        summary = (
+            payload.get("student_input")
+            or payload.get("response_text")
+            or payload.get("approved_grade")
+        )
+        if event_type == "canvas_section_saved":
+            summary = f"{payload.get('section_id', 'Canvas')} saved at revision {payload.get('revision', 0)}."
+        elif event_type == "canvas_suggestion_offered":
+            summary = f"Optional {payload.get('kind', 'writing')} support offered for {payload.get('section_id', 'canvas')}."
+        elif event_type == "canvas_suggestion_accepted":
+            summary = f"Student applied and edited optional support in {payload.get('section_id', 'canvas')}."
+        elif event_type == "canvas_suggestion_dismissed":
+            summary = f"Student dismissed optional support in {payload.get('section_id', 'canvas')}."
         trace_nodes.append(
             {
                 "event_id": event.get("event_id"),
                 "timestamp": event.get("created_at"),
-                "event_type": event.get("event_type"),
+                "event_type": event_type,
                 "question_id": event.get("question_id"),
-                "summary": (
-                    payload.get("student_input")
-                    or payload.get("response_text")
-                    or payload.get("approved_grade")
-                    or event.get("event_type")
-                ),
+                "summary": summary or event_type,
                 "payload": payload,
             }
         )

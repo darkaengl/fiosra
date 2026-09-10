@@ -290,6 +290,7 @@ class AssignmentGenerator:
             grounding_mode=grounding_mode,
             grounding_sources=grounding_sources,
             generation_metadata=generation_metadata,
+            canvas_sections=req.canvas_sections,
         )
         insert_sql = text("""
             INSERT INTO assignments (assignment_id, module_id, title, created_by, spec, created_at)

@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 from datetime import datetime
@@ -43,13 +45,14 @@ class EventStore:
         student_id: str,
         assignment_id: UUID | str | None = None,
         current_question_id: str = "q1",
+        access_token: str | None = None,
     ) -> str:
         await self._ensure_pool_primed()
         insert_sql = text("""
             INSERT INTO student_sessions (
-                student_id, assignment_id, current_question_id, status, started_at, last_activity_at
+                student_id, assignment_id, current_question_id, access_token_hash, status, started_at, last_activity_at
             ) VALUES (
-                :student_id, :assignment_id, :current_question_id, 'active', NOW(), NOW()
+                :student_id, :assignment_id, :current_question_id, :access_token_hash, 'active', NOW(), NOW()
             ) RETURNING session_id;
         """)
         async with AsyncSessionLocal() as session:
@@ -59,11 +62,32 @@ class EventStore:
                     "student_id": student_id,
                     "assignment_id": str(assignment_id) if assignment_id else None,
                     "current_question_id": current_question_id,
+                    "access_token_hash": self._hash_access_token(access_token) if access_token else None,
                 },
             )
             session_id = result.scalar()
             await session.commit()
         return str(session_id)
+
+    @staticmethod
+    def _hash_access_token(access_token: str) -> str:
+        return hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+
+    async def has_session_access(self, session_id: UUID | str, access_token: str | None) -> bool:
+        """Verify a browser-held capability without exposing its stored digest."""
+        if not access_token:
+            return False
+        query_sql = text("""
+            SELECT access_token_hash
+            FROM student_sessions
+            WHERE session_id = :session_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(query_sql, {"session_id": str(session_id)})
+            token_hash = result.scalar()
+        return bool(token_hash) and hmac.compare_digest(
+            str(token_hash), self._hash_access_token(access_token)
+        )
 
     async def log_event(
         self,

@@ -17,6 +17,10 @@ export function sessionStorageKey(assignmentId, studentId) {
   return `fiosra.session.${assignmentId}.${studentId}`;
 }
 
+export function sessionAccessTokenStorageKey(sessionId) {
+  return `fiosra.session-access.${sessionId}`;
+}
+
 export async function responseError(response, fallback) {
   const payload = await response.json().catch(() => ({}));
   return payload.detail || payload.message || fallback;

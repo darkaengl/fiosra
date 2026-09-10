@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from fiosra.mvp.learning_canvas_schemas import CanvasSectionDefinition, default_canvas_sections
+
 
 class HintRung(BaseModel):
     level: int = Field(
@@ -85,6 +87,7 @@ class ScaffoldingPlan(BaseModel):
     grounding_mode: str = Field(default="generic", description="course_grounded or generic")
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
     generation_metadata: LLMGenerationMetadata | None = None
+    canvas_sections: list[CanvasSectionDefinition] = Field(default_factory=default_canvas_sections)
 
 
 class QuestionDraftRequest(BaseModel):
@@ -105,6 +108,7 @@ class QuestionDraftRequest(BaseModel):
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
     generation_metadata: LLMGenerationMetadata | None = None
     reference_solution: str | dict[str, Any] | None = None
+    canvas_sections: list[CanvasSectionDefinition] = Field(default_factory=default_canvas_sections)
 
 
 class QuestionSpec(BaseModel):
@@ -121,6 +125,7 @@ class QuestionSpec(BaseModel):
     grounding_mode: str = "generic"
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
     generation_metadata: LLMGenerationMetadata | None = None
+    canvas_sections: list[CanvasSectionDefinition] = Field(default_factory=default_canvas_sections)
 
 
 class PublicQuestionSpec(BaseModel):
@@ -137,3 +142,4 @@ class PublicQuestionSpec(BaseModel):
     status: str = "draft"
     grounding_mode: str = "generic"
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
+    canvas_sections: list[CanvasSectionDefinition] = Field(default_factory=default_canvas_sections)

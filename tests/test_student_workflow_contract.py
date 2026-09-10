@@ -52,9 +52,11 @@ async def test_submitted_session_blocks_further_student_dialogue():
         assert session_response.status_code == 200
         session_id = session_response.json()["session_id"]
         student_id = session_response.json()["student_id"]
+        session_headers = {"X-Fiosra-Session-Token": session_response.json()["access_token"]}
 
         message_response = await client.post(
             "/dialogue/message",
+            headers=session_headers,
             json={
                 "session_id": session_id,
                 "student_id": student_id,
@@ -65,12 +67,13 @@ async def test_submitted_session_blocks_further_student_dialogue():
         )
         assert message_response.status_code == 200
 
-        submit_response = await client.post(f"/events/session/{session_id}/submit")
+        submit_response = await client.post(f"/events/session/{session_id}/submit", headers=session_headers)
         assert submit_response.status_code == 200
         assert submit_response.json()["status"] == "submitted"
 
         blocked_response = await client.post(
             "/dialogue/message",
+            headers=session_headers,
             json={
                 "session_id": session_id,
                 "student_id": student_id,

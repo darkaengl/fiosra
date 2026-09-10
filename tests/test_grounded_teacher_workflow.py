@@ -119,9 +119,11 @@ async def test_module_grounded_assignment_publishes_and_opens_student_projection
             },
         )
         assert session_response.status_code == 200
+        session_headers = {"X-Fiosra-Session-Token": session_response.json()["access_token"]}
 
         tutor_response = await client.post(
             "/dialogue/message",
+            headers=session_headers,
             json={
                 "session_id": session_response.json()["session_id"],
                 "student_id": session_response.json()["student_id"],

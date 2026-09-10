@@ -87,6 +87,7 @@ class SocraticDialogueEngine:
         hint_ladder: list[Any] | None = None,
         target_kcs: list[str] | None = None,
         is_course_grounded: bool = False,
+        active_section_context: str | None = None,
     ) -> dict[str, Any]:
         """
         Generates a Socratic response while strictly maintaining Answer Isolation.
@@ -197,6 +198,7 @@ class SocraticDialogueEngine:
             ),
             user_prompt=(
                 f"Public assignment context:\n{question_prompt}\n\n"
+                f"Active student-owned canvas section:\n{active_section_context or 'General reasoning'}\n\n"
                 f"Server-selected hint at rung {active_rung}:\n{response_text}"
             ),
             deterministic_fallback=response_text,

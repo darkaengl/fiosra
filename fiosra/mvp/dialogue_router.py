@@ -1,7 +1,7 @@
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
@@ -9,6 +9,7 @@ from fiosra.mvp.dialogue_engine import dialogue_engine
 from fiosra.mvp.event_store import event_store
 
 router = APIRouter(prefix="/dialogue", tags=["Socratic Dialogue"])
+SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
 
 
 class DialogueMessageRequest(BaseModel):
@@ -21,6 +22,12 @@ class DialogueMessageRequest(BaseModel):
     current_rung: int = Field(default=0, ge=0, le=3, description="Legacy client display value; ignored by server")
     hint_requested: bool = Field(default=False, description="Whether the student explicitly asked for a hint")
     assignment_id: UUID | None = Field(default=None, description="Optional assignment ID")
+    active_section_id: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=64,
+        description="Requested canvas section; resolved and validated from the published assignment server-side.",
+    )
 
 
 class DialogueMessageResponse(BaseModel):
@@ -34,22 +41,46 @@ class DialogueMessageResponse(BaseModel):
 
 
 @router.post("/message", response_model=DialogueMessageResponse)
-async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any]:
+async def handle_dialogue_turn(
+    request: DialogueMessageRequest,
+    session_token: SessionToken = None,
+) -> dict[str, Any]:
     """Process a guarded Socratic turn with server-controlled hint advancement."""
+    if not await event_store.has_session_access(request.session_id, session_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This browser is not authorized to contribute to the requested reasoning session.",
+        )
     session_info = await event_store.get_session_details(request.session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{request.session_id}' not found")
     if session_info["status"] != "active":
         raise HTTPException(status_code=409, detail="This session is no longer accepting student responses.")
+    if request.student_id != session_info["student_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student identity does not match this session.")
+    if request.question_id != session_info["current_question_id"]:
+        raise HTTPException(status_code=409, detail="Question context does not match the active session.")
 
     authoritative_assignment_id = session_info.get("assignment_id")
     assignment_context = None
+    active_section_context = None
     if authoritative_assignment_id:
         assignment_context = await assignment_generator.get_public_assignment(authoritative_assignment_id)
         if not assignment_context:
             raise HTTPException(status_code=409, detail="The session's published assignment is no longer available.")
         if request.assignment_id and str(request.assignment_id) != authoritative_assignment_id:
             raise HTTPException(status_code=409, detail="The request assignment does not match this student session.")
+        section_id = request.active_section_id or assignment_context.canvas_sections[0].section_id
+        active_section = next(
+            (section for section in assignment_context.canvas_sections if section.section_id == section_id),
+            None,
+        )
+        if not active_section:
+            raise HTTPException(status_code=409, detail="The requested canvas section is not declared by this assignment.")
+        active_section_context = (
+            f"{active_section.label}: {active_section.purpose} "
+            f"Guidance: {active_section.completion_guidance}"
+        )
 
     active_prompt = assignment_context.prompt if assignment_context else request.question_prompt
     active_domain = assignment_context.domain if assignment_context else request.domain
@@ -81,6 +112,7 @@ async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any
         hint_ladder=active_hint_ladder,
         target_kcs=active_target_kcs,
         is_course_grounded=is_course_grounded,
+        active_section_context=active_section_context,
     )
 
     if result["is_adversarial"]:

@@ -14,6 +14,7 @@ from fiosra.mvp.dialogue_router import router as dialogue_router
 from fiosra.mvp.events_router import router as events_router
 from fiosra.mvp.evidence_dossier.router import router as evidence_router
 from fiosra.mvp.knowledge_router import router as knowledge_router
+from fiosra.mvp.learning_canvas_router import router as learning_canvas_router
 from fiosra.mvp.neo4j_client import neo4j_client
 
 
@@ -47,6 +48,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(knowledge_router)
 app.include_router(events_router)
+app.include_router(learning_canvas_router)
 app.include_router(dialogue_router)
 app.include_router(evidence_router)
 app.include_router(assignment_router)

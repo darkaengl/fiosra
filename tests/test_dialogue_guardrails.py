@@ -42,9 +42,11 @@ def test_benign_pedagogical_prompts_not_flagged():
 @pytest.mark.asyncio
 async def test_adversarial_deflection_via_api():
     """Verify that adversarial requests sent via /dialogue/message receive pedagogical deflections."""
+    access_token = "guardrail-test-token-one"
     session_id = await event_store.create_session(
         student_id="student_attacker_01",
         current_question_id="Q1",
+        access_token=access_token,
     )
 
     secret_reference = "The 1787 sovereign debt crisis was caused by French war loans and tax exemptions."
@@ -52,6 +54,7 @@ async def test_adversarial_deflection_via_api():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_attacker_01",
@@ -77,15 +80,18 @@ async def test_adversarial_deflection_via_api():
 @pytest.mark.asyncio
 async def test_adversarial_attempt_does_not_advance_hint_ladder():
     """Verify that adversarial attacks do not artificially advance the hint level or decrement autonomy."""
+    access_token = "guardrail-test-token-two"
     session_id = await event_store.create_session(
         student_id="student_attacker_02",
         current_question_id="Q1",
+        access_token=access_token,
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Attack 1
         res1 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_attacker_02",
@@ -101,6 +107,7 @@ async def test_adversarial_attempt_does_not_advance_hint_ladder():
         # Attack 2
         res2 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_attacker_02",
@@ -112,4 +119,3 @@ async def test_adversarial_attempt_does_not_advance_hint_ladder():
         )
         assert res2.json()["is_adversarial"] is True
         assert res2.json()["hint_rung"] == 0
-

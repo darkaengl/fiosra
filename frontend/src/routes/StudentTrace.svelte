@@ -1,10 +1,18 @@
 <script>
   import { onMount } from 'svelte';
-  import { formatDate, responseError, routeParams } from '../lib/session.js';
+  import {
+    formatDate,
+    getStudentId,
+    responseError,
+    routeParams,
+    sessionAccessTokenStorageKey,
+    sessionStorageKey,
+  } from '../lib/session.js';
 
   let courseId = $state('');
   let assignmentId = $state('');
   let sessionId = $state('');
+  let sessionAccessToken = $state('');
   let trace = $state([]);
   let dossier = $state(null);
   let activeNode = $state(null);
@@ -20,6 +28,10 @@
       hint_delivered: 'Requested scaffold',
       adversarial_probe_defended: 'Integrity boundary',
       misconception_flagged: 'Misconception signal',
+      canvas_section_saved: 'Canvas section revised',
+      canvas_suggestion_offered: 'Optional support offered',
+      canvas_suggestion_accepted: 'Support frame applied and edited',
+      canvas_suggestion_dismissed: 'Support frame dismissed',
       student_submitted_for_review: 'Submitted for educator review',
       grade_finalised_by_educator: 'Educator finalization',
     };
@@ -29,6 +41,7 @@
   function eventClass(event) {
     if (event.event_type === 'student_prompt_submitted') return 'student';
     if (event.event_type === 'hint_delivered') return 'hint';
+    if (event.event_type.startsWith('canvas_')) return 'canvas';
     if (event.event_type === 'adversarial_probe_defended') return 'guardrail';
     if (event.event_type.includes('submitted') || event.event_type.includes('finalised')) return 'complete';
     return 'tutor';
@@ -40,11 +53,20 @@
     assignmentId = params.get('assignment_id') || '';
     sessionId = params.get('session_id') || '';
     if (!sessionId) return;
+    const persistedSessionId = localStorage.getItem(sessionStorageKey(assignmentId, getStudentId()));
+    if (persistedSessionId !== sessionId) {
+      throw new Error('Open the protected canvas from this browser to view this reasoning trace.');
+    }
+    sessionAccessToken = localStorage.getItem(sessionAccessTokenStorageKey(sessionId)) || '';
+    if (!sessionAccessToken) {
+      throw new Error('This browser no longer holds access to the protected reasoning session.');
+    }
+    const sessionHeaders = { 'X-Fiosra-Session-Token': sessionAccessToken };
 
     const [traceResponse, dossierResponse, sessionResponse] = await Promise.all([
       fetch(`/evidence/trace/${sessionId}`),
       fetch(`/evidence/dossier/${sessionId}`),
-      fetch(`/events/session/${sessionId}`),
+      fetch(`/events/session/${sessionId}`, { headers: sessionHeaders }),
     ]);
     if (!traceResponse.ok) throw new Error(await responseError(traceResponse, 'The reasoning trace could not be loaded.'));
     if (!dossierResponse.ok) throw new Error(await responseError(dossierResponse, 'The evidence dossier could not be loaded.'));
@@ -59,7 +81,10 @@
     isSubmitting = true;
     error = '';
     try {
-      const response = await fetch(`/events/session/${sessionId}/submit`, { method: 'POST' });
+      const response = await fetch(`/events/session/${sessionId}/submit`, {
+        method: 'POST',
+        headers: { 'X-Fiosra-Session-Token': sessionAccessToken },
+      });
       if (!response.ok) throw new Error(await responseError(response, 'The work could not be submitted.'));
       status = 'submitted';
       await loadTrace();

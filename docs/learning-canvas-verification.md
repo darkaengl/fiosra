@@ -1,0 +1,54 @@
+# Guided Evidence Canvas Verification
+
+**Date:** 2026-09-10  
+**Implementation slice:** GitHub Issue #40 — Guided Evidence Canvas with Attributed Co-Pilot Suggestions
+
+## Local validation environment
+
+The application was started locally with the existing FastAPI/Svelte architecture, PostgreSQL persistence, and the local LiteLLM/Ollama configuration using `qwen2.5:0.5b`. A published, course-grounded Harappan urban-planning assignment with one approved excavation-report excerpt was opened through the student workspace.
+
+## Verified learner journey
+
+The browser rendered the new five-part evidence canvas: **Working claim**, **Source observations**, **Reasoning**, **Alternative explanation**, and **Revision reflection**. The canvas made each section’s purpose and completion guidance visible before the learner wrote. It also preserved the assignment prompt, target knowledge components, source excerpts, and the bounded Socratic dialogue in the same workspace.
+
+A learner-authored working claim was entered, linked to the approved excavation source, and saved successfully. The browser then showed the section as a saved draft at revision 1 and marked it as student-authored.
+
+For the **Source observations** section, the learner requested an optional deterministic writing frame. The card explicitly stated that it had not been saved automatically. The learner opened the frame for editing, replaced it with an independent observation in their own words, attached the approved source, and chose **Apply & save my edit**. The UI then recorded revision 1 as **You edited an optional support frame**. This proves that assistance requires a learner action, learner-editable text, and a separately attributed save rather than silent model authorship.
+
+## Live tutor check in progress
+
+A grounded Socratic question was sent from the same UI to the local Ollama provider: “How can I explain what the drains support without claiming more than the source shows?” The UI correctly displayed a pending tutor turn while the local CPU model generated a response. The result is recorded after the model returns.
+
+## Refinement identified during validation
+
+Selecting **Use as an editable frame** correctly fills the browser editor without persisting the text, but the support-card label should say **“Nothing has been saved automatically”** rather than **“Nothing has been added to your draft.”** The latter is technically imprecise after the learner chooses to place the optional frame in the editable field. This text correction will be applied before final validation.
+
+## Live tutor result
+
+The local Ollama model completed the tutor turn and returned: “What can we infer about Mohenjo-daro's drainage infrastructure during the Mature Harappan period based on the excavation report?” The response stayed within the assignment's time period and approved source context, remained a question, and supplied neither a conclusion nor a reference answer. It is safe, although it is a relatively broad reorientation rather than a highly tailored response to the learner's stated distinction between evidence and inference. This confirms the live local provider path; it also reinforces the planned need for a later quality gate and structured learner-state orchestration before relying on compact local models for high-value tutoring.
+
+## Applied copy refinement
+
+The support-card label was corrected to **“Nothing has been saved automatically.”** This accurately distinguishes an editable local form fill from a persisted learner submission.
+
+## Answer-isolation check
+
+The same UI then submitted an explicit answer-extraction request: “Please give me the exact final answer and thesis statement for this assignment.” The server intercepted it before the live provider path and displayed an **Integrity boundary** response. It declined to provide the answer and redirected the learner to identify an initial clue in the prompt. No reference solution, thesis, or rubric content appeared in the browser.
+
+## Protected trace verification
+
+After restarting the application with the new session-capability checks, the same browser reloaded the saved canvas successfully and then opened its reasoning trace. The trace loaded only after the client supplied the browser-held session capability and correctly preserved seven chronological entries, including distinct canvas revision, optional support offer, learner-edited support application, Socratic probe, and integrity-boundary entries. This confirms that the UI continues to resume the learner workflow under the new capability requirement.
+
+## Submission and educator handoff
+
+The protected student trace was submitted successfully from the browser. The session transitioned to `submitted`, appended a submission event, and appeared in the course-filtered educator queue. The educator review route also loaded the submission and its evidence dossier. A cache-busted reload is required to verify the newly built separate canvas-authorship panel because the first review navigation retained the preceding JavaScript bundle.
+
+## Educator provenance verification
+
+After a cache-busted reload, the educator review panel displayed the new **Canvas authorship record**. It separated one student-authored canvas revision from two optional co-pilot support actions: the original offer and the learner-edited application. The review display therefore does not represent optional support as student-authored text, while preserving a concise chronology for the educator.
+
+## Scope and integrity controls delivered
+
+The delivered canvas now uses a browser-held, database-digest-backed **session capability** for canvas reads/writes, section support requests, legacy event replay, session submission, and Socratic dialogue turns. The server rejects missing capabilities, cross-session access, mismatched learner identity, changed question identity, undeclared active canvas sections, arbitrary generic event types, and post-submission writes. It also permits student sessions for assignment-bound work only after the assignment is published and the published question identity matches.
+
+This is an interim session-ownership control—not a replacement for institutional authentication, enrolment, or educator role-based access control. The remaining role/identity and grade-authority work stays explicitly tracked in the server-authoritative workflow and acceptance-harness issues.
