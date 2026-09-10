@@ -2,6 +2,7 @@ import logging
 import re
 from typing import Any
 
+from fiosra.mvp.llm.orchestrator import llm_orchestrator
 from fiosra.mvp.seed_pipeline import search_nearest_misconceptions
 
 logger = logging.getLogger(__name__)
@@ -185,6 +186,25 @@ class SocraticDialogueEngine:
             }
             response_text = assignment_hint or resp
 
+        generation = await llm_orchestrator.enhance(
+            purpose="socratic_hint_rephrase",
+            system_prompt=(
+                "You are a concise Socratic tutor. Rewrite only the supplied bounded hint as one supportive "
+                "question or invitation to reason. Preserve its instructional intent and stay within the public "
+                "assignment context. Never provide an answer, thesis, solution, grading judgment, rubric, or "
+                "reference material. Do not introduce people, events, evidence, or concepts absent from the input."
+            ),
+            user_prompt=(
+                f"Public assignment context:\n{question_prompt}\n\n"
+                f"Server-selected hint at rung {active_rung}:\n{response_text}"
+            ),
+            deterministic_fallback=response_text,
+            pseudonymous_seed=f"dialogue:{question_prompt}:{active_rung}",
+            max_characters=420,
+            max_tokens=100,
+        )
+        response_text = generation.content
+
         return {
             "is_adversarial": False,
             "thoughts_of_tutorbot": tutor_thoughts,
@@ -192,6 +212,7 @@ class SocraticDialogueEngine:
             "hint_rung": active_rung,
             "penalty_score": penalty_score,
             "matched_misconception_id": matched_misconception["misconception_id"] if matched_misconception else None,
+            "generation_metadata": generation.metadata.as_dict(),
         }
 
 

@@ -30,6 +30,19 @@ class GroundingSource(BaseModel):
     excerpt: str
 
 
+class LLMGenerationMetadata(BaseModel):
+    """Prompt-free provider telemetry for educator and operational audit trails."""
+
+    provider: str
+    model: str
+    used_live_provider: bool
+    latency_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    fallback_reason: str | None = None
+
+
 class ClarificationQuestion(BaseModel):
     question_id: str
     dimension: str
@@ -71,6 +84,7 @@ class ScaffoldingPlan(BaseModel):
     distractor_traps: list[dict[str, Any]]
     grounding_mode: str = Field(default="generic", description="course_grounded or generic")
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
+    generation_metadata: LLMGenerationMetadata | None = None
 
 
 class QuestionDraftRequest(BaseModel):
@@ -89,6 +103,7 @@ class QuestionDraftRequest(BaseModel):
     rubric_rules: list[dict[str, Any]] | None = None
     grounding_mode: str = "generic"
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
+    generation_metadata: LLMGenerationMetadata | None = None
     reference_solution: str | dict[str, Any] | None = None
 
 
@@ -105,6 +120,7 @@ class QuestionSpec(BaseModel):
     status: str = "draft"
     grounding_mode: str = "generic"
     grounding_sources: list[GroundingSource] = Field(default_factory=list)
+    generation_metadata: LLMGenerationMetadata | None = None
 
 
 class PublicQuestionSpec(BaseModel):

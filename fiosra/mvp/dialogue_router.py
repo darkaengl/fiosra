@@ -30,6 +30,7 @@ class DialogueMessageResponse(BaseModel):
     penalty_score: float
     is_adversarial: bool
     matched_misconception_id: str | None = None
+    generation_metadata: dict[str, Any] | None = None
 
 
 @router.post("/message", response_model=DialogueMessageResponse)
@@ -96,6 +97,7 @@ async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any
         "rung": result["hint_rung"],
         "penalty_score": result["penalty_score"],
         "matched_misconception_id": result.get("matched_misconception_id"),
+        "generation_metadata": result.get("generation_metadata"),
     }
     await event_store.log_event(
         session_id=request.session_id,

@@ -11,6 +11,7 @@ from fiosra.mvp.assignment_designer.schemas import (
     ClarifyAndScaffoldRequest,
     GroundingSource,
     HintRung,
+    LLMGenerationMetadata,
     PublicQuestionSpec,
     QuestionDraftRequest,
     QuestionSpec,
@@ -19,6 +20,7 @@ from fiosra.mvp.assignment_designer.schemas import (
 )
 from fiosra.mvp.assignment_designer.vault import answer_vault
 from fiosra.mvp.database import AsyncSessionLocal
+from fiosra.mvp.llm.orchestrator import llm_orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,27 @@ class AssignmentGenerator:
             f"and test the risk of {cognitive_trap}."
         )
         clarified_prompt = base_prompt if clarification.lower() in base_prompt.lower() else f"{base_prompt}\n\n{clarification}"
+        source_context = "\n".join(
+            f"- {source.title}: {source.excerpt}" for source in grounding_sources
+        ) or "No course source is attached; preserve the educator's stated evidence requirement."
+        generation = await llm_orchestrator.enhance(
+            purpose="assignment_scaffold_prompt",
+            system_prompt=(
+                "You refine an educator-authored student task for a Socratic reasoning workspace. "
+                "Return only one concise student-facing prompt. Preserve the stated learning scope, use only "
+                "the supplied public sources, require a bounded claim with evidence and uncertainty, and do "
+                "not supply an answer, thesis, rubric, solution, or grading judgment."
+            ),
+            user_prompt=(
+                f"Educator draft:\n{base_prompt}\n\nRequired boundaries:\n{clarification}\n\n"
+                f"Public course context:\n{source_context}"
+            ),
+            deterministic_fallback=clarified_prompt,
+            pseudonymous_seed=f"assignment:{req.course_id or 'unbound'}:{req.module_id or 'unbound'}:{base_prompt}",
+            max_characters=1600,
+            max_tokens=240,
+        )
+        clarified_prompt = generation.content
 
         source_kcs = [source.kc_id for source in grounding_sources if source.kc_id]
         target_kcs = cls._deduplicate(req.target_kcs or source_kcs)
@@ -175,6 +198,7 @@ class AssignmentGenerator:
             distractor_traps=distractors,
             grounding_mode="course_grounded" if grounding_sources else "generic",
             grounding_sources=grounding_sources,
+            generation_metadata=LLMGenerationMetadata.model_validate(generation.metadata.as_dict()),
         )
 
     @classmethod
@@ -184,6 +208,7 @@ class AssignmentGenerator:
         question_id = f"Q_{uuid.uuid4().hex[:8].upper()}"
 
         fallback_plan: ScaffoldingPlan | None = None
+        generation_metadata = req.generation_metadata
         if req.clarified_prompt:
             prompt = req.clarified_prompt
             target_kcs = req.target_kcs or []
@@ -208,6 +233,7 @@ class AssignmentGenerator:
                 if not grounding_sources:
                     grounding_sources = fallback_plan.grounding_sources
                     grounding_mode = fallback_plan.grounding_mode
+                generation_metadata = generation_metadata or fallback_plan.generation_metadata
         else:
             fallback_plan = await cls.generate_scaffolding_plan(
                 ClarifyAndScaffoldRequest(
@@ -225,6 +251,7 @@ class AssignmentGenerator:
             rubric_criteria = fallback_plan.rubric_rules
             grounding_mode = fallback_plan.grounding_mode
             grounding_sources = fallback_plan.grounding_sources
+            generation_metadata = fallback_plan.generation_metadata
 
         subproblems = [
             ScaffoldingStep(
@@ -261,6 +288,7 @@ class AssignmentGenerator:
             status="draft",
             grounding_mode=grounding_mode,
             grounding_sources=grounding_sources,
+            generation_metadata=generation_metadata,
         )
         insert_sql = text("""
             INSERT INTO assignments (assignment_id, module_id, title, created_by, spec, created_at)
