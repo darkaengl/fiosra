@@ -12,6 +12,10 @@
   let designerUrl = $derived(
     `#/designer?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}`
   );
+  let hasObjectives = $derived(Boolean(module.learning_objectives?.length));
+  let hasPublishedAssignment = $derived(
+    Boolean(module.assignments?.some((assignment) => assignment.status === 'published'))
+  );
 </script>
 
 <div class="module-card">
@@ -27,7 +31,7 @@
       </div>
     </div>
     <div class="module-header-meta">
-      <span class="module-badge-status">Active • Position {module.position}</span>
+      <span class="module-badge-status">Unit {module.position}</span>
     </div>
   </div>
 
@@ -38,6 +42,12 @@
       <span class="lo-content">{module.learning_objectives.join(' • ')}</span>
     </div>
   {/if}
+
+  <div class="readiness-bar" aria-label="Module setup readiness">
+    <span class:complete={hasObjectives}>Objectives {hasObjectives ? 'mapped' : 'needed'}</span>
+    <span class:complete={resources.length > 0}>Sources {resources.length > 0 ? 'grounded' : 'needed'}</span>
+    <span class:complete={hasPublishedAssignment}>Student task {hasPublishedAssignment ? 'published' : 'not published'}</span>
+  </div>
 
   <!-- Grounded Readings & Primary Sources Section -->
   <div class="resources-section">
@@ -66,9 +76,8 @@
                   <span class="resource-type-pill {r.resource_type}">
                     {r.resource_type === 'pdf' ? 'PDF' : r.resource_type === 'external_link' ? 'Link' : 'Primary Source'}
                   </span>
-                  <span class="pgvector-pill">
-                    ● Grounded
-                  </span>
+                  <span class="pgvector-pill">● Grounded source</span>
+                  <span class:unmapped={!r.kc_id} class="kc-pill">{r.kc_id ? `KC: ${r.kc_id}` : 'KC mapping pending'}</span>
                   {#if r.source_url}
                     <a href={r.source_url} target="_blank" rel="noopener" class="resource-link">
                       Open Link ↗
@@ -122,6 +131,14 @@
               <a href={designerUrl} class="btn btn-secondary btn-xs">
                 Designer ➔
               </a>
+              {#if a.status === 'published'}
+                <a
+                  href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(a.assignment_id)}`}
+                  class="btn btn-primary btn-xs"
+                >
+                  Student canvas →
+                </a>
+              {/if}
             </div>
           </div>
         {/each}
@@ -224,6 +241,28 @@
   .lo-content {
     color: var(--color-slate-bright);
   }
+
+  .readiness-bar {
+    padding: 9px 22px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--color-graphite-border);
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .readiness-bar span {
+    color: var(--color-slate-muted);
+    font-size: 10.5px;
+  }
+
+  .readiness-bar span::before {
+    content: '○';
+    margin-right: 4px;
+  }
+
+  .readiness-bar span.complete { color: var(--color-signal-green); }
+  .readiness-bar span.complete::before { content: '●'; }
 
   /* Resources Section */
   .resources-section {
@@ -344,6 +383,14 @@
     color: var(--color-signal-green);
     font-weight: 600;
   }
+
+  .kc-pill {
+    color: var(--color-horizon-bright);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .kc-pill.unmapped { color: var(--color-amber); }
 
   .resource-link {
     font-size: 11px;

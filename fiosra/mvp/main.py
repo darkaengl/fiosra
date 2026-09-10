@@ -14,6 +14,7 @@ from fiosra.mvp.dialogue_router import router as dialogue_router
 from fiosra.mvp.events_router import router as events_router
 from fiosra.mvp.evidence_dossier.router import router as evidence_router
 from fiosra.mvp.knowledge_router import router as knowledge_router
+from fiosra.mvp.learning_canvas_router import router as learning_canvas_router
 from fiosra.mvp.neo4j_client import neo4j_client
 
 
@@ -33,10 +34,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for Next.js frontend dev servers
+# Enable CORS only for configured local frontend development origins.
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +48,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(knowledge_router)
 app.include_router(events_router)
+app.include_router(learning_canvas_router)
 app.include_router(dialogue_router)
 app.include_router(evidence_router)
 app.include_router(assignment_router)
@@ -69,4 +72,3 @@ async def root_redirect() -> RedirectResponse:
 async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok", "app": settings.APP_NAME}
-

@@ -35,7 +35,8 @@ graph TD
         V_Modules --> Roster["CohortRoster.svelte"]
         V_Modules --> Modals["Modal / AddModuleModal / AddResourceModal"]
         V_Review --> Gauge["ScoreMeter.svelte"]
-        V_Canvas --> EvidenceDrawer["Evidence & Citation Panel"]
+        V_Canvas --> WriterCanvas["Writer-First Canvas, / Command Menu, @ Source Picker"]
+        V_Canvas --> AssistDrawer["Collapsed Optional AI Utility Drawer"]
     end
 ```
 

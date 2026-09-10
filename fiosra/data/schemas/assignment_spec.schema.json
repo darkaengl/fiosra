@@ -178,6 +178,31 @@
               }
             }
           },
+          "canvas_sections": {
+            "type": "array",
+            "description": "Ordered student-owned evidence canvas sections. This public contract must not contain answers, solutions, or private rubric rationale.",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": ["section_id", "label", "purpose", "completion_guidance", "position"],
+              "additionalProperties": false,
+              "properties": {
+                "section_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+                "label": { "type": "string", "minLength": 3, "maxLength": 100 },
+                "purpose": { "type": "string", "minLength": 3, "maxLength": 400 },
+                "completion_guidance": { "type": "string", "minLength": 3, "maxLength": 800 },
+                "required": { "type": "boolean", "default": true },
+                "position": { "type": "integer", "minimum": 1, "maximum": 50 },
+                "max_characters": { "type": "integer", "minimum": 120, "maximum": 8000, "default": 1800 },
+                "allowed_suggestion_kinds": {
+                  "type": "array",
+                  "items": { "type": "string", "enum": ["writing_frame", "section_question", "source_reminder"] },
+                  "uniqueItems": true
+                }
+              }
+            }
+          },
           "misconception_probes": {
             "type": "array",
             "description": "Known misconceptions this question is designed to detect",

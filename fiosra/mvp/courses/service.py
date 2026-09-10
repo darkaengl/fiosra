@@ -307,9 +307,9 @@ class CourseService:
                 s.student_id,
                 COUNT(DISTINCT s.session_id) as session_count,
                 COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN s.session_id END) as completed_count,
-                COUNT(CASE WHEN e.event_type = 'hint_served' THEN 1 END) as hint_count,
+                COUNT(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN 1 END) as hint_count,
                 COUNT(CASE WHEN e.event_type = 'misconception_flagged' THEN 1 END) as misconception_count,
-                jsonb_agg(CASE WHEN e.event_type = 'hint_served' THEN e.payload END) as hints,
+                jsonb_agg(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN e.payload END) as hints,
                 jsonb_agg(CASE WHEN e.event_type = 'misconception_flagged' THEN e.payload END) as misconceptions
             FROM student_sessions s
             JOIN assignments a ON s.assignment_id = a.assignment_id

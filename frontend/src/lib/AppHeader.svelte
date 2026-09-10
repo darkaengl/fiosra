@@ -72,7 +72,7 @@
     if (match) {
       return match.code || match.title || match.name || 'Course';
     }
-    return courseTitle && courseTitle !== 'Course Workspace' ? courseTitle : 'HIST-002';
+    return courseTitle && courseTitle !== 'Course Workspace' ? courseTitle : 'Current course';
   });
 </script>
 

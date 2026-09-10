@@ -5,7 +5,7 @@
 
   let courses = $state([]);
   let isLoading = $state(true);
-  let totalEnrolled = $state(86);
+  let loadError = $state('');
 
   // Search & Filter & Pagination
   let searchQuery = $state('');
@@ -20,50 +20,22 @@
   let createFeedback = $state('');
 
   // Form fields
+  let newCourseCode = $state('');
   let newCourseTitle = $state('');
   let newCourseDomain = $state('History');
   let newCourseInstructor = $state('Dr. Vance');
   let newCourseSyllabus = $state('');
 
-  const staticCourses = [
-    {
-      code: 'HIST-201 • UNDERGRADUATE',
-      name: 'The French Revolution & Modern Statehood',
-      description: 'Critical analysis of institutional debt, the Ancien Régime fiscal breakdown, and the conceptual transition to popular sovereignty (1787–1799).',
-      domain: 'History',
-      students: 24,
-      modules: 3,
-      assignments: 8,
-    },
-    {
-      code: 'PHIL-102 • FOUNDATIONAL',
-      name: 'Moral Reasoning & Epistemology',
-      description: 'Deontological versus consequentialist frameworks, epistemic justification, and formal premise entailment in ethical dilemmas.',
-      domain: 'Philosophy',
-      students: 28,
-      modules: 4,
-      assignments: 10,
-    },
-    {
-      code: 'LIT-304 • ADVANCED SEMINAR',
-      name: 'Modernist Narratives & Deconstruction',
-      description: 'Stream-of-consciousness, temporal fragmentation, and structural skepticism in post-WWI literature with verbatim textual NLI verification.',
-      domain: 'Literature',
-      students: 18,
-      modules: 2,
-      assignments: 6,
-    },
-  ];
-
   async function loadCourses() {
     isLoading = true;
+    loadError = '';
     try {
       const res = await fetch('/courses');
-      if (res.ok) {
-        courses = await res.json();
-      }
+      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+      courses = await res.json();
     } catch (err) {
       console.error('Failed to load courses:', err);
+      loadError = 'The course portfolio could not be loaded. No example data is being shown.';
     } finally {
       isLoading = false;
     }
@@ -71,7 +43,7 @@
 
   // Filtered and Paginated Courses
   let filteredCourses = $derived.by(() => {
-    let list = courses.length > 0 ? courses : staticCourses;
+    let list = courses;
     if (selectedDomain !== 'all') {
       list = list.filter((c) => {
         const d = (c.domain || '').toLowerCase();
@@ -91,6 +63,8 @@
   });
 
   let totalPages = $derived(Math.max(1, Math.ceil(filteredCourses.length / pageSize)));
+  let totalModules = $derived(courses.reduce((total, course) => total + (course.modules?.length || 0), 0));
+  let totalAssignments = $derived(courses.reduce((total, course) => total + (course.assignments_count || 0), 0));
 
   let paginatedCourses = $derived.by(() => {
     const start = (currentPage - 1) * pageSize;
@@ -109,6 +83,12 @@
     currentPage = 1;
   }
 
+  function courseIdentity(course) {
+    const title = course.title || course.name || 'Untitled course';
+    const match = title.match(/^([A-Za-z]{2,10}-\d{1,4}[A-Za-z]?)\s*:\s*(.+)$/);
+    return match ? { code: match[1], title: match[2] } : { code: null, title };
+  }
+
   async function handleCreateCourse(e) {
     e.preventDefault();
     if (!newCourseTitle.trim()) return;
@@ -119,7 +99,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: newCourseTitle.trim(),
+          title: newCourseCode.trim() ? `${newCourseCode.trim()}: ${newCourseTitle.trim()}` : newCourseTitle.trim(),
           domain: newCourseDomain,
           created_by: newCourseInstructor.trim() || 'Dr. Vance',
           syllabus_context: newCourseSyllabus.trim() || null,
@@ -129,6 +109,7 @@
       const newCourse = await res.json();
       courses = [newCourse, ...courses];
       showCreateCourse = false;
+      newCourseCode = '';
       newCourseTitle = '';
       newCourseSyllabus = '';
       currentPage = 1;
@@ -156,7 +137,7 @@
     </div>
     <div class="header-actions">
       <button type="button" class="btn btn-secondary" onclick={() => (showIngestModal = true)}>
-        📄 Ingest Syllabus Corpus
+        📄 Ground course materials
       </button>
       <button type="button" class="btn btn-primary" onclick={() => (showCreateCourse = true)}>
         + Create New Course
@@ -169,29 +150,29 @@
     <div class="stat-card">
       <div class="stat-label"><span>Active Workspaces</span><span>📚</span></div>
       <div class="stat-value-row">
-        <span class="stat-value">{courses.length || 3}</span>
+        <span class="stat-value">{courses.length}</span>
         <span class="stat-trend neutral">Live Synced</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label"><span>Total Enrolled Cohort</span><span>👥</span></div>
+      <div class="stat-label"><span>Curriculum Modules</span><span>🗺️</span></div>
       <div class="stat-value-row">
-        <span class="stat-value">{totalEnrolled}</span>
-        <span class="stat-trend positive">Active Students</span>
+        <span class="stat-value">{totalModules}</span>
+        <span class="stat-trend neutral">Live course data</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label"><span>Live Socratic Sessions</span><span>⚡</span></div>
+      <div class="stat-label"><span>Assignment Drafts</span><span>⚡</span></div>
       <div class="stat-value-row">
-        <span class="stat-value">14</span>
-        <span class="stat-trend positive">Now in Canvas</span>
+        <span class="stat-value">{totalAssignments}</span>
+        <span class="stat-trend neutral">Live course data</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-label"><span>AutoSCORE Review Queue</span><span>🎯</span></div>
+      <div class="stat-label"><span>Student Activity</span><span>🎯</span></div>
       <div class="stat-value-row">
-        <span class="stat-value">4</span>
-        <span class="stat-trend alert">Needs Approval</span>
+        <span class="stat-value">—</span>
+        <span class="stat-trend neutral">Available by course</span>
       </div>
     </div>
   </div>
@@ -218,7 +199,7 @@
         class="filter-chip {selectedDomain === 'all' ? 'active' : ''}"
         onclick={() => setDomainFilter('all')}
       >
-        All Domains ({courses.length || 3})
+        All Domains ({courses.length})
       </button>
       <button
         type="button"
@@ -270,6 +251,8 @@
         <div class="loading-spinner"></div>
         <span>Loading course portfolio...</span>
       </div>
+    {:else if loadError}
+      <div class="empty-state"><div class="empty-icon">⚠️</div><h3>Course data is unavailable</h3><p>{loadError}</p><button type="button" class="btn btn-secondary" onclick={loadCourses}>Retry loading courses</button></div>
     {:else if paginatedCourses.length === 0}
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
@@ -282,13 +265,14 @@
     {:else}
       <div class="courses-grid">
         {#each paginatedCourses as course (course.course_id || course.code || course.name)}
+          {@const identity = courseIdentity(course)}
           <div class="course-card">
             <div class="course-card-top">
               <div>
-                <span class="course-code-badge">{(course.domain || 'ACADEMIC').toUpperCase()} • WORKSPACE</span>
-                <h3 class="course-name">{course.title || course.name}</h3>
+                <span class="course-code-badge">{identity.code || (course.domain || 'ACADEMIC').toUpperCase()} • WORKSPACE</span>
+                <h3 class="course-name">{identity.title}</h3>
               </div>
-              <span class="grounding-pill"><span>●</span> Neo4j Grounded</span>
+              <span class="grounding-pill"><span>●</span> Course workspace</span>
             </div>
 
             <p class="course-desc">
@@ -370,11 +354,17 @@
 
 <!-- Create Course Modal -->
 <Modal isOpen={showCreateCourse} title="🏛️ Create New Course Workspace" onClose={() => (showCreateCourse = false)}>
-  <p class="modal-desc">Configure a new academic course workspace. Once initialized in PostgreSQL and Neo4j, you can sequence prerequisite modules, ground syllabi, and monitor student reasoning cohorts.</p>
+  <p class="modal-desc">Set a clear course identity and teaching context. You can then create modules, attach source material, and test a student-safe assignment before publication.</p>
   <form onsubmit={handleCreateCourse} class="create-form">
-    <div class="form-field">
-      <label for="newCourseTitle" class="field-label">Course Code &amp; Title <span class="req">*</span></label>
-      <input id="newCourseTitle" type="text" class="field-input" placeholder="e.g. HIST-302: Revolutions in the Atlantic World" bind:value={newCourseTitle} required />
+    <div class="form-row">
+      <div class="form-field">
+        <label for="newCourseCode" class="field-label">Course Code</label>
+        <input id="newCourseCode" type="text" class="field-input" placeholder="e.g. HIST-302" bind:value={newCourseCode} />
+      </div>
+      <div class="form-field">
+        <label for="newCourseTitle" class="field-label">Course Title <span class="req">*</span></label>
+        <input id="newCourseTitle" type="text" class="field-input" placeholder="e.g. Revolutions in the Atlantic World" bind:value={newCourseTitle} required />
+      </div>
     </div>
     <div class="form-row">
       <div class="form-field">
@@ -408,22 +398,17 @@
 </Modal>
 
 <!-- Ingest Syllabus Modal -->
-<Modal isOpen={showIngestModal} title="📄 Ingest Syllabus Corpus &amp; Primary Grounding" onClose={() => (showIngestModal = false)}>
-  <p class="modal-desc">Upload your raw course syllabus, reading excerpts, or rubric standards. Fiosra automatically parses temporal boundaries, generates vector embeddings for DeBERTa NLI claim verification, and maps prerequisite Knowledge Components in Neo4j.</p>
-  <div class="dropzone-box" role="button" tabindex="0" onclick={() => alert('Syllabus Corpus Grounded Successfully! 14 Knowledge Components and 32 Vector Chunks indexed.')} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') alert('Syllabus Grounded!'); }}>
-    <div class="dropzone-icon">📥</div>
-    <div class="dropzone-label">Drop Syllabus PDF, EPUB, or Markdown file here</div>
-    <div class="dropzone-hint">Automatic parsing via pgvector (1536-dim embeddings) + Neo4j Graph Integration</div>
-  </div>
+<Modal isOpen={showIngestModal} title="📄 Ground course materials" onClose={() => (showIngestModal = false)}>
+  <p class="modal-desc">Materials must be attached to a curriculum module so their provenance is visible in assignment design. Create or open a course, add a module, and use <strong>Ingest Material</strong> from that module.</p>
   <div class="pipeline-preview">
-    <div class="pipeline-title">Deterministic Grounding Pipeline</div>
-    <div class="pipeline-step"><span>1. Temporal chunking</span><span class="step-ok">✓ Ready</span></div>
-    <div class="pipeline-step"><span>2. DeBERTa NLI claim boundary extraction</span><span class="step-ok">✓ Ready</span></div>
-    <div class="pipeline-step"><span>3. Neo4j prerequisite DAG binding</span><span class="step-ok">✓ Ready</span></div>
+    <div class="pipeline-title">What grounding records</div>
+    <div class="pipeline-step"><span>1. The selected course and module</span><span class="step-ok">Required</span></div>
+    <div class="pipeline-step"><span>2. Source title, excerpt, and link when supplied</span><span class="step-ok">Visible to educators</span></div>
+    <div class="pipeline-step"><span>3. Knowledge-component mapping when available</span><span class="step-ok">Reviewable</span></div>
   </div>
   <div class="modal-footer">
     <button type="button" class="btn btn-secondary" onclick={() => (showIngestModal = false)}>Cancel</button>
-    <button type="button" class="btn btn-primary" onclick={() => { alert('Grounding complete!'); showIngestModal = false; }}>Start Automated Grounding</button>
+    <a href="#/modules" class="btn btn-primary" onclick={() => (showIngestModal = false)}>Open curriculum</a>
   </div>
 </Modal>
 
@@ -541,9 +526,7 @@
     font-size: 11px;
     font-weight: 600;
   }
-  .stat-trend.positive { color: var(--color-signal-green); }
   .stat-trend.neutral { color: var(--color-slate-light); }
-  .stat-trend.alert { color: var(--color-amber); }
 
   .controls-bar {
     display: flex;
@@ -985,37 +968,6 @@
     gap: 12px;
     border-top: 1px solid var(--color-graphite-border);
     padding-top: 16px;
-  }
-
-  .dropzone-box {
-    border: 2px dashed var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 32px 20px;
-    text-align: center;
-    background: var(--color-graphite-card);
-    cursor: pointer;
-    transition: border-color 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .dropzone-box:hover {
-    border-color: var(--color-horizon-blue);
-  }
-
-  .dropzone-icon {
-    font-size: 32px;
-  }
-  .dropzone-label {
-    font-weight: 600;
-    color: #ffffff;
-    font-size: 14px;
-  }
-  .dropzone-hint {
-    font-size: 12px;
-    color: var(--color-slate-muted);
   }
 
   .pipeline-preview {

@@ -186,10 +186,12 @@ async def test_fastapi_event_and_dialogue_endpoints():
         assert session_res.status_code == 200
         session_data = session_res.json()
         session_id = session_data["session_id"]
+        session_headers = {"X-Fiosra-Session-Token": session_data["access_token"]}
 
         # 2. Log custom event
         log_res = await client.post(
             "/events/log",
+            headers=session_headers,
             json={
                 "session_id": session_id,
                 "student_id": "student_maya_88",
@@ -204,6 +206,7 @@ async def test_fastapi_event_and_dialogue_endpoints():
         # 3. Post dialogue message (normal turn)
         msg_res = await client.post(
             "/dialogue/message",
+            headers=session_headers,
             json={
                 "session_id": session_id,
                 "student_id": "student_maya_88",
@@ -223,6 +226,7 @@ async def test_fastapi_event_and_dialogue_endpoints():
         # 4. Post dialogue message (adversarial demand)
         adv_res = await client.post(
             "/dialogue/message",
+            headers=session_headers,
             json={
                 "session_id": session_id,
                 "student_id": "student_maya_88",
@@ -238,7 +242,7 @@ async def test_fastapi_event_and_dialogue_endpoints():
         assert adv_res.json()["is_adversarial"] is True
 
         # 5. Retrieve flight recorder replay
-        replay_res = await client.get(f"/events/session/{session_id}")
+        replay_res = await client.get(f"/events/session/{session_id}", headers=session_headers)
         assert replay_res.status_code == 200
         replay_data = replay_res.json()
         assert replay_data["total_events"] >= 3

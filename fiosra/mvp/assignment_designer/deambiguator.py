@@ -12,57 +12,67 @@ logger = logging.getLogger(__name__)
 
 
 class ScopeDeAmbiguator:
-    """
-    AI Pedagogical Scope De-Ambiguator Co-Pilot.
-    Analyzes raw educator assignment prompts for ambiguity across:
-    1. Temporal boundary specificity
-    2. Causal mechanism inquiry
-    3. Curriculum Knowledge Component anchoring
-    When ambiguity > 30%, synthesizes a 3-question alignment interview.
-    """
-
-    TEMPORAL_ANCHORS: ClassVar[set[str]] = {
-        "1787", "1788", "1789", "1790", "1791", "1792", "1793", "1794",
-        "pre-revolution", "ancien regime", "estates-general", "tennis court",
-        "bastille", "august 4", "declaration of rights", "constitutional monarchy",
-    }
+    """Identify missing instructional boundaries without assuming a subject-specific template."""
 
     CAUSAL_ANCHORS: ClassVar[set[str]] = {
-        "why", "how did", "causes", "caused", "consequences", "trigger",
-        "explain how", "evaluate the extent", "mechanism", "fiscal collapse",
-        "debt crisis", "voting by head", "tax exemptions",
+        "why",
+        "how did",
+        "causes",
+        "caused",
+        "consequences",
+        "trigger",
+        "explain how",
+        "evaluate the extent",
+        "mechanism",
+        "compare",
+        "analyze",
+        "argue",
+        "infer",
+        "evaluate",
     }
+    CONTEXTUAL_ANCHORS: ClassVar[set[str]] = {
+        "century",
+        "era",
+        "period",
+        "during",
+        "between",
+        "from",
+        "module",
+        "excerpt",
+        "source",
+        "case study",
+        "chapter",
+    }
+
+    @classmethod
+    def _has_scope_anchor(cls, prompt: str) -> bool:
+        return bool(re.search(r"\b\d{3,4}\b", prompt)) or any(
+            anchor in prompt for anchor in cls.CONTEXTUAL_ANCHORS
+        )
 
     def evaluate_prompt_ambiguity(
         self,
         raw_prompt: str,
         domain: str = "history",
         course_id: UUID | None = None,
+        module_id: UUID | None = None,
     ) -> AmbiguityDiagnosis:
-        """
-        Evaluates prompt ambiguity and generates a 3-question educator interview if needed.
-        """
+        """Evaluate scope in terms a teacher can correct for any supported domain."""
         prompt_lower = raw_prompt.lower()
         words = re.findall(r"\w+", prompt_lower)
-
-        # 1. Temporal Boundary Evaluation
-        has_temporal = any(anchor in prompt_lower for anchor in self.TEMPORAL_ANCHORS)
-        temporal_score = 0.0 if has_temporal else 0.40
-
-        # 2. Causal Mechanism Evaluation
+        has_scope = self._has_scope_anchor(prompt_lower)
         has_causal = any(anchor in prompt_lower for anchor in self.CAUSAL_ANCHORS)
+
+        scope_score = 0.0 if has_scope else 0.40
         causal_score = 0.0 if has_causal else 0.35
-
-        # 3. Prompt Length / Specificity
         length_score = 0.0 if len(words) >= 15 else 0.25
-
-        total_ambiguity = round(min(temporal_score + causal_score + length_score, 1.0), 2)
+        total_ambiguity = round(min(scope_score + causal_score + length_score, 1.0), 2)
         is_ambiguous = total_ambiguity > 0.30
 
         dimensions = {
-            "temporal_boundary": "Specific" if has_temporal else "Ambiguous / Open-ended epoch",
-            "causal_inquiry": "Structured" if has_causal else "Descriptive / Lacks causal mechanism",
-            "scope_granularity": "Calibrated" if len(words) >= 15 else "Too brief / Under-specified",
+            "contextual_boundary": "Specific" if has_scope else "Needs a setting, period, or conceptual boundary",
+            "reasoning_demand": "Structured" if has_causal else "Needs a claim, comparison, or causal question",
+            "scope_granularity": "Calibrated" if len(words) >= 15 else "Too brief / under-specified",
         }
 
         interview_questions: list[ClarificationQuestion] = []
@@ -70,36 +80,36 @@ class ScopeDeAmbiguator:
             interview_questions = [
                 ClarificationQuestion(
                     question_id="Q1_TEMPORAL",
-                    dimension="temporal_scope",
-                    prompt="What specific temporal window or phase of the French Revolution should students analyze?",
+                    dimension="scope and boundary",
+                    prompt="What setting, period, case, or conceptual boundary should students hold fixed?",
                     options=[
-                        "Pre-revolutionary fiscal crisis and structural royal debt (1787–May 1789)",
-                        "Estates-General standoff and popular mobilization in Paris (May–July 1789)",
-                        "Constitutional monarchy overhaul and August Decrees (August 1789–1791)",
+                        "Use the specific setting or time period named in the task.",
+                        "Focus on the selected curriculum module and its assigned sources.",
+                        "Define a narrower comparison or case before students begin.",
                     ],
-                    default_recommendation="Pre-revolutionary fiscal crisis and structural royal debt (1787–May 1789)",
+                    default_recommendation="Focus on the selected curriculum module and its assigned sources.",
                 ),
                 ClarificationQuestion(
                     question_id="Q2_MISCONCEPTIONS",
-                    dimension="cognitive_traps",
-                    prompt="Which common student misconception trap should this assignment specifically diagnose and remediate?",
+                    dimension="cognitive trap",
+                    prompt="What incomplete inference should the reasoning scaffold help students test?",
                     options=[
-                        "Attributing the fiscal collapse solely to Marie Antoinette's dresses rather than war debt (MISC_HIST_006)",
-                        "Assuming the Third Estate was purely poor peasants, erasing the educated bourgeoisie (MISC_HIST_007)",
-                        "Believing doubling the Third Estate gave them power without voting by head (MISC_HIST_009)",
+                        "Treating a single observation as proof of a broad conclusion.",
+                        "Offering a single-cause explanation without weighing alternatives.",
+                        "Restating a source without explaining how it supports a claim.",
                     ],
-                    default_recommendation="Attributing the fiscal collapse solely to Marie Antoinette's dresses rather than war debt (MISC_HIST_006)",
+                    default_recommendation="Treating a single observation as proof of a broad conclusion.",
                 ),
                 ClarificationQuestion(
                     question_id="Q3_EVIDENCE",
-                    dimension="evidence_anchor",
-                    prompt="What primary evidence or document type should students cite to substantiate their claims?",
+                    dimension="evidence anchor",
+                    prompt="Which assigned source or evidence type must students use in their response?",
                     options=[
-                        "Cahiers de Doléances (parish grievance petitions)",
-                        "Necker's Compte Rendu au Roi and sovereign debt interest tables",
-                        "Decrees of the National Assembly and Tennis Court Oath declaration",
+                        "The primary source or reading attached to this module.",
+                        "A course source plus one corroborating assigned text.",
+                        "Evidence identified explicitly by the educator before publication.",
                     ],
-                    default_recommendation="Necker's Compte Rendu au Roi and sovereign debt interest tables",
+                    default_recommendation="The primary source or reading attached to this module.",
                 ),
             ]
 

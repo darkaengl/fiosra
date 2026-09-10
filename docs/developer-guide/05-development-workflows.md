@@ -94,6 +94,9 @@ psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/002_syllabus_c
 
 # Apply module resources table
 psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/004_module_resources.sql
+
+# Apply session capability and learning canvas tables
+psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/005_learning_canvas.sql
 ```
 
 ---
@@ -172,6 +175,12 @@ uv run pytest tests/test_dialogue_guardrails.py
 
 # Test event store append-only telemetry:
 uv run pytest tests/test_event_store.py
+
+# Test student-owned canvas, attribution, source validation, and revision conflicts:
+uv run pytest tests/test_learning_canvas.py
+
+# Test session-capability authorization and assignment binding:
+uv run pytest tests/test_session_capability.py
 ```
 
 ### Code Formatting & Linting

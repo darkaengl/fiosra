@@ -7,8 +7,6 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - ./ui-ux/frontend-dist:/app/ui-ux/frontend-dist:ro
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/fiosra_db

@@ -2,6 +2,7 @@ import logging
 import re
 from typing import Any
 
+from fiosra.mvp.llm.orchestrator import llm_orchestrator
 from fiosra.mvp.seed_pipeline import search_nearest_misconceptions
 
 logger = logging.getLogger(__name__)
@@ -39,12 +40,12 @@ class SocraticDialogueEngine:
         return bool(ADVERSARIAL_REGEX.search(student_input.strip()))
 
     def generate_hint_ladder(self, question_prompt: str) -> list[dict[str, Any]]:
-        """Generates a default 4-rung Socratic hint ladder for a question."""
+        """Generate a generic answer-blind ladder when an assignment-specific one is unavailable."""
         return [
-            {"rung": 0, "label": "Orientation", "text": "What are the core concepts or actors identified in the prompt?"},
-            {"rung": 1, "label": "Conceptual Anchor", "text": "Consider the structural incentives and fiscal constraints at play."},
-            {"rung": 2, "label": "Mechanistic Bridge", "text": "Trace how the state debt service impacted royal options."},
-            {"rung": 3, "label": "Target Synthesis", "text": "Synthesize the interaction between war debt and tax exemptions."},
+            {"rung": 0, "label": "Orientation", "text": "What observation or course detail would make your claim most defensible?"},
+            {"rung": 1, "label": "Conceptual Anchor", "text": "Separate the evidence stated in the source from the inference you are making from it."},
+            {"rung": 2, "label": "Mechanistic Bridge", "text": "Write one sentence connecting a specific detail to your claim, then test an alternative explanation."},
+            {"rung": 3, "label": "Target Synthesis", "text": "Revise your claim so it remains bounded by the evidence and addresses a reasonable limitation."},
         ]
 
     def build_adversarial_rejection(
@@ -83,6 +84,10 @@ class SocraticDialogueEngine:
         domain: str = "history",
         current_rung: int = 0,
         hint_requested: bool = False,
+        hint_ladder: list[Any] | None = None,
+        target_kcs: list[str] | None = None,
+        is_course_grounded: bool = False,
+        active_section_context: str | None = None,
     ) -> dict[str, Any]:
         """
         Generates a Socratic response while strictly maintaining Answer Isolation.
@@ -100,9 +105,24 @@ class SocraticDialogueEngine:
 
         # 3. Diagnose Potential Misconceptions via pgvector similarity search
         matched_misconception = None
-        traps = await search_nearest_misconceptions(student_input, limit=1, domain=domain)
+        # A public assignment ladder is already an educator-curated, bounded context.
+        # Do not let a broad domain embedding override it with an unrelated taxonomy trap.
+        traps = (
+            []
+            if hint_ladder and is_course_grounded
+            else await search_nearest_misconceptions(student_input, limit=1, domain=domain)
+        )
         if traps and traps[0]["similarity"] > 0.01:
             matched_misconception = traps[0]
+        if (
+            matched_misconception
+            and is_course_grounded
+            and target_kcs
+            and matched_misconception.get("kc_id") not in target_kcs
+        ):
+            # A domain-wide taxonomy match is not enough: it must be relevant to the
+            # public assignment's own learning objectives before it can shape a tutor turn.
+            matched_misconception = None
 
         # 4. Generate Socratic Dialogue output based on hint rung and diagnosis
         if matched_misconception:
@@ -130,6 +150,15 @@ class SocraticDialogueEngine:
             )
         else:
             # General Socratic Scaffolding based on Rung
+            assignment_hint = None
+            if hint_ladder:
+                for hint in hint_ladder:
+                    hint_level = hint.get("level") if isinstance(hint, dict) else getattr(hint, "level", None)
+                    if hint_level == active_rung:
+                        is_locked = hint.get("is_locked", False) if isinstance(hint, dict) else getattr(hint, "is_locked", False)
+                        if not is_locked:
+                            assignment_hint = hint.get("content") if isinstance(hint, dict) else getattr(hint, "content", None)
+                        break
             rung_strategies = {
                 0: (
                     "Metacognitive probe: Prompt student to inspect their assumptions.",
@@ -137,15 +166,15 @@ class SocraticDialogueEngine:
                 ),
                 1: (
                     "Conceptual nudge: Highlight foundational concepts without giving away steps.",
-                    f"Think about the broader context of {domain}: what underlying principles or causes apply here?",
+                    "Which distinction in the prompt or assigned source would make your claim more precise?",
                 ),
                 2: (
                     "Procedural guide: Point to concrete next analytical step.",
-                    "Look specifically at the primary causes and contrasting perspectives involved in this problem.",
+                    "Name the observation, the inference, and one alternative explanation in three connected sentences.",
                 ),
                 3: (
                     "Worked analogy: Provide isomorphic model with different context.",
-                    "Consider an analogy: when an organization faces deep budget shortfalls, it must examine both revenue sources and debt obligations. How does that compare to this situation?",
+                    "Imagine a map shows two places connected by a road: it supports a claim about connection, but not by itself a claim about why leaders built it. Apply that distinction here.",
                 ),
             }
             strat, resp = rung_strategies.get(active_rung, rung_strategies[0])
@@ -156,7 +185,29 @@ class SocraticDialogueEngine:
                 "strategy_selected": strat,
                 "affective_adjustment": "Inquisitive and guided reflection.",
             }
-            response_text = resp
+            response_text = assignment_hint or resp
+
+        generation = await llm_orchestrator.enhance(
+            purpose="socratic_hint_rephrase",
+            system_prompt=(
+                "You are a concise Socratic tutor. Output exactly one supportive question ending in a question "
+                "mark, with no preface, answer, explanation, list, or quotation. Rewrite only the supplied bounded "
+                "hint. Preserve its instructional intent and stay within the public assignment context. Never provide "
+                "an answer, thesis, solution, grading judgment, rubric, or reference material. Do not introduce people, "
+                "events, evidence, or concepts absent from the input."
+            ),
+            user_prompt=(
+                f"Public assignment context:\n{question_prompt}\n\n"
+                f"Active student-owned canvas section:\n{active_section_context or 'General reasoning'}\n\n"
+                f"Server-selected hint at rung {active_rung}:\n{response_text}"
+            ),
+            deterministic_fallback=response_text,
+            pseudonymous_seed=f"dialogue:{question_prompt}:{active_rung}",
+            max_characters=420,
+            max_tokens=100,
+            allow_live=is_course_grounded,
+        )
+        response_text = generation.content
 
         return {
             "is_adversarial": False,
@@ -165,6 +216,7 @@ class SocraticDialogueEngine:
             "hint_rung": active_rung,
             "penalty_score": penalty_score,
             "matched_misconception_id": matched_misconception["misconception_id"] if matched_misconception else None,
+            "generation_metadata": generation.metadata.as_dict(),
         }
 
 

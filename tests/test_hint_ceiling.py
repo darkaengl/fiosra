@@ -9,15 +9,18 @@ from fiosra.mvp.main import app
 @pytest.mark.asyncio
 async def test_strictly_monotonic_hint_ladder_progression():
     """Verify that hints progress monotonically one rung at a time with delta=0.25 penalty."""
+    access_token = "hint-test-token-one"
     session_id = await event_store.create_session(
         student_id="student_hint_test_01",
         current_question_id="Q1",
+        access_token=access_token,
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Step 1: Initial question with no hint (Rung 0, Autonomy = 1.00)
         r0 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_hint_test_01",
@@ -36,6 +39,7 @@ async def test_strictly_monotonic_hint_ladder_progression():
         # Step 2: Request Hint 1 (Rung 1, Autonomy penalty Δ = 0.25 -> 0.75)
         r1 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_hint_test_01",
@@ -54,6 +58,7 @@ async def test_strictly_monotonic_hint_ladder_progression():
         # Step 3: Request Hint 2 (Rung 2, Autonomy penalty Δ = 0.25 -> 0.50)
         r2 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_hint_test_01",
@@ -72,6 +77,7 @@ async def test_strictly_monotonic_hint_ladder_progression():
         # Step 4: Request Hint 3 (Rung 3, Autonomy penalty Δ = 0.25 -> 0.25)
         r3 = await ac.post(
             "/dialogue/message",
+            headers={"X-Fiosra-Session-Token": access_token},
             json={
                 "session_id": session_id,
                 "student_id": "student_hint_test_01",
@@ -91,9 +97,11 @@ async def test_strictly_monotonic_hint_ladder_progression():
 @pytest.mark.asyncio
 async def test_hint_ceiling_lock_bottom_out():
     """Verify that requesting hints beyond Rung 3 stays at maximum ceiling and locks bottom-out."""
+    access_token = "hint-test-token-two"
     session_id = await event_store.create_session(
         student_id="student_ceiling_test_02",
         current_question_id="Q1",
+        access_token=access_token,
     )
 
     ladder = dialogue_engine.generate_hint_ladder("Explain France's fiscal crisis.")
@@ -106,6 +114,7 @@ async def test_hint_ceiling_lock_bottom_out():
         for i in range(5):
             res = await ac.post(
                 "/dialogue/message",
+                headers={"X-Fiosra-Session-Token": access_token},
                 json={
                     "session_id": session_id,
                     "student_id": "student_ceiling_test_02",
