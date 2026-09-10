@@ -122,6 +122,14 @@
               <a href={designerUrl} class="btn btn-secondary btn-xs">
                 Designer ➔
               </a>
+              {#if a.status === 'published'}
+                <a
+                  href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(a.assignment_id)}`}
+                  class="btn btn-primary btn-xs"
+                >
+                  Student canvas →
+                </a>
+              {/if}
             </div>
           </div>
         {/each}

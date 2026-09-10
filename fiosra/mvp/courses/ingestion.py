@@ -4,6 +4,7 @@ import re
 import uuid
 from uuid import UUID
 
+from neo4j.exceptions import Neo4jError
 from sqlalchemy import text
 
 from fiosra.mvp.courses.schemas import SyllabusChunkResponse
@@ -93,7 +94,7 @@ class SyllabusParser:
         """
         try:
             kcs = await graph_service.list_all_kcs(domain=domain)
-        except (RuntimeError, ConnectionError, OSError) as e:
+        except (Neo4jError, RuntimeError, ConnectionError, OSError) as e:
             logger.warning(f"Could not fetch KCs from Neo4j for grounding: {e}")
             kcs = []
 
@@ -306,4 +307,3 @@ class SyllabusParser:
 
 
 syllabus_parser = SyllabusParser()
-

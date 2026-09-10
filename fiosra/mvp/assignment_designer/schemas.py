@@ -5,7 +5,11 @@ from pydantic import BaseModel, Field
 
 
 class HintRung(BaseModel):
-    level: int = Field(ge=0, le=4, description="0=metacognitive, 1=conceptual, 2=procedural, 3=worked_analogy, 4=bottom_out")
+    level: int = Field(
+        ge=0,
+        le=4,
+        description="0=metacognitive, 1=conceptual, 2=procedural, 3=worked_analogy, 4=bottom_out",
+    )
     hint_type: str
     content: str
     is_locked: bool = False
@@ -19,7 +23,7 @@ class ScaffoldingStep(BaseModel):
 
 class ClarificationQuestion(BaseModel):
     question_id: str
-    dimension: str  # "temporal_scope", "cognitive_traps", "evidence_anchor"
+    dimension: str
     prompt: str
     options: list[str]
     default_recommendation: str
@@ -64,6 +68,11 @@ class QuestionDraftRequest(BaseModel):
     created_by: str = "educator_prof_mora"
     raw_prompt: str | None = None
     answers: dict[str, str] | None = None
+    clarified_prompt: str | None = None
+    target_kcs: list[str] | None = None
+    hint_ladder: list[HintRung] | None = None
+    rubric_rules: list[dict[str, Any]] | None = None
+    reference_solution: str | dict[str, Any] | None = None
 
 
 class QuestionSpec(BaseModel):
@@ -76,4 +85,18 @@ class QuestionSpec(BaseModel):
     hint_ladder: list[HintRung]
     rubric_criteria: list[dict[str, Any]]
     vault_token: str
-    status: str = "draft"  # draft, published
+    status: str = "draft"
+
+
+class PublicQuestionSpec(BaseModel):
+    """Student-safe assignment representation that intentionally excludes the vault token."""
+
+    question_id: str
+    assignment_id: str
+    prompt: str
+    domain: str
+    target_kcs: list[str]
+    subproblems: list[ScaffoldingStep]
+    hint_ladder: list[HintRung]
+    rubric_criteria: list[dict[str, Any]]
+    status: str = "draft"

@@ -1,8 +1,9 @@
 import io
-import uuid
+from pathlib import Path
+
+import pypdf
 import pytest
 from httpx import ASGITransport, AsyncClient
-import pypdf
 
 from fiosra.mvp.main import app
 
@@ -124,7 +125,6 @@ async def test_module_resource_pdf_upload():
         # Add metadata or text via annotation / content
         pdf_bytes_io = io.BytesIO()
         writer.write(pdf_bytes_io)
-        pdf_bytes = pdf_bytes_io.getvalue()
 
         # Let's test with a simulated PDF or text file
         # If blank PDF has no extractable text, let's test markdown/txt upload or structured text
@@ -147,9 +147,8 @@ async def test_module_resource_pdf_upload():
 @pytest.mark.asyncio
 async def test_module_resource_real_pdf_upload():
     """Verify uploading an actual binary PDF file and extracting text with pypdf."""
-    pdf_path = "/Users/anupamasadanandan/.gemini/antigravity-ide/brain/ece7e89f-d1f7-41eb-8a7f-e16b6a14fba6/.user_uploaded/media_1788895461523.pdf"
-    with open(pdf_path, "rb") as f:
-        pdf_bytes = f.read()
+    pdf_path = Path(__file__).parent / "fixtures" / "harappa_excavation_report.pdf"
+    pdf_bytes = pdf_path.read_bytes()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         c_res = await ac.post(
@@ -185,4 +184,3 @@ async def test_module_resource_real_pdf_upload():
         assert chunks[0]["module_id"] == module_id
         assert chunks[0]["resource_type"] == "pdf"
         assert len(chunks[0]["content"]) > 20
-

@@ -1,7 +1,7 @@
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -13,10 +13,10 @@ router = APIRouter(prefix="/evidence", tags=["Evidence & AutoSCORE Dossier"])
 
 
 class FinaliseGradeRequest(BaseModel):
-    approved_grade: str = Field(..., description="Final grade approved or overridden by educator (e.g. 'A', '88%')")
+    approved_grade: str = Field(..., min_length=1, max_length=12, description="Educator-approved final grade")
     teacher_id: str = Field(default="teacher_sovereign_01", description="Educator ID finalizing the grade")
-    teacher_override: bool = Field(default=False, description="Whether the teacher overrode the agent-suggested score")
-    feedback_comments: str = Field(default="", description="Formative feedback notes to the student")
+    teacher_override: bool = Field(default=False, description="Whether the educator overrode the suggested grade")
+    feedback_comments: str = Field(default="", max_length=4000, description="Formative feedback notes")
 
 
 class FinaliseGradeResponse(BaseModel):
@@ -28,39 +28,64 @@ class FinaliseGradeResponse(BaseModel):
     message: str
 
 
+@router.get("/review-queue")
+async def get_review_queue(
+    course_id: Annotated[UUID | None, Query()] = None,
+) -> list[dict[str, Any]]:
+    """Return submitted student sessions ready for sovereign educator review."""
+    sql = text("""
+        SELECT s.session_id, s.student_id, s.assignment_id, s.status, s.last_activity_at, a.title
+        FROM student_sessions s
+        LEFT JOIN assignments a ON s.assignment_id = a.assignment_id
+        LEFT JOIN modules m ON a.module_id = m.module_id
+        WHERE s.status = 'submitted'
+          AND (:course_id IS NULL OR m.course_id = CAST(:course_id AS UUID))
+        ORDER BY s.last_activity_at DESC;
+    """)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(sql, {"course_id": str(course_id) if course_id else None})
+        rows = result.mappings().all()
+
+    queue: list[dict[str, Any]] = []
+    for row in rows:
+        session_info = await event_store.get_session_details(row["session_id"])
+        events = await event_store.get_session_events(row["session_id"])
+        dossier = evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
+        summary = dossier.get("executive_summary", {})
+        queue.append(
+            {
+                "session_id": str(row["session_id"]),
+                "student_id": row["student_id"],
+                "assignment_id": str(row["assignment_id"]) if row["assignment_id"] else None,
+                "assignment_title": row["title"] or "Reasoning assignment",
+                "submitted_at": row["last_activity_at"].isoformat() if row["last_activity_at"] else None,
+                "suggested_grade": summary.get("suggested_grade", "Pending"),
+                "autonomy_score": summary.get("autonomy_score", 0),
+                "misconceptions_triggered": summary.get("misconceptions_triggered", []),
+            }
+        )
+    return queue
+
+
 @router.get("/dossier/{session_id}")
 async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
-    """
-    Synthesizes the 1-page executive educator review dossier (AutoSCORE Evidence Packet Z).
-    Includes rubric criteria assessments with direct verbatim student quote citations.
-    """
+    """Synthesize the educator review dossier with evidence quotes and reasoning telemetry."""
     session_info = await event_store.get_session_details(session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-
     events = await event_store.get_session_events(session_id)
-    dossier = evidence_dossier_synthesizer.synthesize_dossier(
-        session_info=session_info,
-        events=events,
-    )
-    return dossier
+    return evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
 
 
 @router.post("/dossier/{session_id}/finalise-grade", response_model=FinaliseGradeResponse)
-async def finalise_student_grade(
-    session_id: UUID,
-    request: FinaliseGradeRequest,
-) -> dict[str, Any]:
-    """
-    1-Click Educator Sovereign Grade Finalization.
-    Updates the session status to 'completed' and records the sovereign grade decision
-    in the immutable event store flight recorder.
-    """
+async def finalise_student_grade(session_id: UUID, request: FinaliseGradeRequest) -> dict[str, Any]:
+    """Record an educator's grade decision and seal the student session as completed."""
     session_info = await event_store.get_session_details(session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    if session_info["status"] == "completed":
+        raise HTTPException(status_code=409, detail="This session has already been finalized.")
 
-    # 1. Log sovereign grade decision to flight recorder
     await event_store.log_event(
         session_id=session_id,
         student_id=session_info["student_id"],
@@ -74,19 +99,7 @@ async def finalise_student_grade(
         },
         assignment_id=session_info.get("assignment_id"),
     )
-
-    # 2. Update session status to completed in student_sessions table
-    update_sql = text("""
-        UPDATE student_sessions
-        SET status = 'completed',
-            completed_at = NOW(),
-            last_activity_at = NOW()
-        WHERE session_id = :session_id;
-    """)
-    async with AsyncSessionLocal() as session:
-        await session.execute(update_sql, {"session_id": str(session_id)})
-        await session.commit()
-
+    await event_store.complete_session(session_id)
     return {
         "session_id": str(session_id),
         "status": "completed",
@@ -99,34 +112,27 @@ async def finalise_student_grade(
 
 @router.get("/trace/{session_id}")
 async def get_student_reasoning_trace(session_id: UUID) -> dict[str, Any]:
-    """
-    Retrieves the chronological reasoning trace nodes for visualization on the student canvas.
-    """
+    """Return a renderable chronological trace for the student reasoning canvas."""
     session_info = await event_store.get_session_details(session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-
     events = await event_store.get_session_events(session_id)
     trace_nodes = []
-    for ev in events:
-        ev_type = ev.get("event_type")
-        payload = ev.get("payload", {})
-        trace_nodes.append({
-            "event_id": ev.get("event_id"),
-            "timestamp": ev.get("created_at"),
-            "event_type": ev_type,
-            "question_id": ev.get("question_id"),
-            "summary": (
-                payload.get("student_input")
-                or payload.get("response_text")
-                or payload.get("approved_grade")
-                or ev_type
-            ),
-            "payload": payload,
-        })
-
-    return {
-        "session_id": str(session_id),
-        "total_nodes": len(trace_nodes),
-        "trace_nodes": trace_nodes,
-    }
+    for event in events:
+        payload = event.get("payload", {})
+        trace_nodes.append(
+            {
+                "event_id": event.get("event_id"),
+                "timestamp": event.get("created_at"),
+                "event_type": event.get("event_type"),
+                "question_id": event.get("question_id"),
+                "summary": (
+                    payload.get("student_input")
+                    or payload.get("response_text")
+                    or payload.get("approved_grade")
+                    or event.get("event_type")
+                ),
+                "payload": payload,
+            }
+        )
+    return {"session_id": str(session_id), "total_nodes": len(trace_nodes), "trace_nodes": trace_nodes}

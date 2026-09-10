@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     ENABLE_MATH_CAS: bool = True
     ENABLE_NLI_VERIFIER: bool = False
     DEFAULT_MAX_HINT_LEVEL: int = 3
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(
         env_file=".env",

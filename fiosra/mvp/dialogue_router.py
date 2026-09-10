@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from fiosra.mvp.dialogue_engine import dialogue_engine
@@ -14,10 +14,10 @@ class DialogueMessageRequest(BaseModel):
     session_id: UUID = Field(..., description="Active session ID")
     student_id: str = Field(..., description="Student ID")
     question_id: str = Field(default="q1", description="Current question ID")
-    student_input: str = Field(..., description="Student message or reasoning attempt")
-    question_prompt: str = Field(..., description="The original question prompt")
+    student_input: str = Field(..., min_length=1, max_length=12000, description="Student reasoning attempt")
+    question_prompt: str = Field(..., min_length=3, description="Original question prompt")
     domain: str = Field(default="history", description="Curriculum domain")
-    current_rung: int = Field(default=0, ge=0, le=3, description="Current hint rung (0-3)")
+    current_rung: int = Field(default=0, ge=0, le=3, description="Legacy client display value; ignored by server")
     hint_requested: bool = Field(default=False, description="Whether the student explicitly asked for a hint")
     assignment_id: UUID | None = Field(default=None, description="Optional assignment ID")
 
@@ -33,34 +33,34 @@ class DialogueMessageResponse(BaseModel):
 
 @router.post("/message", response_model=DialogueMessageResponse)
 async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any]:
-    """
-    Processes a student dialogue turn while enforcing Answer Isolation,
-    adversarial guardrails, and automated event store flight recording.
-    """
-    # 1. Log student attempt to event store
+    """Process a guarded Socratic turn with server-controlled hint advancement."""
+    session_info = await event_store.get_session_details(request.session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail=f"Session '{request.session_id}' not found")
+    if session_info["status"] != "active":
+        raise HTTPException(status_code=409, detail="This session is no longer accepting student responses.")
+
     await event_store.log_event(
         session_id=request.session_id,
         student_id=request.student_id,
         question_id=request.question_id,
         event_type="student_prompt_submitted",
-        payload={
-            "student_input": request.student_input,
-            "hint_requested": request.hint_requested,
-            "current_rung": request.current_rung,
-        },
-        assignment_id=request.assignment_id,
+        payload={"student_input": request.student_input, "hint_requested": request.hint_requested},
+        assignment_id=request.assignment_id or session_info.get("assignment_id"),
     )
 
-    # 2. Run Answer-Isolated Dialogue Engine
+    stored_rung = await event_store.get_current_hint_rung(request.session_id)
+    # Adversarial prompts never receive the accumulated hint context. This preserves
+    # the existing ladder for the next legitimate turn while returning a base redirect.
+    engine_rung = 0 if dialogue_engine.is_adversarial_attempt(request.student_input) else stored_rung
     result = await dialogue_engine.generate_response(
         student_input=request.student_input,
         question_prompt=request.question_prompt,
         domain=request.domain,
-        current_rung=request.current_rung,
+        current_rung=engine_rung,
         hint_requested=request.hint_requested,
     )
 
-    # 3. Log tutor response to flight recorder
     if result["is_adversarial"]:
         event_type = "adversarial_probe_defended"
     elif request.hint_requested:
@@ -68,19 +68,33 @@ async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any
     else:
         event_type = "tutor_turn_completed"
 
+    event_payload = {
+        "response_text": result["response_text"],
+        "thoughts_of_tutorbot": result["thoughts_of_tutorbot"],
+        "hint_rung": result["hint_rung"],
+        "rung": result["hint_rung"],
+        "penalty_score": result["penalty_score"],
+        "matched_misconception_id": result.get("matched_misconception_id"),
+    }
     await event_store.log_event(
         session_id=request.session_id,
         student_id=request.student_id,
         question_id=request.question_id,
         event_type=event_type,
-        payload={
-            "response_text": result["response_text"],
-            "thoughts_of_tutorbot": result["thoughts_of_tutorbot"],
-            "hint_rung": result["hint_rung"],
-            "penalty_score": result["penalty_score"],
-            "matched_misconception_id": result.get("matched_misconception_id"),
-        },
-        assignment_id=request.assignment_id,
+        payload=event_payload,
+        assignment_id=request.assignment_id or session_info.get("assignment_id"),
     )
-
+    if result.get("matched_misconception_id"):
+        await event_store.log_event(
+            session_id=request.session_id,
+            student_id=request.student_id,
+            question_id=request.question_id,
+            event_type="misconception_flagged",
+            payload={
+                "code": result["matched_misconception_id"],
+                "kc_id": "unmapped",
+                "hint_rung": result["hint_rung"],
+            },
+            assignment_id=request.assignment_id or session_info.get("assignment_id"),
+        )
     return result

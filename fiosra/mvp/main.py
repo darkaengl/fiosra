@@ -33,10 +33,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for Next.js frontend dev servers
+# Enable CORS only for configured local frontend development origins.
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,4 +70,3 @@ async def root_redirect() -> RedirectResponse:
 async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok", "app": settings.APP_NAME}
-

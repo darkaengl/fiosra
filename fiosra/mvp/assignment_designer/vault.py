@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import secrets
+from copy import deepcopy
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class AnswerVault:
         self,
         assignment_id: str,
         question_id: str,
-        reference_solution: dict[str, Any],
+        reference_solution: dict[str, Any] | str,
     ) -> str:
         """
         Encrypts/hashes reference solution into the vault and returns an opaque vault_token.
@@ -50,7 +51,7 @@ class AnswerVault:
         self,
         vault_token: str,
         teacher_id: str,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | str | None:
         """
         Retrieves reference solution strictly for authenticated educator review.
         """
@@ -58,7 +59,7 @@ class AnswerVault:
         if not entry:
             return None
         logger.info(f"Educator '{teacher_id}' accessed Answer Vault entry {vault_token}")
-        return dict(entry["solution"])
+        return deepcopy(entry["solution"])
 
 
 answer_vault = AnswerVault()
