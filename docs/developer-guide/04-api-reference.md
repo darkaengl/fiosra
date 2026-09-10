@@ -285,3 +285,85 @@ Aggregates the entire trajectory ($Z$) of a student assignment session into an a
   "verification_status": "pending_educator_review"
 }
 ```
+
+---
+
+## 7. Long-Form Student Documents (`/learning-documents`)
+
+The long-form document API is the protected, server-authoritative persistence boundary for the student writer-first workspace. It stores typed Tiptap/ProseMirror blocks rather than browser HTML, has no artificial total-document character cap, and does not return Answer Vault, reference-solution, rubric-answer, or provider data.
+
+Every endpoint in this group requires the opaque `X-Fiosra-Session-Token` capability issued when the assignment-bound student session was created. A missing or incorrect capability receives `403 Forbidden`.
+
+### `GET /learning-documents/sessions/{session_id}`
+
+Loads the current canonical document for an authorized session. On the first request, it creates the document and imports any existing legacy canvas section drafts as heading/paragraph blocks. The response includes a monotonically increasing `document_revision` used for optimistic concurrency.
+
+- **Response `200 OK`**:
+
+```json
+{
+  "document_id": "f7d839ca-7a4c-4a03-a12f-437177db52e0",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "assignment_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "title": "Reasoning document",
+  "status": "active",
+  "schema_version": 1,
+  "document_revision": 2,
+  "blocks": [
+    {
+      "block_id": "bb7d98ad-c253-48e6-bc58-50c852ff1c95",
+      "block_type": "paragraph",
+      "position": 2,
+      "section_id": "working_claim",
+      "author_type": "student",
+      "revision": 3,
+      "plaintext": "The drainage pattern supports an inference about coordination.",
+      "content": {
+        "type": "paragraph",
+        "attrs": {
+          "blockId": "bb7d98ad-c253-48e6-bc58-50c852ff1c95",
+          "sectionId": "working_claim",
+          "authorType": "student"
+        },
+        "content": [{"type": "text", "text": "The drainage pattern supports an inference about coordination."}]
+      }
+    }
+  ]
+}
+```
+
+### `PUT /learning-documents/sessions/{session_id}`
+
+Saves an incremental block patch. The client sends `upserts` only for changed blocks and `deleted_block_ids` only for removed blocks; it never needs to send a 100-page document for each keystroke. A new section is simply a new heading/paragraph pair with unique block IDs and positions.
+
+- **Request body**:
+
+```json
+{
+  "base_revision": 2,
+  "upserts": [
+    {
+      "block_id": "bb7d98ad-c253-48e6-bc58-50c852ff1c95",
+      "block_type": "paragraph",
+      "position": 2,
+      "section_id": "working_claim",
+      "author_type": "student",
+      "content": {
+        "type": "paragraph",
+        "attrs": {
+          "blockId": "bb7d98ad-c253-48e6-bc58-50c852ff1c95",
+          "sectionId": "working_claim",
+          "authorType": "student"
+        },
+        "content": [{"type": "text", "text": "The drainage pattern supports an inference about coordination, not a proof of its governing institution."}]
+      }
+    }
+  ],
+  "deleted_block_ids": []
+}
+```
+
+- **Response `200 OK`**: The complete current document state plus `changed_block_ids`.
+- **Important rejection cases**: `409 Conflict` for a stale `base_revision` or a submitted/completed session; `422 Unprocessable Content` for duplicate positions, block identity mismatch, malformed nested nodes, unsupported node types, or blocks above their safe transport limit.
+
+See [Chapter 6](./06-learning-canvas-and-assistance.md) for the Tiptap editor lifecycle, long-document size policy, migration steps, and the approved but not-yet-implemented assistance roadmap.
