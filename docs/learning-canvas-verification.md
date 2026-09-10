@@ -52,3 +52,17 @@ After a cache-busted reload, the educator review panel displayed the new **Canva
 The delivered canvas now uses a browser-held, database-digest-backed **session capability** for canvas reads/writes, section support requests, legacy event replay, session submission, and Socratic dialogue turns. The server rejects missing capabilities, cross-session access, mismatched learner identity, changed question identity, undeclared active canvas sections, arbitrary generic event types, and post-submission writes. It also permits student sessions for assignment-bound work only after the assignment is published and the published question identity matches.
 
 This is an interim session-ownership control—not a replacement for institutional authentication, enrolment, or educator role-based access control. The remaining role/identity and grade-authority work stays explicitly tracked in the server-authoritative workflow and acceptance-harness issues.
+
+## Writer-first canvas refinement validation
+
+The redesigned student workspace was opened locally with the deterministic provider. The first desktop viewport now centers a large, 18-row writing surface beneath a compact assignment bar. The section navigator is reduced to a narrow numbered rail. The assignment brief and **Assist** control remain compact and the optional assistant drawer is closed on load. No expanded chat transcript, AI card, or source rail competes with the learner’s writing surface.
+
+Typing `/frame` in the editor opened an inline, keyboard-addressable command menu containing only the matching bounded action, **Request a writing frame**. The option explicitly describes a neutral, editable structure rather than a completed answer. This confirms that editor-native assistance is discoverable without elevating AI above the draft.
+
+The `/frame` command requested the existing bounded canvas support endpoint and opened the assistant only after that explicit learner action. The central editor remained visible and untouched. The drawer labelled the response **Optional writing frame**, stated that nothing had been saved automatically, and offered only **Use as editable frame**, **Apply & save my edit**, and **Dismiss**. No answer-generation or direct-save action was exposed.
+
+The compact **@ Sources** editor control opened a contextual source picker containing only the published assignment’s approved excavation-report excerpt. The source remains an optional attachment to the learner’s draft rather than copied content or a generated citation. This replaces the persistent source rail while retaining the existing server-side source and quotation validation on save.
+
+Selecting the source attached an **Excavation report** evidence chip beneath the editor while leaving the student’s text fully learner-authored. A separate learner-written claim was then entered into the large canvas; the source picker did not copy source language into it. This verifies the intended distinction between source selection and AI-generated or pasted content.
+
+The learner-owned claim and attached approved source were saved successfully. The section rail updated from **0 of 5** to **1 of 5**, the active section reported **Revision 1**, and the workspace labelled the saved result **Student-authored**. The redesign therefore preserves the revisioned, source-bound canvas persistence model while reducing persistent interface clutter.
