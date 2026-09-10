@@ -19,16 +19,22 @@
   let learningDocument = $state(null);
   let probes = $state([]);
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
+  let sessionEvents = $state([]);
   let isLoading = $state(true);
-  let isBriefOpen = $state(false);
-  let isQuickPromptOpen = $state(false);
-  let isQuestionDrawerOpen = $state(false);
+
+  // Sidebar and Panel Controls
+  let isSidebarOpen = $state(true);
+  let activeSidebarTab = $state('scope'); // 'scope' | 'sources' | 'outline' | 'trace'
+  let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
   let probeResponse = $state('');
   let probeNotice = $state('');
   let isProbeBusy = $state(false);
+  let sourceSearchQuery = $state('');
   let error = $state('');
   let probeTimer;
+  let editorRef = $state(null);
+
   let currentProbe = $derived(activeProbe());
 
   const QUIET_PERIOD_MS = 5000;
@@ -61,6 +67,19 @@
     if (!activeProbeId && probes[0]) activeProbeId = probes[0].probe_id;
   }
 
+  async function loadSessionEvents() {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`/events/session/${sessionId}`, { headers: sessionHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        sessionEvents = data.events || [];
+      }
+    } catch (err) {
+      console.warn('Loading session events for sidebar trace:', err);
+    }
+  }
+
   async function loadAssignment() {
     const params = routeParams();
     courseId = params.get('course_id') || '';
@@ -85,7 +104,6 @@
       }
     }
 
-    // Auto-discover active assignment across courses if neither assignment_id nor course_id was passed
     if (!assignment && !courseId) {
       try {
         const coursesRes = await fetch('/courses');
@@ -173,6 +191,7 @@
 
     await loadDocument();
     await loadProbes();
+    await loadSessionEvents();
   }
 
   async function syncDocument(patch) {
@@ -210,33 +229,22 @@
       evidenceSummary = result.evidence_summary || evidenceSummary;
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
-        probeNotice = 'A focused Socratic question is ready. It tests this paragraph’s reasoning, not your grade.';
+        probeNotice = 'A Socratic probe is ready. It tests this paragraph’s reasoning.';
+        isTutorPanelOpen = true; // Automatically open tutor panel smoothly when a new probe arrives
       }
+      await loadSessionEvents();
     } catch (err) {
       probeNotice = err.message || 'Your writing is saved. A question could not be checked right now.';
     }
   }
 
-  function toggleQuestions() {
-    if (isQuestionDrawerOpen) {
-      isQuestionDrawerOpen = false;
-    } else {
+  function toggleTutorPanel() {
+    isTutorPanelOpen = !isTutorPanelOpen;
+    if (isTutorPanelOpen) {
       const current = activeProbe();
       if (current) activeProbeId = current.probe_id;
-      isQuestionDrawerOpen = true;
       probeNotice = '';
     }
-  }
-
-  function closeQuestions() {
-    isQuestionDrawerOpen = false;
-  }
-
-  function openQuestions() {
-    const current = activeProbe();
-    if (current) activeProbeId = current.probe_id;
-    isQuestionDrawerOpen = true;
-    probeNotice = '';
   }
 
   async function changeProbe(probeId, action, body = null) {
@@ -253,8 +261,9 @@
       probeNotice = result.message;
       probeResponse = '';
       await loadProbes();
+      await loadSessionEvents();
       activeProbeId = probes[0]?.probe_id || '';
-      if (!probes.length) isQuestionDrawerOpen = false;
+      if (!probes.length) isTutorPanelOpen = false;
     } catch (err) {
       probeNotice = err.message || 'This question could not be updated.';
     } finally {
@@ -271,11 +280,31 @@
     await changeProbe(probe.probe_id, 'responses', { response_text: probeResponse.trim() });
   }
 
+  function insertSourceFromSidebar(source) {
+    if (editorRef?.insertSourceQuote) {
+      editorRef.insertSourceQuote(source);
+    }
+  }
+
+  function addSectionFromSidebar(type) {
+    if (editorRef?.insertWritingFrame) {
+      editorRef.insertWritingFrame(type);
+    }
+  }
+
+  let filteredSources = $derived(
+    (assignment?.grounding_sources || []).filter((s) => {
+      if (!sourceSearchQuery) return true;
+      const q = sourceSearchQuery.toLowerCase();
+      return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
+    })
+  );
+
   onMount(async () => {
     try {
       await loadAssignment();
     } catch (err) {
-      error = err.message || 'The long-form learning workspace could not be initialized.';
+      error = err.message || 'The reasoning workspace could not be initialized.';
     } finally {
       isLoading = false;
     }
@@ -286,9 +315,7 @@
 
 <svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') {
-    if (isQuestionDrawerOpen) isQuestionDrawerOpen = false;
-    if (isBriefOpen) isBriefOpen = false;
-    if (isQuickPromptOpen) isQuickPromptOpen = false;
+    if (isTutorPanelOpen) isTutorPanelOpen = false;
   }
 }} />
 
@@ -324,295 +351,438 @@
     </div>
   </main>
 {:else}
-  <main class="document-workspace">
-    <!-- Top Assignment Bar -->
-    <header class="assignment-bar">
-      <div class="assignment-identity">
-        <span class="eyebrow">Reasoning Canvas</span>
-        <h1>{assignment.title || 'Reasoning Assignment'}</h1>
-        <span class="document-type">Claim–Evidence–Reasoning</span>
+  <div class="workspace-viewport">
+    <!-- Top Control Bar -->
+    <header class="workspace-topbar">
+      <div class="topbar-left">
+        <button 
+          class="sidebar-toggle-btn" 
+          class:active={isSidebarOpen}
+          onclick={() => isSidebarOpen = !isSidebarOpen}
+          title="Toggle Navigation & Learning Context Sidebar"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          <span>{isSidebarOpen ? 'Hide Sidebar' : 'Sidebar'}</span>
+        </button>
+
+        <div class="assignment-headline">
+          <span class="eyebrow">Reasoning Milestone</span>
+          <h1>{assignment.title || 'Reasoning Assignment'}</h1>
+        </div>
       </div>
 
-      <div class="assignment-actions">
-        <button class="quiet-control" onclick={() => isQuickPromptOpen = !isQuickPromptOpen}>
-          {isQuickPromptOpen ? 'Hide Prompt ▲' : 'Prompt & Sources ▼'}
+      <div class="topbar-right">
+        <button 
+          class="tutor-toggle-btn" 
+          class:active={isTutorPanelOpen}
+          onclick={toggleTutorPanel}
+          title="Toggle Socratic Inquiry & Bounded Probes"
+        >
+          <span class="probe-dot" class:has-probes={probes.length > 0}></span>
+          <span>Socratic Probes</span>
+          {#if probes.length > 0}
+            <span class="probe-count-pill">{probes.length}</span>
+          {/if}
         </button>
-        <button class="quiet-control" onclick={() => isBriefOpen = true}>
-          Full Brief
-        </button>
-
-        {#if probes.length}
-          <button class="question-control" onclick={toggleQuestions} aria-label={`Toggle ${probes.length} evidence question${probes.length === 1 ? '' : 's'}`}>
-            Socratic Probes <span>{probes.length}</span>
-          </button>
-        {/if}
-
-        <a class="trace-control" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>
-          Trace ↗
-        </a>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
     </header>
 
-    <!-- Collapsible Quick Prompt & Sources Accordion -->
-    {#if isQuickPromptOpen}
-      <section class="quick-prompt-banner">
-        <div class="prompt-col">
-          <span class="banner-tag">Assignment Prompt</span>
-          <p class="prompt-text">{assignment.prompt}</p>
-        </div>
-        {#if assignment.grounding_sources?.length}
-          <div class="sources-col">
-            <span class="banner-tag">Approved Evidence Sources</span>
-            <div class="source-chips">
-              {#each assignment.grounding_sources as source}
-                <div class="source-chip" title={source.excerpt || ''}>
-                  📜 {source.title || 'Course Material'}
-                </div>
-              {/each}
-            </div>
+    <!-- 3-Zone Workspace Layout Container -->
+    <div class="workspace-grid" class:sidebar-closed={!isSidebarOpen} class:tutor-open={isTutorPanelOpen}>
+      
+      <!-- ZONE 1: LEFT MULTI-TAB SIDEBAR -->
+      {#if isSidebarOpen}
+        <aside class="workspace-sidebar" aria-label="Learning Materials and Navigation Sidebar">
+          <!-- Sidebar Tabs Header -->
+          <div class="sidebar-tab-strip" role="tablist">
+            <button 
+              class="sidebar-tab" 
+              class:active={activeSidebarTab === 'scope'}
+              onclick={() => activeSidebarTab = 'scope'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'scope'}
+            >
+              <span class="tab-icon">📋</span>
+              <span class="tab-label">Scope</span>
+            </button>
+
+            <button 
+              class="sidebar-tab" 
+              class:active={activeSidebarTab === 'sources'}
+              onclick={() => activeSidebarTab = 'sources'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'sources'}
+            >
+              <span class="tab-icon">📚</span>
+              <span class="tab-label">Sources ({assignment.grounding_sources?.length || 0})</span>
+            </button>
+
+            <button 
+              class="sidebar-tab" 
+              class:active={activeSidebarTab === 'outline'}
+              onclick={() => activeSidebarTab = 'outline'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'outline'}
+            >
+              <span class="tab-icon">📑</span>
+              <span class="tab-label">Outline</span>
+            </button>
+
+            <button 
+              class="sidebar-tab" 
+              class:active={activeSidebarTab === 'trace'}
+              onclick={() => activeSidebarTab = 'trace'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'trace'}
+            >
+              <span class="tab-icon">⏱️</span>
+              <span class="tab-label">Trace</span>
+            </button>
           </div>
-        {/if}
-      </section>
-    {/if}
 
-    {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-    {#if probeNotice && !isQuestionDrawerOpen}
-      <button class="probe-notice" onclick={openQuestions}>
-        💡 {probeNotice}
-      </button>
-    {/if}
+          <!-- Sidebar Tab Content Area -->
+          <div class="sidebar-tab-body">
+            <!-- TAB 1: SCOPE & BRIEF -->
+            {#if activeSidebarTab === 'scope'}
+              <div class="tab-panel scope-panel">
+                <div class="section-card">
+                  <span class="card-eyebrow">Assignment Task</span>
+                  <p class="prompt-text">{assignment.prompt}</p>
+                </div>
 
-    <!-- Long-Form Document Editor -->
-    {#if learningDocument}
-      <LongFormDocumentEditor
-        {learningDocument}
-        {assignment}
-        disabled={sessionStatus !== 'active'}
-        onSync={syncDocument}
-        onSynced={scheduleProbeEvaluation}
-        onOpenQuestions={toggleQuestions}
-        probeCount={probes.length}
-      />
-    {/if}
+                <div class="section-card">
+                  <span class="card-eyebrow">Target Knowledge Components</span>
+                  <div class="kc-pills">
+                    {#each assignment.target_kcs || [] as kc}
+                      <span class="kc-pill">{kc}</span>
+                    {:else}
+                      <p class="empty-text">No target KCs specified.</p>
+                    {/each}
+                  </div>
+                </div>
 
-    <!-- Backdrop for Question Drawer -->
-    {#if isQuestionDrawerOpen}
-      <div class="drawer-backdrop" onclick={closeQuestions} aria-hidden="true"></div>
-    {/if}
+                <div class="section-card cert-card">
+                  <span class="card-eyebrow">Reasoning Standard</span>
+                  <p class="cert-text">
+                    Ground every claim in verified source evidence. AI is a Socratic examiner that questions your reasoning—it will not draft answers or grade work.
+                  </p>
+                </div>
+              </div>
 
-    <!-- Socratic Questions Side Drawer -->
-    <aside class:open={isQuestionDrawerOpen} class="question-drawer" aria-label="Evidence and questions" aria-hidden={!isQuestionDrawerOpen}>
-      <header>
-        <div>
-          <span class="eyebrow">Socratic Inquiry</span>
-          <h2>Evidence & Probes</h2>
-        </div>
-        <button class="close-btn" onclick={closeQuestions} aria-label="Close evidence questions" title="Close Panel (Esc)">✕</button>
-      </header>
+            <!-- TAB 2: LEARNING MATERIALS & APPROVED SOURCES -->
+            {:else if activeSidebarTab === 'sources'}
+              <div class="tab-panel sources-panel">
+                <div class="source-search-box">
+                  <input 
+                    type="text" 
+                    placeholder="Search approved course evidence..."
+                    bind:value={sourceSearchQuery}
+                    class="sidebar-search-input"
+                  />
+                </div>
 
-      {#if currentProbe}
-        <div class="question-context">
-          <span>{currentProbe.section_label || 'Active paragraph'}</span>
-          <strong>{currentProbe.focus_type.replace(/_/g, ' ')}</strong>
-        </div>
-        <p class="question-copy">{currentProbe.question}</p>
-        <div class="evidence-explainer">
-          <p>This question tests the causal reasoning in your saved paragraph. Your response is captured as student-authored evidence for your instructor to review.</p>
-        </div>
+                <div class="sources-stream">
+                  {#each filteredSources as source}
+                    <div class="source-evidence-card">
+                      <div class="source-top">
+                        <span class="source-tag">Primary Source</span>
+                        <h6>{source.title || 'Course Material'}</h6>
+                      </div>
+                      <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
+                      <div class="source-bottom">
+                        <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
+                          <span>+ Cite in Document</span>
+                        </button>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="empty-state">
+                      <p>No primary sources match your query.</p>
+                    </div>
+                  {/each}
+                </div>
+              </div>
 
-        <label for="probe-response">Your Reasoning Explanation</label>
-        <textarea 
-          id="probe-response" 
-          bind:value={probeResponse} 
-          disabled={isProbeBusy} 
-          placeholder="Explain your causal reasoning in your own words. This is preserved as distinct student evidence."
-        ></textarea>
+            <!-- TAB 3: OUTLINE & SECTIONS -->
+            {:else if activeSidebarTab === 'outline'}
+              <div class="tab-panel outline-panel">
+                <div class="outline-intro">
+                  <span class="card-eyebrow">Document Structure</span>
+                  <p>Structured sections guide clear Claim–Evidence–Reasoning development.</p>
+                </div>
 
-        {#if probeNotice}<p class="probe-message" role="status">{probeNotice}</p>{/if}
+                <div class="scaffold-presets">
+                  <span class="card-eyebrow">Add CER Section</span>
+                  <div class="preset-grid">
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('claim')}>
+                      <span>🎯 Working Claim</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('evidence')}>
+                      <span>📜 Source Observations</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reasoning')}>
+                      <span>⚡ Causal Mechanism</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('alternative')}>
+                      <span>🔄 Alternative Explanation</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reflection')}>
+                      <span>🔍 Revision Reflection</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-        <div class="question-actions">
-          <button class="primary-question-action" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
-            {isProbeBusy ? 'Saving…' : 'Save Response (Evidence)'}
-          </button>
-          <button class="secondary-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
-            Later
-          </button>
-          <button class="dismiss-btn" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>
-            Dismiss
-          </button>
-        </div>
-      {:else}
-        <div class="empty-questions">
-          <h3>No Open Questions</h3>
-          <p>Continue writing. When a saved paragraph contains reasoning worth testing, a targeted Socratic probe will appear here without interrupting your work.</p>
-          {#if evidenceSummary.evidence_submitted}
-            <span class="evidence-submitted-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
-          {/if}
-        </div>
+            <!-- TAB 4: REASONING TRACE & SESSIONS -->
+            {:else if activeSidebarTab === 'trace'}
+              <div class="tab-panel trace-panel">
+                <div class="trace-header">
+                  <div>
+                    <span class="card-eyebrow">Session Audit Stream</span>
+                    <span class="trace-count">{sessionEvents.length} recorded events</span>
+                  </div>
+                  <a class="deep-trace-link" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>
+                    Full Trace ↗
+                  </a>
+                </div>
+
+                <div class="trace-timeline">
+                  {#each sessionEvents as ev}
+                    <div class="trace-node">
+                      <div class="node-dot"></div>
+                      <div class="node-content">
+                        <span class="node-type">{ev.event_type.replace(/_/g, ' ')}</span>
+                        <span class="node-time">{new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="empty-state">
+                      <p>No actions logged yet. Edits and probes will stream live here.</p>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        </aside>
       {/if}
 
-      <div class="drawer-footer">
-        <button class="return-canvas-btn" onclick={closeQuestions}>✕ Close Panel (Esc)</button>
-      </div>
-    </aside>
-  </main>
+      <!-- ZONE 2: CENTER REASONING CANVAS -->
+      <main class="canvas-main-area">
+        {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+        {#if probeNotice && !isTutorPanelOpen}
+          <button class="probe-alert-bar" onclick={toggleTutorPanel}>
+            💡 {probeNotice} (Click to open Socratic panel)
+          </button>
+        {/if}
 
-  <!-- Full Assignment Brief Modal -->
-  {#if isBriefOpen}
-    <div class="brief-overlay" role="presentation" onclick={() => isBriefOpen = false}>
-      <dialog class="brief-dialog" open aria-label="Assignment brief" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') isBriefOpen = false; }}>
-        <header>
-          <div>
-            <div class="eyebrow">Assignment Specification</div>
-            <h2>{assignment.title || 'Reasoning Assignment'}</h2>
-          </div>
-          <button class="close-btn" onclick={() => isBriefOpen = false} aria-label="Close assignment brief">✕</button>
-        </header>
+        {#if learningDocument}
+          <LongFormDocumentEditor
+            bind:this={editorRef}
+            {learningDocument}
+            {assignment}
+            disabled={sessionStatus !== 'active'}
+            onSync={syncDocument}
+            onSynced={scheduleProbeEvaluation}
+            onOpenQuestions={toggleTutorPanel}
+            probeCount={probes.length}
+          />
+        {/if}
+      </main>
 
-        <div class="brief-content">
-          <div class="brief-section">
-            <h3>Prompt & Task</h3>
-            <p class="brief-prompt">{assignment.prompt}</p>
-          </div>
-
-          <div class="brief-grid">
-            <div class="brief-card">
-              <h3>Target Knowledge Components</h3>
-              <div class="kc-list">
-                {#each assignment.target_kcs || [] as kc}
-                  <code class="kc-tag">{kc}</code>
-                {:else}
-                  <p class="empty-text">No target KCs specified.</p>
-                {/each}
-              </div>
+      <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout, below topbar) -->
+      {#if isTutorPanelOpen}
+        <aside class="socratic-tutor-column" aria-label="Socratic Reasoning and Evidence Panel">
+          <header class="tutor-header">
+            <div>
+              <span class="eyebrow">Socratic Inquiry</span>
+              <h3>Evidence & Probes</h3>
             </div>
+            <button class="close-panel-btn" onclick={() => isTutorPanelOpen = false} title="Close Panel (Esc)">✕</button>
+          </header>
 
-            <div class="brief-card">
-              <h3>Approved Course Sources ({assignment.grounding_sources?.length || 0})</h3>
-              <div class="sources-list-mini">
-                {#each assignment.grounding_sources || [] as source}
-                  <div class="source-item-mini">
-                    <strong>📜 {source.title || 'Course Evidence'}</strong>
-                    <span>{source.excerpt || ''}</span>
-                  </div>
-                {:else}
-                  <p class="empty-text">No primary source excerpts attached.</p>
-                {/each}
+          <div class="tutor-body">
+            {#if currentProbe}
+              <div class="probe-card">
+                <div class="probe-meta">
+                  <span class="section-tag">{currentProbe.section_label || 'Active paragraph'}</span>
+                  <span class="focus-pill">{currentProbe.focus_type.replace(/_/g, ' ')}</span>
+                </div>
+
+                <p class="probe-question">{currentProbe.question}</p>
+
+                <div class="probe-pedagogy-tip">
+                  <p>This question tests the causal reasoning in your saved paragraph. Your answer is captured as student evidence for evaluation.</p>
+                </div>
+
+                <label for="probe-input" class="probe-input-label">Your Reasoning Explanation</label>
+                <textarea 
+                  id="probe-input"
+                  bind:value={probeResponse}
+                  disabled={isProbeBusy}
+                  placeholder="Explain your causal reasoning in your own words. This is preserved as distinct student evidence."
+                  class="probe-textarea"
+                ></textarea>
+
+                {#if probeNotice}<p class="probe-status-msg" role="status">{probeNotice}</p>{/if}
+
+                <div class="probe-actions">
+                  <button class="save-evidence-btn" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
+                    {isProbeBusy ? 'Saving…' : 'Save Response (Evidence)'}
+                  </button>
+                  <button class="defer-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
+                    Later
+                  </button>
+                  <button class="dismiss-btn" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>
+                    Dismiss
+                  </button>
+                </div>
               </div>
-            </div>
+            {:else}
+              <div class="empty-probe-state">
+                <h4>No Pending Probes</h4>
+                <p>Continue writing in your document. When a paragraph contains reasoning worth testing, a targeted Socratic probe will appear here.</p>
+                {#if evidenceSummary.evidence_submitted}
+                  <span class="evidence-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
+                {/if}
+              </div>
+            {/if}
           </div>
-        </div>
+        </aside>
+      {/if}
 
-        <footer>
-          <span>Socratic questions test understanding and capture reviewable evidence; AI never writes answers or grades.</span>
-          <button class="btn btn-primary" onclick={() => isBriefOpen = false}>Return to Canvas</button>
-        </footer>
-      </dialog>
     </div>
-  {/if}
+  </div>
 {/if}
 
 <style>
-  .document-workspace {
-    background: var(--color-obsidian);
-    color: var(--color-slate-bright);
-    min-height: calc(100vh - 56px);
-    padding: 0 clamp(16px, 4vw, 48px) 60px;
-    transition: background 0.2s ease;
-  }
-
-  .assignment-bar {
-    align-items: center;
-    border-bottom: 1px solid var(--color-graphite-border);
-    display: flex;
-    gap: 16px;
-    justify-content: space-between;
-    min-height: 72px;
-    padding: 12px 0;
-  }
-
-  .assignment-identity {
+  .workspace-viewport {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    height: calc(100vh - 56px);
+    background: var(--color-obsidian);
+    overflow: hidden;
+  }
+
+  /* Top Control Bar */
+  .workspace-topbar {
+    background: var(--color-graphite);
+    border-bottom: 1px solid var(--color-graphite-border);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 52px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .sidebar-toggle-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sidebar-toggle-btn:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+  }
+
+  .sidebar-toggle-btn.active {
+    background: rgba(217, 119, 6, 0.12);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  .assignment-headline {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
   }
 
   .eyebrow {
-    color: var(--color-horizon-blue);
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
-    letter-spacing: 0.6px;
     text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--color-horizon-blue);
   }
 
-  .assignment-identity h1 {
-    color: var(--color-heading);
-    font-family: var(--font-brand);
-    font-size: 20px;
-    font-weight: 700;
+  .assignment-headline h1 {
     margin: 0;
+    font-family: var(--font-brand);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-heading);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .document-type {
-    color: var(--color-slate-muted);
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .assignment-actions {
-    align-items: center;
+  .topbar-right {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
   }
 
-  .quiet-control, .trace-control {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-light);
-    cursor: pointer;
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 6px 11px;
-    text-decoration: none;
-    transition: all 0.15s ease;
-  }
-
-  .quiet-control:hover, .trace-control:hover {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
-    border-color: var(--color-slate-subtle);
-  }
-
-  .question-control {
+  .tutor-toggle-btn {
     background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.35);
+    border: 1px solid rgba(139, 92, 246, 0.3);
     border-radius: var(--radius-sm);
     color: #8b5cf6;
-    cursor: pointer;
-    font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 700;
     padding: 6px 11px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .question-control span {
+  .tutor-toggle-btn:hover, .tutor-toggle-btn.active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+  }
+
+  .probe-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #8b5cf6;
+  }
+
+  .probe-dot.has-probes {
+    animation: pulseGlow 2s infinite;
+  }
+
+  .probe-count-pill {
     background: #8b5cf6;
     color: #fff;
     border-radius: 99px;
     padding: 1px 6px;
     font-size: 10px;
+    font-weight: 800;
   }
 
   .session-badge {
@@ -622,66 +792,349 @@
     color: var(--color-signal-green);
     font-size: 10px;
     font-weight: 700;
-    padding: 4px 10px;
+    padding: 3px 9px;
     text-transform: capitalize;
   }
 
   .session-badge.submitted {
     background: var(--color-amber-bg);
-    border-color: rgba(217, 119, 6, 0.25);
     color: var(--color-amber);
+    border-color: rgba(217, 119, 6, 0.25);
   }
 
-  /* Quick Prompt Banner */
-  .quick-prompt-banner {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 16px;
-    margin-top: 14px;
+  /* Main 3-Zone Workspace Grid */
+  .workspace-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    box-shadow: var(--shadow-sm);
-    animation: slideDown 0.15s ease-out;
+    grid-template-columns: 320px 1fr;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    transition: all 0.2s ease;
   }
 
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
+  .workspace-grid.sidebar-closed {
+    grid-template-columns: 0px 1fr;
   }
 
-  .banner-tag {
+  .workspace-grid.tutor-open {
+    grid-template-columns: 320px 1fr 380px;
+  }
+
+  .workspace-grid.sidebar-closed.tutor-open {
+    grid-template-columns: 0px 1fr 380px;
+  }
+
+  /* ZONE 1: LEFT SIDEBAR */
+  .workspace-sidebar {
+    background: var(--color-graphite);
+    border-right: 1px solid var(--color-graphite-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 5;
+  }
+
+  .sidebar-tab-strip {
+    display: flex;
+    border-bottom: 1px solid var(--color-graphite-border);
+    background: var(--color-bone-muted);
+    padding: 4px 6px 0;
+    gap: 2px;
+  }
+
+  .sidebar-tab {
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-slate-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.12s ease;
+  }
+
+  .sidebar-tab:hover {
+    color: var(--color-heading);
+    background: var(--color-graphite-hover);
+  }
+
+  .sidebar-tab.active {
+    background: var(--color-graphite);
+    border-color: var(--color-graphite-border);
+    color: var(--color-heading);
+    font-weight: 700;
+  }
+
+  .tab-icon { font-size: 13px; }
+
+  .sidebar-tab-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .tab-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .section-card {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card-eyebrow {
     font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--color-horizon-blue);
-    display: block;
-    margin-bottom: 6px;
+    color: var(--color-slate-muted);
   }
 
   .prompt-text {
     margin: 0;
-    font-size: 13px;
-    line-height: 1.6;
+    font-size: 12px;
+    line-height: 1.55;
     color: var(--color-slate-bright);
   }
 
-  .source-chips {
+  .kc-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
   }
 
-  .source-chip {
+  .kc-pill {
     background: var(--color-bone-muted);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-xs);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-horizon-blue);
+    padding: 2px 6px;
+  }
+
+  .cert-card {
+    background: var(--color-bone-muted);
+    border-left: 3px solid var(--color-horizon-blue);
+  }
+
+  .cert-text {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+  }
+
+  /* Sources Panel */
+  .sidebar-search-input {
+    width: 100%;
+    background: var(--input-bg, var(--color-graphite));
+    border: 1px solid var(--input-border, var(--color-graphite-border));
+    border-radius: var(--radius-xs);
+    padding: 6px 10px;
     font-size: 11px;
     color: var(--color-slate-bright);
+    outline: none;
+    box-sizing: border-box;
+  }
+  .sidebar-search-input:focus {
+    border-color: var(--color-aurora);
+  }
+
+  .sources-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .source-evidence-card {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .source-top {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .source-tag {
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: rgba(2, 132, 199, 0.1);
+    color: var(--color-aurora);
+    padding: 1px 4px;
+    border-radius: 99px;
+  }
+
+  .source-top h6 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .source-body {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+    background: var(--color-bone-muted);
+    border-left: 2px solid var(--color-aurora);
+    padding: 6px 8px;
+    font-style: italic;
+  }
+
+  .cite-action-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-aurora);
+    font-size: 10px;
+    font-weight: 700;
     padding: 4px 8px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .cite-action-btn:hover {
+    background: var(--color-aurora);
+    color: #fff;
+    border-color: var(--color-aurora);
+  }
+
+  /* Outline Presets */
+  .preset-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .preset-btn {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
     font-weight: 600;
+    color: var(--color-slate-bright);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .preset-btn:hover {
+    background: var(--color-graphite-hover);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  /* Trace Timeline */
+  .trace-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .trace-count {
+    font-size: 10px;
+    color: var(--color-slate-muted);
+    display: block;
+  }
+
+  .deep-trace-link {
+    font-size: 11px;
+    color: var(--color-horizon-blue);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .deep-trace-link:hover { text-decoration: underline; }
+
+  .trace-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .trace-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .node-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-horizon-blue);
+  }
+
+  .node-content {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 11px;
+  }
+
+  .node-type {
+    color: var(--color-heading);
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .node-time {
+    color: var(--color-slate-subtle);
+    font-size: 10px;
+  }
+
+  /* ZONE 2: CENTER CANVAS MAIN AREA */
+  .canvas-main-area {
+    overflow-y: auto;
+    padding: 20px clamp(16px, 3vw, 40px) 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .probe-alert-bar {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-sm);
+    color: #8b5cf6;
+    font: 600 12px var(--font-ui);
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    max-width: 1060px;
+    margin: 0 auto;
+  }
+  .probe-alert-bar:hover {
+    background: rgba(139, 92, 246, 0.18);
   }
 
   .error-banner {
@@ -690,447 +1143,273 @@
     border-radius: var(--radius-sm);
     color: var(--color-rose);
     font-size: 12px;
-    margin: 16px 0;
     padding: 10px 14px;
-  }
-
-  .probe-notice {
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: var(--radius-sm);
-    color: #8b5cf6;
-    cursor: pointer;
-    display: block;
-    font: 600 13px var(--font-ui);
-    margin: 14px 0 -4px;
-    padding: 10px 14px;
-    text-align: left;
+    max-width: 1060px;
+    margin: 0 auto;
     width: 100%;
-    transition: all 0.15s ease;
   }
 
-  .probe-notice:hover {
-    background: rgba(139, 92, 246, 0.16);
-  }
-
-  /* Socratic Question Drawer */
-  .question-drawer {
-    background: var(--color-graphite-card, var(--color-graphite));
+  /* ZONE 3: RIGHT SOCRATIC TUTOR PANEL */
+  .socratic-tutor-column {
+    background: var(--color-graphite);
     border-left: 1px solid var(--color-graphite-border);
-    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    height: 100%;
-    padding: 24px;
-    position: fixed;
-    right: 0;
-    top: 0;
-    transform: translateX(105%);
-    transition: transform 0.24s ease;
-    visibility: hidden;
-    width: min(440px, 100vw);
-    z-index: 70;
-    box-sizing: border-box;
     overflow-y: auto;
+    z-index: 5;
+    animation: slideInRight 0.2s ease-out;
   }
 
-  .question-drawer.open {
-    transform: translateX(0);
-    visibility: visible;
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
   }
 
-  .question-drawer header {
-    align-items: flex-start;
+  .tutor-header {
+    padding: 12px 16px;
     border-bottom: 1px solid var(--color-graphite-border);
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    padding-bottom: 14px;
+    background: var(--color-bone-muted);
   }
 
-  .question-drawer h2 {
-    color: var(--color-heading);
+  .tutor-header h3 {
+    margin: 2px 0 0;
     font-family: var(--font-brand);
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
-    margin: 4px 0 0;
+    color: var(--color-heading);
   }
 
-  .close-btn {
+  .close-panel-btn {
     background: transparent;
     border: none;
     color: var(--color-slate-subtle);
-    font-size: 16px;
+    font-size: 15px;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 2px 6px;
     border-radius: var(--radius-xs);
   }
-  .close-btn:hover {
+  .close-panel-btn:hover {
     color: var(--color-heading);
     background: var(--color-graphite-hover);
   }
 
-  .question-context {
+  .tutor-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .probe-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .probe-meta {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .question-context span {
+  .section-tag {
+    font-size: 11px;
     color: var(--color-slate-muted);
-    font-size: 12px;
   }
 
-  .question-context strong {
+  .focus-pill {
     background: rgba(139, 92, 246, 0.12);
     border: 1px solid rgba(139, 92, 246, 0.28);
     border-radius: 99px;
     color: #8b5cf6;
-    font-size: 10px;
-    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 7px;
     text-transform: capitalize;
   }
 
-  .question-copy {
+  .probe-question {
     color: var(--color-heading);
     font-family: var(--font-brand);
-    font-size: 17px;
+    font-size: 15px;
+    font-weight: 600;
     line-height: 1.5;
     margin: 0;
-    font-weight: 600;
   }
 
-  .evidence-explainer {
+  .probe-pedagogy-tip {
     background: var(--color-bone-muted);
-    border-left: 3px solid var(--color-aurora);
-    padding: 10px 12px;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border-left: 2px solid var(--color-aurora);
+    padding: 8px 10px;
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   }
 
-  .evidence-explainer p {
+  .probe-pedagogy-tip p {
     margin: 0;
     font-size: 11px;
+    line-height: 1.4;
     color: var(--color-slate-light);
-    line-height: 1.45;
   }
 
-  .question-drawer label {
-    color: var(--color-heading);
-    font-size: 12px;
+  .probe-input-label {
+    font-size: 11px;
     font-weight: 700;
+    color: var(--color-heading);
     margin-top: 4px;
   }
 
-  .question-drawer textarea {
+  .probe-textarea {
+    width: 100%;
     background: var(--input-bg, var(--color-graphite));
     border: 1px solid var(--input-border, var(--color-graphite-border));
     border-radius: var(--radius-sm);
     color: var(--color-slate-bright);
-    font: 14px/1.55 var(--font-ui);
-    min-height: 140px;
+    font: 13px/1.55 var(--font-ui);
+    min-height: 120px;
     outline: none;
-    padding: 12px;
+    padding: 10px;
     resize: vertical;
     box-sizing: border-box;
-    width: 100%;
   }
-
-  .question-drawer textarea:focus {
+  .probe-textarea:focus {
     border-color: var(--color-horizon-blue);
     box-shadow: 0 0 0 2px var(--color-horizon-glow);
   }
 
-  .probe-message {
+  .probe-status-msg {
+    margin: 0;
+    font-size: 11px;
     color: var(--color-horizon-blue);
-    font-size: 12px;
-    line-height: 1.4;
-    margin: 0;
   }
 
-  .question-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .primary-question-action {
-    background: var(--color-horizon-blue);
-    border: 1px solid var(--color-horizon-bright);
-    border-radius: var(--radius-sm);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 8px 12px;
-    cursor: pointer;
-    flex: 1;
-  }
-  .primary-question-action:hover:not(:disabled) {
-    background: var(--color-horizon-bright);
-  }
-
-  .secondary-btn {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-light);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 8px 12px;
-    cursor: pointer;
-  }
-  .secondary-btn:hover:not(:disabled) {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
-  }
-
-  .dismiss-btn {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--color-slate-subtle);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 8px 10px;
-    cursor: pointer;
-  }
-  .dismiss-btn:hover:not(:disabled) {
-    color: var(--color-amber);
-  }
-
-  .empty-questions {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 18px;
-    text-align: center;
-  }
-
-  .empty-questions h3 {
-    color: var(--color-heading);
-    font-size: 15px;
-    margin: 0 0 6px;
-  }
-
-  .empty-questions p {
-    color: var(--color-slate-muted);
-    font-size: 12px;
-    line-height: 1.5;
-    margin: 0;
-  }
-
-  .evidence-submitted-badge {
-    color: var(--color-signal-green);
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
-    margin-top: 12px;
-  }
-
-  .drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(2px);
-    z-index: 69;
-    animation: fadeIn 0.15s ease-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .drawer-footer {
-    margin-top: auto;
-    padding-top: 16px;
-    border-top: 1px solid var(--color-graphite-border);
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .return-canvas-btn {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-light);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 7px 12px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .return-canvas-btn:hover {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
-  }
-
-  /* Brief Modal */
-  .brief-overlay {
-    align-items: center;
-    background: var(--modal-overlay-bg, rgba(25, 28, 33, 0.6));
-    backdrop-filter: blur(4px);
-    display: flex;
-    inset: 0;
-    justify-content: center;
-    padding: 24px;
-    position: fixed;
-    z-index: 80;
-  }
-
-  .brief-dialog {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    max-width: 800px;
-    padding: 24px;
-    width: min(100%, 800px);
-    color: var(--color-slate-bright);
-  }
-
-  .brief-dialog header {
-    align-items: flex-start;
-    border-bottom: 1px solid var(--color-graphite-border);
-    display: flex;
-    justify-content: space-between;
-    padding-bottom: 14px;
-  }
-
-  .brief-dialog h2 {
-    color: var(--color-heading);
-    font-size: 20px;
-    margin: 4px 0 0;
-  }
-
-  .brief-content {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin: 18px 0;
-    max-height: 60vh;
-    overflow-y: auto;
-  }
-
-  .brief-prompt {
-    font-size: 14px;
-    line-height: 1.6;
-    margin: 0;
-  }
-
-  .brief-grid {
-    display: grid;
-    gap: 14px;
-    grid-template-columns: 1fr 1.2fr;
-  }
-
-  .brief-card {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .brief-card h3 {
-    margin: 0;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-slate-muted);
-  }
-
-  .kc-list {
+  .probe-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .kc-tag {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    padding: 2px 6px;
+  .save-evidence-btn {
+    background: var(--color-horizon-blue);
+    border: 1px solid var(--color-horizon-bright);
     border-radius: var(--radius-xs);
+    color: #fff;
     font-size: 11px;
-    color: var(--color-horizon-blue);
+    font-weight: 700;
+    padding: 7px 11px;
+    cursor: pointer;
+    flex: 1;
+  }
+  .save-evidence-btn:hover:not(:disabled) {
+    background: var(--color-horizon-bright);
   }
 
-  .sources-list-mini {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  .defer-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-slate-light);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 7px 10px;
+    cursor: pointer;
   }
 
-  .source-item-mini strong {
-    display: block;
-    font-size: 12px;
+  .dismiss-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-slate-subtle);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 7px 8px;
+    cursor: pointer;
+  }
+  .dismiss-btn:hover { color: var(--color-amber); }
+
+  .empty-probe-state {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .empty-probe-state h4 {
+    margin: 0 0 6px;
+    font-size: 14px;
     color: var(--color-heading);
   }
 
-  .source-item-mini span {
+  .empty-probe-state p {
+    margin: 0;
     font-size: 11px;
+    line-height: 1.45;
     color: var(--color-slate-muted);
-    line-height: 1.4;
-    display: block;
   }
 
-  .brief-dialog footer {
-    align-items: center;
-    border-top: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-muted);
-    display: flex;
-    font-size: 11px;
-    gap: 14px;
-    justify-content: space-between;
-    padding-top: 16px;
+  .evidence-badge {
+    display: inline-block;
+    color: var(--color-signal-green);
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 10px;
   }
 
-  /* Empty / Loading Views */
+  .empty-state {
+    text-align: center;
+    padding: 16px 0;
+    color: var(--color-slate-muted);
+    font-size: 11px;
+  }
+
   .loading-view, .empty-view {
-    align-items: center;
-    background: var(--color-obsidian);
-    color: var(--color-slate-light);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    align-items: center;
     justify-content: center;
     min-height: calc(100vh - 56px);
+    background: var(--color-obsidian);
+    color: var(--color-slate-light);
     padding: 24px;
     text-align: center;
   }
 
-  .empty-view h1 {
-    color: var(--color-heading);
-    font-family: var(--font-brand);
-    font-size: 24px;
-    margin: 0;
-  }
-
-  .empty-view p {
-    color: var(--color-slate-light);
-    max-width: 520px;
-    line-height: 1.5;
-    margin: 0;
-  }
-
   .spinner {
-    animation: spin 0.8s linear infinite;
-    border: 3px solid rgba(217, 119, 6, 0.2);
-    border-radius: 50%;
-    border-top-color: var(--color-horizon-blue);
-    height: 32px;
     width: 32px;
+    height: 32px;
+    border: 3px solid rgba(217, 119, 6, 0.2);
+    border-top-color: var(--color-horizon-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1024px) {
+    .workspace-grid {
+      grid-template-columns: 280px 1fr;
+    }
+    .workspace-grid.tutor-open {
+      grid-template-columns: 280px 1fr 320px;
+    }
   }
 
-  @media (max-width: 780px) {
-    .document-workspace { padding: 0 14px 40px; }
-    .assignment-bar { align-items: flex-start; flex-direction: column; gap: 10px; }
-    .quick-prompt-banner { grid-template-columns: 1fr; }
-    .brief-grid { grid-template-columns: 1fr; }
-    .question-drawer { width: 100%; }
+  @media (max-width: 800px) {
+    .workspace-grid {
+      grid-template-columns: 1fr;
+    }
+    .workspace-grid.tutor-open {
+      grid-template-columns: 1fr;
+    }
+    .workspace-sidebar {
+      display: none;
+    }
+    .socratic-tutor-column {
+      position: fixed;
+      inset: 52px 0 0 0;
+      z-index: 50;
+    }
   }
 </style>

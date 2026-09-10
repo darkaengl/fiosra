@@ -165,7 +165,7 @@
     documentHeadings = headings;
   }
 
-  function scrollToHeading(pos) {
+  export function scrollToHeading(pos) {
     if (!editor) return;
     editor.chain().focus().setTextSelection(pos).scrollIntoView().run();
   }
@@ -245,7 +245,7 @@
     }
   }
 
-  function addSection(title = 'New Section') {
+  export function addSection(title = 'New Section') {
     if (!editor || disabled) return;
     const sectionId = `section_${Date.now().toString(36)}`;
     editor.chain().focus('end').insertContent([
@@ -271,7 +271,7 @@
     if (mark === 'italic') editor.chain().focus().toggleItalic().run();
   }
 
-  function insertSourceQuote(source) {
+  export function insertSourceQuote(source) {
     if (!editor || disabled) return;
     const title = source.title || 'Course Evidence';
     const excerpt = source.excerpt || '';
@@ -293,7 +293,7 @@
     isSourceDrawerOpen = false;
   }
 
-  function insertWritingFrame(frameType) {
+  export function insertWritingFrame(frameType) {
     if (!editor || disabled) return;
     let title = 'Working Claim';
     let prompt = 'State your clear, defensible provisional claim.';
