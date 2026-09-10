@@ -1,7 +1,7 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 from sqlalchemy import text
@@ -9,6 +9,7 @@ from sqlalchemy import text
 from fiosra.mvp.assignment_designer.distractor_engine import distractor_engine
 from fiosra.mvp.assignment_designer.schemas import (
     ClarifyAndScaffoldRequest,
+    GroundingSource,
     HintRung,
     PublicQuestionSpec,
     QuestionDraftRequest,
@@ -23,59 +24,108 @@ logger = logging.getLogger(__name__)
 
 
 class AssignmentGenerator:
-    """Builds, persists, and publishes answer-isolated assignment specifications."""
+    """Build, persist, and publish answer-isolated assignments with teacher-visible grounding."""
+
+    FALLBACK_KCS: ClassVar[dict[str, list[str]]] = {
+        "history": ["KC_HIST_HISTORICAL_ARGUMENT", "KC_HIST_PRIMARY_SOURCE_ANALYSIS"],
+        "language": ["KC_LANG_CLAIM_CONSTRUCTION", "KC_LANG_EVIDENCE_EVALUATION"],
+    }
+
+    @staticmethod
+    def _deduplicate(values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value for value in values if value))
+
+    @classmethod
+    async def _load_grounding_sources(
+        cls,
+        course_id: UUID | str | None,
+        module_id: UUID | str | None,
+    ) -> list[GroundingSource]:
+        if not course_id:
+            return []
+        source_sql = text("""
+            SELECT chunk_id, title, kc_id, content
+            FROM syllabus_chunks
+            WHERE course_id = CAST(:course_id AS UUID)
+              AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
+            ORDER BY created_at ASC
+            LIMIT 5;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                source_sql,
+                {
+                    "course_id": str(course_id),
+                    "module_id": str(module_id) if module_id else None,
+                },
+            )
+            rows = result.mappings().all()
+        return [
+            GroundingSource(
+                chunk_id=str(row["chunk_id"]),
+                title=row["title"] or "Assigned course material",
+                kc_id=row["kc_id"],
+                excerpt=(row["content"] or "").strip()[:280],
+            )
+            for row in rows
+        ]
 
     @classmethod
     async def generate_scaffolding_plan(cls, req: ClarifyAndScaffoldRequest) -> ScaffoldingPlan:
-        """Generate a four-rung Socratic ladder and NLI-style rubric criteria."""
-        temporal = req.answers.get("Q1_TEMPORAL", "Pre-revolutionary fiscal crisis (1787–1789)")
-        misconception_choice = req.answers.get(
-            "Q2_MISCONCEPTIONS",
-            "Attributing bankruptcy to royal personal luxury rather than sovereign war debt",
-        )
-        evidence_choice = req.answers.get("Q3_EVIDENCE", "Necker's Compte Rendu and sovereign debt tables")
+        """Generate an answer-blind scaffold constrained to the selected course corpus when present."""
+        grounding_sources = await cls._load_grounding_sources(req.course_id, req.module_id)
+        source_titles = ", ".join(source.title for source in grounding_sources[:2])
+        temporal = req.answers.get("Q1_TEMPORAL", "").strip()
+        misconception = req.answers.get("Q2_MISCONCEPTIONS", "").strip()
+        evidence_anchor = req.answers.get("Q3_EVIDENCE", "").strip()
 
-        clarified_prompt = (
-            f"Focusing on {temporal}, analyze the primary structural causes of France's fiscal bankruptcy. "
-            f"Using evidence from {evidence_choice}, evaluate why the crown's debt crisis required "
-            f"convening the Estates-General, and refute the notion that {misconception_choice}."
+        evidence = evidence_anchor or source_titles or "the assigned course materials"
+        scope = temporal or "the setting and boundaries named in the educator's prompt"
+        cognitive_trap = misconception or "moving from an observation to an unsupported broad conclusion"
+        base_prompt = req.raw_prompt.strip()
+        clarification = (
+            f"Work within {scope}. Use {evidence} to distinguish direct observations from justified inferences, "
+            f"and test the risk of {cognitive_trap}."
         )
-        target_kcs = req.target_kcs or [
-            "KC_HIST_FRENCH_DEBT",
-            "KC_HIST_ANCIEN_REGIME",
-            "KC_HIST_ESTATES_GENERAL",
-        ]
+        clarified_prompt = base_prompt if clarification.lower() in base_prompt.lower() else f"{base_prompt}\n\n{clarification}"
+
+        source_kcs = [source.kc_id for source in grounding_sources if source.kc_id]
+        target_kcs = cls._deduplicate(req.target_kcs or source_kcs)
+        if not target_kcs:
+            target_kcs = cls.FALLBACK_KCS.get(req.domain.lower(), ["KC_GENERAL"])
+
+        source_label = source_titles or evidence
+        target_label = target_kcs[0]
         hint_ladder = [
             HintRung(
                 level=0,
                 hint_type="metacognitive",
                 content=(
-                    "Take a look at your explanation: did you focus on individual court personalities, "
-                    "or the broader national financial commitments of the French state?"
+                    "State a provisional claim, then name the observation that most directly supports it. "
+                    "What remains uncertain?"
                 ),
             ),
             HintRung(
                 level=1,
                 hint_type="conceptual",
                 content=(
-                    "By 1788, over half of royal state revenue was spent on debt interest from foreign "
-                    "military conflicts. What does that tell you about the scale of the problem?"
+                    f"Return to {source_label}. Which detail is evidence, and which conclusion would require an inference?"
                 ),
             ),
             HintRung(
                 level=2,
                 hint_type="procedural",
                 content=(
-                    f"Examine {evidence_choice}. Compare expenditures on war debt against palace expenses, "
-                    "then explain the tax immunities held by privileged orders."
+                    f"Write one sentence for the observation, one for the claim it supports, and one for an "
+                    f"alternative explanation. Use the task boundary: {scope}."
                 ),
             ),
             HintRung(
                 level=3,
                 hint_type="worked_analogy",
                 content=(
-                    "Consider a municipality with large infrastructure loans. Even after cutting luxuries, "
-                    "loan interest can cause insolvency unless tax revenue changes. How is that comparable?"
+                    "A map can show that a road connects two places, but it cannot alone prove why the road was built. "
+                    "Apply that distinction between what the source shows and what you infer."
                 ),
             ),
             HintRung(
@@ -87,39 +137,33 @@ class AssignmentGenerator:
         ]
         rubric_rules = [
             {
-                "criterion_id": "rule_structural_debt",
-                "label": "Structural War Debt Identification",
-                "description": (
-                    "Explains that sovereign debt from foreign wars consumed a substantial share "
-                    "of the royal budget."
-                ),
-                "target_kc": "KC_HIST_FRENCH_DEBT",
-                "nli_threshold": 0.85,
+                "criterion_id": "rule_claim_precision",
+                "label": "Bounded claim",
+                "description": "Makes a defensible claim that remains within the task's stated scope.",
+                "target_kc": target_label,
+                "nli_threshold": 0.80,
                 "weight": 2.0,
             },
             {
-                "criterion_id": "rule_tax_immunity",
-                "label": "Fiscal Privilege & Noble Exemption",
-                "description": (
-                    "Identifies that tax burdens fell on the Third Estate while privileged orders "
-                    "held substantial exemptions."
-                ),
-                "target_kc": "KC_HIST_THREE_ESTATES",
-                "nli_threshold": 0.85,
+                "criterion_id": "rule_evidence_reasoning",
+                "label": "Evidence and inference",
+                "description": f"Uses {evidence} and distinguishes direct support from a broader inference.",
+                "target_kc": target_kcs[min(1, len(target_kcs) - 1)],
+                "nli_threshold": 0.80,
                 "weight": 2.0,
             },
             {
-                "criterion_id": "rule_source_citation",
-                "label": "Primary Evidence Citation",
-                "description": f"Grounds claims in references to {evidence_choice}.",
-                "target_kc": "KC_HIST_HISTORICAL_ARGUMENT",
+                "criterion_id": "rule_alternative_explanation",
+                "label": "Reasoning under uncertainty",
+                "description": f"Addresses the risk of {cognitive_trap} by testing an alternative explanation.",
+                "target_kc": target_label,
                 "nli_threshold": 0.80,
                 "weight": 1.0,
             },
         ]
         distractors = await distractor_engine.get_distractors_for_kcs(
             target_kcs,
-            domain=req.domain,
+            domain=req.domain.lower(),
             limit=3,
         )
         return ScaffoldingPlan(
@@ -129,63 +173,75 @@ class AssignmentGenerator:
             hint_ladder=hint_ladder,
             rubric_rules=rubric_rules,
             distractor_traps=distractors,
+            grounding_mode="course_grounded" if grounding_sources else "generic",
+            grounding_sources=grounding_sources,
         )
 
     @classmethod
     async def draft_question(cls, req: QuestionDraftRequest) -> QuestionSpec:
-        """Draft an assignment, lock its reference solution, and persist its public specification."""
+        """Persist an assignment while retaining reference solutions only in the Answer Vault."""
         assignment_id = str(uuid.uuid4())
         question_id = f"Q_{uuid.uuid4().hex[:8].upper()}"
 
+        fallback_plan: ScaffoldingPlan | None = None
         if req.clarified_prompt:
             prompt = req.clarified_prompt
-            target_kcs = req.target_kcs or ["KC_HIST_FRENCH_DEBT", "KC_HIST_ESTATES_GENERAL"]
+            target_kcs = req.target_kcs or []
             hint_ladder = req.hint_ladder
             rubric_criteria = req.rubric_rules
-            if not hint_ladder or not rubric_criteria:
+            grounding_mode = req.grounding_mode
+            grounding_sources = req.grounding_sources
+            if not target_kcs or not hint_ladder or not rubric_criteria:
                 fallback_plan = await cls.generate_scaffolding_plan(
                     ClarifyAndScaffoldRequest(
                         raw_prompt=req.raw_prompt or req.clarified_prompt,
                         domain=req.domain,
                         answers=req.answers or {},
                         target_kcs=target_kcs,
+                        course_id=req.course_id,
+                        module_id=req.module_id,
                     )
                 )
+                target_kcs = target_kcs or fallback_plan.target_kcs
                 hint_ladder = hint_ladder or fallback_plan.hint_ladder
                 rubric_criteria = rubric_criteria or fallback_plan.rubric_rules
-        elif req.raw_prompt and req.answers:
-            plan = await cls.generate_scaffolding_plan(
-                ClarifyAndScaffoldRequest(raw_prompt=req.raw_prompt, domain=req.domain, answers=req.answers)
-            )
-            prompt = plan.clarified_prompt
-            target_kcs = plan.target_kcs
-            hint_ladder = plan.hint_ladder
-            rubric_criteria = plan.rubric_rules
+                if not grounding_sources:
+                    grounding_sources = fallback_plan.grounding_sources
+                    grounding_mode = fallback_plan.grounding_mode
         else:
-            prompt = req.raw_prompt or f"Analyze the key factors of {req.topic} in {req.domain}."
-            plan = await cls.generate_scaffolding_plan(
-                ClarifyAndScaffoldRequest(raw_prompt=prompt, domain=req.domain, answers={})
+            fallback_plan = await cls.generate_scaffolding_plan(
+                ClarifyAndScaffoldRequest(
+                    raw_prompt=req.raw_prompt or f"Develop an evidence-based response about {req.topic}.",
+                    domain=req.domain,
+                    answers=req.answers or {},
+                    target_kcs=req.target_kcs or [],
+                    course_id=req.course_id,
+                    module_id=req.module_id,
+                )
             )
-            target_kcs = req.target_kcs or plan.target_kcs
-            hint_ladder = plan.hint_ladder
-            rubric_criteria = plan.rubric_rules
+            prompt = fallback_plan.clarified_prompt
+            target_kcs = fallback_plan.target_kcs
+            hint_ladder = fallback_plan.hint_ladder
+            rubric_criteria = fallback_plan.rubric_rules
+            grounding_mode = fallback_plan.grounding_mode
+            grounding_sources = fallback_plan.grounding_sources
 
         subproblems = [
             ScaffoldingStep(
                 step_id="step_1",
-                step_prompt="Identify the financial origins of the crown debt.",
+                step_prompt="Identify the source observation or course evidence that bears most directly on your claim.",
                 target_kc=target_kcs[0],
             ),
             ScaffoldingStep(
                 step_id="step_2",
-                step_prompt="Explain how institutional arrangements shaped the response to the crisis.",
+                step_prompt="Explain the inference your evidence supports and name a limit or alternative explanation.",
                 target_kc=target_kcs[min(1, len(target_kcs) - 1)],
             ),
         ]
         reference_solution = req.reference_solution or {
-            "thesis": "France's bankruptcy was structural, driven by war debt interest and noble tax exemptions.",
-            "key_evidence": "Necker's Compte Rendu and war expenditure records",
-            "model_argument": "The crown could not service debt without taxing privileged orders.",
+            "thesis": "A defensible response makes a bounded claim and explains how assigned evidence supports it.",
+            "key_evidence": "Specific details from the teacher-selected source corpus",
+            "model_argument": "The response distinguishes direct observation from inference and tests a plausible alternative.",
         }
         vault_token = answer_vault.lock_solution(
             assignment_id=assignment_id,
@@ -203,10 +259,12 @@ class AssignmentGenerator:
             rubric_criteria=rubric_criteria,
             vault_token=vault_token,
             status="draft",
+            grounding_mode=grounding_mode,
+            grounding_sources=grounding_sources,
         )
         insert_sql = text("""
             INSERT INTO assignments (assignment_id, module_id, title, created_by, spec, created_at)
-            VALUES (:assignment_id, :module_id, :title, :created_by, CAST(:spec AS JSONB), NOW());
+            VALUES (CAST(:assignment_id AS UUID), CAST(:module_id AS UUID), :title, :created_by, CAST(:spec AS JSONB), NOW());
         """)
         async with AsyncSessionLocal() as session:
             await session.execute(
@@ -231,7 +289,7 @@ class AssignmentGenerator:
 
     @classmethod
     async def get_public_assignment(cls, assignment_id: UUID | str) -> PublicQuestionSpec | None:
-        sql = text("SELECT spec FROM assignments WHERE assignment_id = :assignment_id;")
+        sql = text("SELECT spec FROM assignments WHERE assignment_id = CAST(:assignment_id AS UUID);")
         async with AsyncSessionLocal() as session:
             result = await session.execute(sql, {"assignment_id": str(assignment_id)})
             spec = result.scalar()
@@ -250,9 +308,9 @@ class AssignmentGenerator:
             SELECT a.spec
             FROM assignments a
             LEFT JOIN modules m ON a.module_id = m.module_id
-            WHERE (:course_id IS NULL OR m.course_id = CAST(:course_id AS UUID))
-              AND (:module_id IS NULL OR a.module_id = CAST(:module_id AS UUID))
-              AND (:status IS NULL OR a.spec ->> 'status' = :status)
+            WHERE (CAST(:course_id AS UUID) IS NULL OR m.course_id = CAST(:course_id AS UUID))
+              AND (CAST(:module_id AS UUID) IS NULL OR a.module_id = CAST(:module_id AS UUID))
+              AND (CAST(:status AS VARCHAR) IS NULL OR a.spec ->> 'status' = CAST(:status AS VARCHAR))
             ORDER BY a.created_at DESC;
         """)
         async with AsyncSessionLocal() as session:
@@ -273,12 +331,37 @@ class AssignmentGenerator:
         assignment_id: UUID | str,
         module_id: UUID | str | None = None,
     ) -> dict[str, Any]:
-        """Publish an assignment and optionally bind it to a curriculum module."""
+        """Publish an assignment only when its same student-safe projection is retrievable."""
+        readiness_sql = text("""
+            SELECT module_id, spec
+            FROM assignments
+            WHERE assignment_id = CAST(:assignment_id AS UUID);
+        """)
+        async with AsyncSessionLocal() as session:
+            readiness_result = await session.execute(
+                readiness_sql,
+                {"assignment_id": str(assignment_id)},
+            )
+            readiness_row = readiness_result.mappings().first()
+        if not readiness_row:
+            raise ValueError(f"Assignment '{assignment_id}' not found.")
+
+        active_module_id = module_id or readiness_row["module_id"]
+        private_spec = readiness_row["spec"]
+        private_spec = private_spec if isinstance(private_spec, dict) else json.loads(private_spec)
+        if active_module_id and (
+            private_spec.get("grounding_mode") != "course_grounded"
+            or not private_spec.get("grounding_sources")
+        ):
+            raise RuntimeError(
+                "Attach and ground at least one course source before publishing a module assignment."
+            )
+
         update_sql = text("""
             UPDATE assignments
-            SET module_id = COALESCE(:module_id, module_id),
+            SET module_id = COALESCE(CAST(:module_id AS UUID), module_id),
                 spec = jsonb_set(spec, '{status}', '"published"')
-            WHERE assignment_id = :assignment_id
+            WHERE assignment_id = CAST(:assignment_id AS UUID)
             RETURNING assignment_id, module_id, title;
         """)
         async with AsyncSessionLocal() as session:
@@ -293,6 +376,10 @@ class AssignmentGenerator:
             if not row:
                 raise ValueError(f"Assignment '{assignment_id}' not found.")
             await session.commit()
+
+        public_spec = await cls.get_public_assignment(assignment_id)
+        if not public_spec or public_spec.status != "published":
+            raise RuntimeError("The assignment could not be verified through the student-safe publication contract.")
         return {
             "assignment_id": str(row["assignment_id"]),
             "module_id": str(row["module_id"]) if row["module_id"] else None,

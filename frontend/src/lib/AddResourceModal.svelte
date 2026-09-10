@@ -119,9 +119,9 @@
   }
 </script>
 
-<Modal {isOpen} title="📚 Ingest Course Material &amp; Grounding Corpus" width="640px" {onClose}>
+<Modal {isOpen} title="📚 Attach a source to this module" width="640px" {onClose}>
   <div class="modal-description">
-    Attach reading material, primary sources, PDF documents, or external research links to this unit. Content is chunked, embedded into <strong style="color: var(--color-signal-green);">1536-dim pgvector</strong> embeddings, and grounded to Neo4j Knowledge Components.
+    Attach the reading, excerpt, or source students should use. Fiosra records its title, excerpt, source link, and knowledge-component mapping when available so you can review assignment provenance before publishing.
   </div>
 
   <div class="target-module-pill">
@@ -197,7 +197,7 @@
             required
           />
           <div class="upload-hint">
-            pypdf automatically extracts text, parses semantic headings, and embeds into pgvector.
+            Text will be extracted and attached to this module for source-grounded assignment design.
           </div>
         </div>
       </div>
@@ -235,12 +235,12 @@
       </div>
 
       <div class="field-group">
-        <label for="link-summary">Pedagogical Notes &amp; Summary (Used for Vector Embeddings) <span style="color: var(--color-rose);">*</span></label>
+        <label for="link-summary">Excerpt or teaching notes <span style="color: var(--color-rose);">*</span></label>
         <textarea
           id="link-summary"
           rows="4"
           bind:value={linkContent}
-          placeholder="Summarize key architectural, stratigraphical, or chronological insights from this external resource..."
+          placeholder="Add the material students should examine or the source details you want the assignment to cite..."
           required
         ></textarea>
       </div>
@@ -257,7 +257,7 @@
         Cancel
       </button>
       <button type="submit" class="btn btn-primary" disabled={isSubmitting}>
-        <span>{isSubmitting ? '⏳ Embedding into pgvector...' : '🚀 Ingest & Ground Material'}</span>
+        <span>{isSubmitting ? '⏳ Attaching source…' : 'Attach source to module'}</span>
       </button>
     </div>
   </form>

@@ -77,11 +77,19 @@
   }
 
   async function handleDeleteResource(chunkId) {
-    if (!confirm('Remove this grounded reading chunk from the curriculum and pgvector?')) return;
     try {
+      const dependencyResponse = await fetch(`/courses/${currentCourseId}/resources/${chunkId}/dependencies`);
+      const dependencies = dependencyResponse.ok ? await dependencyResponse.json() : [];
+      const impact = dependencies.length
+        ? `\n\nIt is cited by published assignments: ${dependencies.map((item) => item.title).join(', ')}. These tasks must be archived before removal.`
+        : '\n\nNo published assignment currently cites this source.';
+      if (!confirm(`Remove this grounded source? This cannot be undone.${impact}`)) return;
       const res = await fetch(`/courses/${currentCourseId}/resources/${chunkId}`, { method: 'DELETE' });
       if (res.ok || res.status === 204) {
         allResources = allResources.filter((r) => r.chunk_id !== chunkId);
+      } else {
+        const detail = await res.json().catch(() => ({}));
+        alert(detail.detail || 'This source could not be removed.');
       }
     } catch (err) { alert('Failed to delete resource: ' + err.message); }
   }

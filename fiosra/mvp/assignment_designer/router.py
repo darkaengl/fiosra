@@ -37,6 +37,7 @@ async def analyze_assignment_scope(request: ScopeAnalysisRequest) -> AmbiguityDi
         raw_prompt=request.raw_prompt,
         domain=request.domain,
         course_id=request.course_id,
+        module_id=request.module_id,
     )
 
 
@@ -89,3 +90,5 @@ async def publish_assignment(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

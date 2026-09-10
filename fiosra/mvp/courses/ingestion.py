@@ -294,13 +294,45 @@ class SyllabusParser:
         ]
 
     @classmethod
-    async def delete_chunk(cls, chunk_id: UUID | str) -> bool:
-        """
-        Deletes a specific resource or reading chunk by chunk_id.
-        """
-        delete_sql = text("DELETE FROM syllabus_chunks WHERE chunk_id = :chunk_id RETURNING chunk_id;")
+    async def published_assignment_dependencies(
+        cls,
+        course_id: UUID | str,
+        chunk_id: UUID | str,
+    ) -> list[dict[str, str]]:
+        """Return published tasks that cite a source chunk in their stored provenance."""
+        dependency_sql = text("""
+            SELECT a.assignment_id, a.title
+            FROM assignments a
+            JOIN modules m ON a.module_id = m.module_id
+            WHERE m.course_id = CAST(:course_id AS UUID)
+              AND COALESCE(a.spec ->> 'status', 'draft') = 'published'
+              AND COALESCE(a.spec -> 'grounding_sources', '[]'::jsonb)
+                    @> jsonb_build_array(jsonb_build_object('chunk_id', CAST(:chunk_id AS TEXT)));
+        """)
         async with AsyncSessionLocal() as session:
-            result = await session.execute(delete_sql, {"chunk_id": str(chunk_id)})
+            result = await session.execute(
+                dependency_sql,
+                {"course_id": str(course_id), "chunk_id": str(chunk_id)},
+            )
+            return [
+                {"assignment_id": str(row["assignment_id"]), "title": row["title"]}
+                for row in result.mappings().all()
+            ]
+
+    @classmethod
+    async def delete_chunk(cls, course_id: UUID | str, chunk_id: UUID | str) -> bool:
+        """Delete an unreferenced resource chunk from the selected course only."""
+        delete_sql = text("""
+            DELETE FROM syllabus_chunks
+            WHERE chunk_id = CAST(:chunk_id AS UUID)
+              AND course_id = CAST(:course_id AS UUID)
+            RETURNING chunk_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                delete_sql,
+                {"course_id": str(course_id), "chunk_id": str(chunk_id)},
+            )
             deleted = result.scalar() is not None
             await session.commit()
             return deleted

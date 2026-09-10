@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.dialogue_engine import dialogue_engine
 from fiosra.mvp.event_store import event_store
 
@@ -40,6 +41,23 @@ async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any
     if session_info["status"] != "active":
         raise HTTPException(status_code=409, detail="This session is no longer accepting student responses.")
 
+    authoritative_assignment_id = session_info.get("assignment_id")
+    assignment_context = None
+    if authoritative_assignment_id:
+        assignment_context = await assignment_generator.get_public_assignment(authoritative_assignment_id)
+        if not assignment_context:
+            raise HTTPException(status_code=409, detail="The session's published assignment is no longer available.")
+        if request.assignment_id and str(request.assignment_id) != authoritative_assignment_id:
+            raise HTTPException(status_code=409, detail="The request assignment does not match this student session.")
+
+    active_prompt = assignment_context.prompt if assignment_context else request.question_prompt
+    active_domain = assignment_context.domain if assignment_context else request.domain
+    active_hint_ladder = assignment_context.hint_ladder if assignment_context else None
+    active_target_kcs = assignment_context.target_kcs if assignment_context else None
+    is_course_grounded = bool(
+        assignment_context and assignment_context.grounding_mode == "course_grounded"
+    )
+
     await event_store.log_event(
         session_id=request.session_id,
         student_id=request.student_id,
@@ -55,10 +73,13 @@ async def handle_dialogue_turn(request: DialogueMessageRequest) -> dict[str, Any
     engine_rung = 0 if dialogue_engine.is_adversarial_attempt(request.student_input) else stored_rung
     result = await dialogue_engine.generate_response(
         student_input=request.student_input,
-        question_prompt=request.question_prompt,
-        domain=request.domain,
+        question_prompt=active_prompt,
+        domain=active_domain,
         current_rung=engine_rung,
         hint_requested=request.hint_requested,
+        hint_ladder=active_hint_ladder,
+        target_kcs=active_target_kcs,
+        is_course_grounded=is_course_grounded,
     )
 
     if result["is_adversarial"]:

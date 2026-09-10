@@ -39,7 +39,7 @@ async def get_review_queue(
         LEFT JOIN assignments a ON s.assignment_id = a.assignment_id
         LEFT JOIN modules m ON a.module_id = m.module_id
         WHERE s.status = 'submitted'
-          AND (:course_id IS NULL OR m.course_id = CAST(:course_id AS UUID))
+          AND (CAST(:course_id AS UUID) IS NULL OR m.course_id = CAST(:course_id AS UUID))
         ORDER BY s.last_activity_at DESC;
     """)
     async with AsyncSessionLocal() as session:

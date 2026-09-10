@@ -256,7 +256,7 @@ async def upload_module_resource_file(
 @router.delete("/{course_id}/resources/{chunk_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resource_chunk(course_id: UUID, chunk_id: UUID) -> None:
     """
-    Deletes an attached reading or primary source chunk from pgvector.
+    Deletes an attached reading or primary source chunk when no published task cites it.
     """
     course = await course_service.get_course(course_id)
     if not course:
@@ -264,12 +264,34 @@ async def delete_resource_chunk(course_id: UUID, chunk_id: UUID) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Course with ID '{course_id}' not found.",
         )
-    deleted = await syllabus_parser.delete_chunk(chunk_id)
+    dependencies = await syllabus_parser.published_assignment_dependencies(course_id, chunk_id)
+    if dependencies:
+        titles = ", ".join(item["title"] for item in dependencies[:3])
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This resource is cited by published assignments and is retained for student and evidence integrity: "
+                f"{titles}. Archive those assignments before removing this source."
+            ),
+        )
+    deleted = await syllabus_parser.delete_chunk(course_id, chunk_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resource chunk '{chunk_id}' not found.",
         )
+
+
+@router.get("/{course_id}/resources/{chunk_id}/dependencies")
+async def get_resource_dependencies(course_id: UUID, chunk_id: UUID) -> list[dict[str, str]]:
+    """Preview the publication impact of removing a grounded source."""
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    return await syllabus_parser.published_assignment_dependencies(course_id, chunk_id)
 
 
 @router.get("/{course_id}/syllabus/search", response_model=list[SyllabusChunkResponse])

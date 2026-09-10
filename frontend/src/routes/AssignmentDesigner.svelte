@@ -19,6 +19,10 @@
   let notice = $state('');
   let error = $state('');
 
+  let publishBlocked = $derived(
+    Boolean(moduleId) && scaffold?.grounding_mode !== 'course_grounded'
+  );
+
   function initializeAnswers(questions) {
     const next = {};
     for (const question of questions) next[question.question_id] = question.default_recommendation || question.options?.[0] || '';
@@ -48,7 +52,12 @@
       const response = await fetch('/assignments/analyze-scope', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_prompt: prompt.trim(), domain, course_id: courseId || null }),
+        body: JSON.stringify({
+          raw_prompt: prompt.trim(),
+          domain,
+          course_id: courseId || null,
+          module_id: moduleId || null,
+        }),
       });
       if (!response.ok) throw new Error(await responseError(response, 'Scope analysis failed.'));
       diagnosis = await response.json();
@@ -76,7 +85,13 @@
       const response = await fetch('/assignments/clarify-and-scaffold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_prompt: prompt.trim(), domain, answers }),
+        body: JSON.stringify({
+          raw_prompt: prompt.trim(),
+          domain,
+          answers,
+          course_id: courseId || null,
+          module_id: moduleId || null,
+        }),
       });
       if (!response.ok) throw new Error(await responseError(response, 'Scaffold generation failed.'));
       scaffold = await response.json();
@@ -103,12 +118,15 @@
           body: JSON.stringify({
             topic: topic.trim() || 'Untitled reasoning assignment',
             domain,
+            course_id: courseId || null,
             module_id: moduleId || null,
             created_by: 'educator_workspace',
             clarified_prompt: scaffold.clarified_prompt,
             target_kcs: scaffold.target_kcs,
             hint_ladder: scaffold.hint_ladder,
             rubric_rules: scaffold.rubric_rules,
+            grounding_mode: scaffold.grounding_mode,
+            grounding_sources: scaffold.grounding_sources,
           }),
         });
         if (!response.ok) throw new Error(await responseError(response, 'The draft could not be saved.'));
@@ -212,6 +230,19 @@
             <h2>Target knowledge components</h2>
             <div class="tag-list">{#each scaffold.target_kcs as kc}<code>{kc}</code>{/each}</div>
           </section>
+          <section class:generic-grounding={scaffold.grounding_mode !== 'course_grounded'} class="grounding-section">
+            <h2>Grounding check</h2>
+            {#if scaffold.grounding_mode === 'course_grounded'}
+              <p>This scaffold is constrained to the selected module’s course materials.</p>
+              <div class="grounding-list">
+                {#each scaffold.grounding_sources as source}
+                  <article><strong>{source.title}</strong><span>{source.kc_id || 'KC mapping pending'}</span><p>{source.excerpt}</p></article>
+                {/each}
+              </div>
+            {:else}
+              <p>This is a generic scaffold. Attach and ground a module source before publishing a module-bound assignment.</p>
+            {/if}
+          </section>
           <section>
             <h2>Hint ladder</h2>
             <div class="ladder-list">
@@ -228,8 +259,9 @@
           </section>
           <div class="actions">
             <button class="btn btn-secondary" onclick={() => saveDraft(false)} disabled={isSaving}>{draft ? 'Draft saved' : 'Save draft'}</button>
-            <button class="btn btn-primary" onclick={() => saveDraft(true)} disabled={isSaving || draft?.status === 'published'}>{draft?.status === 'published' ? 'Published' : 'Publish to students'}</button>
+            <button class="btn btn-primary" onclick={() => saveDraft(true)} disabled={isSaving || draft?.status === 'published' || publishBlocked}>{draft?.status === 'published' ? 'Published' : 'Publish to students'}</button>
           </div>
+          {#if publishBlocked}<p class="publish-warning">Publishing is blocked until this module has a grounded course source.</p>{/if}
           {#if draft?.status === 'published'}
             <a class="btn btn-success launch" href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(draft.assignment_id)}`}>Open student canvas →</a>
           {/if}
@@ -245,5 +277,5 @@
 </main>
 
 <style>
-  .designer-main{max-width:1280px;margin:0 auto;padding:36px 28px 80px;display:flex;flex-direction:column;gap:24px}.page-header{border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;gap:20px;padding-bottom:22px}.eyebrow,.card-title{color:var(--color-slate-muted);font-size:11px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.page-header h1{color:#fff;font-family:var(--font-brand);font-size:27px;margin:4px 0 7px}.page-header p{color:var(--color-slate-light);font-size:13px;line-height:1.5;margin:0;max-width:700px}.course-chip{align-self:flex-end;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);border-radius:99px;color:var(--color-horizon-bright);font-size:12px;font-weight:600;padding:6px 11px}.designer-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,.9fr);gap:22px;align-items:start}.form-card,.preview-card{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);padding:24px;display:flex;flex-direction:column;gap:12px}.preview-card{position:sticky;top:76px}.form-card label,.diagnosis label{color:var(--color-slate-light);font-size:11px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;margin-top:4px}.form-card input,.form-card select,.form-card textarea,.diagnosis textarea{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);box-sizing:border-box;color:#fff;font:inherit;font-size:13px;padding:10px 12px;width:100%}.form-card input:focus,.form-card select:focus,.form-card textarea:focus,.diagnosis textarea:focus{border-color:var(--color-horizon-blue);outline:none}.helper-text{color:var(--color-slate-muted);font-size:12px;line-height:1.6;margin:0}.diagnosis{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:10px;padding:16px}.diagnosis.clear{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.25)}.diagnosis-header{display:flex;justify-content:space-between;gap:12px;color:#fde68a;font-size:13px}.clear .diagnosis-header{color:#6ee7b7}.diagnosis p{color:var(--color-slate-light);font-size:12px;line-height:1.5;margin:0}.status-line{color:#6ee7b7;font-size:12px;font-weight:600}.status-dot{background:var(--color-signal-green);border-radius:50%;box-shadow:0 0 7px var(--color-signal-green);display:inline-block;height:7px;margin-right:6px;width:7px}.preview-card section{border-top:1px solid var(--color-graphite-border);padding-top:14px}.preview-card h2{color:#fff;font-size:13px;margin:0 0 7px}.preview-card p{color:var(--color-slate-light);font-size:12px;line-height:1.55;margin:0}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag-list code{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.25);border-radius:4px;color:var(--color-aurora-bright);font-size:10px;padding:4px 6px}.ladder-list{display:flex;flex-direction:column;gap:8px}.ladder-item{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:grid;gap:10px;grid-template-columns:58px 1fr;padding:9px}.ladder-item>span{color:var(--color-horizon-bright);font-size:10px;font-weight:700;text-transform:uppercase}.ladder-item strong{color:#e2e8f0;font-size:11px;text-transform:capitalize}.ladder-item p{font-size:11px;margin-top:3px}.ladder-item.locked{opacity:.6}.rule-item{border-top:1px solid rgba(255,255,255,.06);padding:9px 0}.rule-item:first-of-type{border-top:none;padding-top:0}.rule-item strong{color:#e2e8f0;font-size:12px}.rule-item span{color:var(--color-horizon-bright);font-size:10px;font-weight:700}.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}.launch{align-self:stretch}.empty-preview{border:1px dashed var(--color-graphite-border);border-radius:var(--radius-md);color:var(--color-slate-muted);padding:28px 20px;text-align:center}.empty-preview strong{color:#e2e8f0;font-size:13px}.empty-preview p{margin-top:7px}.notice{border-radius:var(--radius-sm);font-size:12px;padding:11px 14px}.notice.success{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#86efac}.notice.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5}.loading-card{align-items:center;background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);color:var(--color-slate-light);display:flex;gap:12px;justify-content:center;min-height:240px}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:25px;width:25px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:900px){.designer-grid{grid-template-columns:1fr}.preview-card{position:static}.course-chip{align-self:flex-start}}@media(max-width:620px){.designer-main{padding:26px 16px}.page-header{flex-direction:column}.actions{flex-direction:column}.actions .btn{width:100%}}
+  .designer-main{max-width:1280px;margin:0 auto;padding:36px 28px 80px;display:flex;flex-direction:column;gap:24px}.page-header{border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;gap:20px;padding-bottom:22px}.eyebrow,.card-title{color:var(--color-slate-muted);font-size:11px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.page-header h1{color:#fff;font-family:var(--font-brand);font-size:27px;margin:4px 0 7px}.page-header p{color:var(--color-slate-light);font-size:13px;line-height:1.5;margin:0;max-width:700px}.course-chip{align-self:flex-end;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);border-radius:99px;color:var(--color-horizon-bright);font-size:12px;font-weight:600;padding:6px 11px}.designer-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,.9fr);gap:22px;align-items:start}.form-card,.preview-card{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);padding:24px;display:flex;flex-direction:column;gap:12px}.preview-card{position:sticky;top:76px}.form-card label,.diagnosis label{color:var(--color-slate-light);font-size:11px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;margin-top:4px}.form-card input,.form-card select,.form-card textarea,.diagnosis textarea{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);box-sizing:border-box;color:#fff;font:inherit;font-size:13px;padding:10px 12px;width:100%}.form-card input:focus,.form-card select:focus,.form-card textarea:focus,.diagnosis textarea:focus{border-color:var(--color-horizon-blue);outline:none}.helper-text{color:var(--color-slate-muted);font-size:12px;line-height:1.6;margin:0}.diagnosis{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:10px;padding:16px}.diagnosis.clear{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.25)}.diagnosis-header{display:flex;justify-content:space-between;gap:12px;color:#fde68a;font-size:13px}.clear .diagnosis-header{color:#6ee7b7}.diagnosis p{color:var(--color-slate-light);font-size:12px;line-height:1.5;margin:0}.status-line{color:#6ee7b7;font-size:12px;font-weight:600}.status-dot{background:var(--color-signal-green);border-radius:50%;box-shadow:0 0 7px var(--color-signal-green);display:inline-block;height:7px;margin-right:6px;width:7px}.preview-card section{border-top:1px solid var(--color-graphite-border);padding-top:14px}.preview-card h2{color:#fff;font-size:13px;margin:0 0 7px}.preview-card p{color:var(--color-slate-light);font-size:12px;line-height:1.55;margin:0}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag-list code{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.25);border-radius:4px;color:var(--color-aurora-bright);font-size:10px;padding:4px 6px}.grounding-section{background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.2);border-radius:var(--radius-sm);padding:12px}.grounding-section.generic-grounding{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3)}.grounding-list{display:flex;flex-direction:column;gap:7px;margin-top:10px}.grounding-list article{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-xs);padding:8px}.grounding-list strong{color:#e2e8f0;display:block;font-size:11px}.grounding-list span{color:var(--color-horizon-bright);font-size:10px}.grounding-list p{font-size:10px;margin-top:4px}.ladder-list{display:flex;flex-direction:column;gap:8px}.ladder-item{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:grid;gap:10px;grid-template-columns:58px 1fr;padding:9px}.ladder-item>span{color:var(--color-horizon-bright);font-size:10px;font-weight:700;text-transform:uppercase}.ladder-item strong{color:#e2e8f0;font-size:11px;text-transform:capitalize}.ladder-item p{font-size:11px;margin-top:3px}.ladder-item.locked{opacity:.6}.rule-item{border-top:1px solid rgba(255,255,255,.06);padding:9px 0}.rule-item:first-of-type{border-top:none;padding-top:0}.rule-item strong{color:#e2e8f0;font-size:12px}.rule-item span{color:var(--color-horizon-bright);font-size:10px;font-weight:700}.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}.publish-warning{color:#fde68a!important;font-size:11px!important}.launch{align-self:stretch}.empty-preview{border:1px dashed var(--color-graphite-border);border-radius:var(--radius-md);color:var(--color-slate-muted);padding:28px 20px;text-align:center}.empty-preview strong{color:#e2e8f0;font-size:13px}.empty-preview p{margin-top:7px}.notice{border-radius:var(--radius-sm);font-size:12px;padding:11px 14px}.notice.success{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#86efac}.notice.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5}.loading-card{align-items:center;background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);color:var(--color-slate-light);display:flex;gap:12px;justify-content:center;min-height:240px}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:25px;width:25px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:900px){.designer-grid{grid-template-columns:1fr}.preview-card{position:static}.course-chip{align-self:flex-start}}@media(max-width:620px){.designer-main{padding:26px 16px}.page-header{flex-direction:column}.actions{flex-direction:column}.actions .btn{width:100%}}
 </style>

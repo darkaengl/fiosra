@@ -16,7 +16,7 @@
     <div class="banner-meta">
       <span class="meta-tag">{(course?.domain || 'ACADEMIC').toUpperCase()} CURRICULUM</span>
       <span class="meta-sep">•</span>
-      <span style="color: var(--color-horizon-bright);">FALL 2026</span>
+      <span style="color: var(--color-horizon-bright);">COURSE WORKSPACE</span>
       <span class="meta-sep">•</span>
       <span>{enrolledCount} ENROLLED STUDENTS</span>
     </div>
@@ -31,8 +31,8 @@
       </div>
       <div class="indicator-chip">
         <span class="chip-icon">🧬</span>
-        <span class="chip-label">Prerequisite DAG:</span>
-        <span class="chip-val">{course?.modules?.length || 0} Modules Configured</span>
+        <span class="chip-label">Curriculum sequence:</span>
+        <span class="chip-val">{course?.modules?.length || 0} Modules configured</span>
       </div>
     </div>
   </div>
