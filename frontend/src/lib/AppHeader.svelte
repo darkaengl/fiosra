@@ -68,6 +68,8 @@
 
     if (path.startsWith('/courses')) {
       activeTab = 'courses';
+    } else if (path.startsWith('/studio')) {
+      activeTab = 'studio';
     } else if (path.startsWith('/designer')) {
       activeTab = 'designer';
     } else if (path.startsWith('/review')) {
@@ -163,6 +165,12 @@
           class="nav-pill {parsed.activeTab === 'courses' ? 'active' : ''}"
         >
           Portfolio
+        </a>
+        <a
+          href="#/studio/course"
+          class="nav-pill {parsed.activeTab === 'studio' ? 'active' : ''}"
+        >
+          ✨ Studio
         </a>
         <a
           href="#/modules{parsed.courseQuery}"

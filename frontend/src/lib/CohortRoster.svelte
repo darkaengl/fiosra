@@ -179,7 +179,7 @@
 
   .student-id {
     font-weight: 600;
-    color: #fff;
+    color: var(--color-heading);
     font-size: 12.5px;
   }
 

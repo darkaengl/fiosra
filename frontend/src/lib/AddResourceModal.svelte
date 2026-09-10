@@ -334,7 +334,7 @@
   textarea {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    color: #fff;
+    color: var(--color-slate-bright);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
     font-size: 13px;

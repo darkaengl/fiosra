@@ -136,11 +136,14 @@
       </p>
     </div>
     <div class="header-actions">
+      <button type="button" class="btn btn-primary ai-studio-btn" onclick={() => push('/studio/course')}>
+        ✨ Build Course with AI Studio
+      </button>
       <button type="button" class="btn btn-secondary" onclick={() => (showIngestModal = true)}>
         📄 Ground course materials
       </button>
-      <button type="button" class="btn btn-primary" onclick={() => (showCreateCourse = true)}>
-        + Create New Course
+      <button type="button" class="btn btn-outline" onclick={() => (showCreateCourse = true)}>
+        + Quick Create
       </button>
     </div>
   </div>

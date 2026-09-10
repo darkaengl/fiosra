@@ -6,6 +6,7 @@
 
   import Modules from './routes/Modules.svelte';
   import Courses from './routes/Courses.svelte';
+  import CourseStudio from './routes/CourseStudio.svelte';
   import AssignmentDesigner from './routes/AssignmentDesigner.svelte';
   import StudioReview from './routes/StudioReview.svelte';
   import CohortDiagnostics from './routes/CohortDiagnostics.svelte';
@@ -18,6 +19,7 @@
     '/': Modules,
     '/modules': Modules,
     '/courses': Courses,
+    '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/review': StudioReview,
     '/diagnostics': CohortDiagnostics,

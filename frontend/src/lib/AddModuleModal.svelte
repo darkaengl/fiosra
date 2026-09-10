@@ -120,7 +120,7 @@
   .module-form { display: flex; flex-direction: column; gap: 16px; }
   .field-group { display: flex; flex-direction: column; gap: 6px; }
   label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-light); }
-  input[type='text'], textarea { background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: #fff; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; outline: none; transition: border-color 0.15s ease; }
+  input[type='text'], textarea { background: var(--color-obsidian); border: 1px solid var(--color-graphite-border); color: var(--color-slate-bright); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; outline: none; transition: border-color 0.15s ease; }
   input:focus, textarea:focus { border-color: var(--color-horizon-bright); }
   .objective-entry { display: flex; gap: 8px; }
   .objective-entry input { flex: 1; }

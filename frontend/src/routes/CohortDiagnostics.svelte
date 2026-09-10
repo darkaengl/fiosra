@@ -112,7 +112,7 @@
 <style>
   .diag-main { padding: 32px 40px 80px; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
   .diag-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--color-graphite-border); padding-bottom: 24px; }
-  .diag-title { font-family: var(--font-brand); font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 4px; }
+  .diag-title { font-family: var(--font-brand); font-size: 24px; font-weight: 700; color: var(--color-heading); margin: 0 0 4px; }
   .diag-sub { font-size: 13px; color: var(--color-slate-muted); margin: 0; }
   .header-actions { display: flex; gap: 12px; }
   .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
@@ -123,7 +123,7 @@
   .kpi-sub { font-size: 11px; color: var(--color-slate-muted); margin-top: 4px; }
   .heatmap-panel, .flagged-panel { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-lg); overflow: hidden; }
   .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--color-graphite-border); }
-  .panel-title { font-size: 14px; font-weight: 700; color: #fff; }
+  .panel-title { font-size: 14px; font-weight: 700; color: var(--color-heading); }
   .legend { display: flex; gap: 8px; }
   .legend-item { font-size: 10.5px; font-weight: 600; color: #fff; padding: 2px 8px; border-radius: var(--radius-xs); }
   .heatmap-grid { overflow-x: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 4px; }
@@ -133,14 +133,14 @@
   .student-col-header { width: 70px; flex-shrink: 0; font-size: 10.5px; color: var(--color-slate-muted); text-align: center; }
   .kc-label { width: 240px; flex-shrink: 0; padding-right: 12px; }
   .kc-code-sm { font-family: var(--font-mono); font-size: 10px; color: var(--color-aurora-bright); }
-  .kc-name-sm { font-size: 11px; color: #e2e8f0; margin-top: 2px; }
+  .kc-name-sm { font-size: 11px; color: var(--color-slate-light); margin-top: 2px; }
   .heat-cell { width: 70px; flex-shrink: 0; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; border-radius: var(--radius-xs); }
   .flagged-list { display: flex; flex-direction: column; }
   .flagged-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-top: 1px solid var(--color-graphite-border); }
   .flagged-row:first-child { border-top: none; }
   .student-info { display: flex; align-items: center; gap: 12px; min-width: 220px; }
   .student-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #ef4444, #f59e0b); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
-  .student-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .student-name { font-size: 13px; font-weight: 600; color: var(--color-heading); }
   .student-misc { font-size: 11px; color: var(--color-slate-muted); margin-top: 2px; }
   .student-misc code { color: var(--color-amber); }
   .avg-score { font-family: var(--font-brand); font-size: 18px; font-weight: 700; }

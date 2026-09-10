@@ -366,39 +366,6 @@ class CourseService:
                 )
             )
 
-
-        # If no live sessions exist yet, return diagnostic cohort baseline
-        if not students:
-            students = [
-                CohortStudentMetrics(
-                    student_id="student_somerville_01",
-                    session_count=3,
-                    completed_assignments=2,
-                    average_autonomy_score=0.92,
-                    hint_consumption_rate=0.15,
-                    active_struggle=False,
-                    struggling_kcs=[],
-                ),
-                CohortStudentMetrics(
-                    student_id="student_struggling_02",
-                    session_count=4,
-                    completed_assignments=1,
-                    average_autonomy_score=0.48,
-                    hint_consumption_rate=0.75,
-                    active_struggle=True,
-                    struggling_kcs=["KC_HIST_FRENCH_DEBT", "KC_HIST_ESTATES_GENERAL"],
-                ),
-                CohortStudentMetrics(
-                    student_id="student_advanced_03",
-                    session_count=5,
-                    completed_assignments=5,
-                    average_autonomy_score=1.00,
-                    hint_consumption_rate=0.00,
-                    active_struggle=False,
-                    struggling_kcs=[],
-                ),
-            ]
-
         return CohortRosterResponse(
             course_id=course.course_id,
             course_title=course.title,
