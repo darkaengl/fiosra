@@ -6,7 +6,7 @@ Welcome to the comprehensive developer documentation for **Fiosra** — the peda
 
 ## 🧭 Master Guide Navigation
 
-This developer guide is organized into five modular chapters covering the entire system from high-level theoretical tenets to line-by-line API contracts and local development pipelines:
+This developer guide is organized into six modular chapters covering the entire system from high-level theoretical tenets to line-by-line API contracts and local development pipelines:
 
 | Chapter | Title | Focus & Contents |
 | :--- | :--- | :--- |
@@ -15,6 +15,7 @@ This developer guide is organized into five modular chapters covering the entire
 | [**Chapter 3**](./03-frontend-architecture.md) | **Frontend Architecture (Svelte 5 SPA)** | Svelte 5 runes (`$state`, `$derived`, `$props`), hash-based SPA router (`/ui/#/`), Educator Studio views, Student Workspace, reusable component library, and design tokens. |
 | [**Chapter 4**](./04-api-reference.md) | **Comprehensive API Reference** | Complete REST endpoint specifications, request/response schemas, path/query parameters, status codes, and JSON payloads. |
 | [**Chapter 5**](./05-development-workflows.md) | **Developer Workflows & Operations** | Prerequisites, local development environment, Docker Compose stack, test execution (`pytest`), Vite production build, database migrations, and debugging. |
+| [**Chapter 6**](./06-learning-canvas-and-assistance.md) | **Writer-First Learning Canvas & Bounded Assistance** | Student-owned drafts, `/` commands, `@` approved-source references, collapsed AI utility drawer, session capabilities, assistance attribution, API sequence, and browser validation. |
 
 ---
 
@@ -48,7 +49,7 @@ This developer guide is organized into five modular chapters covering the entire
 - **Backend**: Python 3.11+, [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy](https://www.sqlalchemy.org/) (Async engine), [Pydantic v2](https://docs.pydantic.dev/), [SymPy](https://www.sympy.org/) Computer Algebra System, [NetworkX](https://networkx.org/).
 - **Frontend**: [Svelte 5](https://svelte.dev/) (Modern Runes syntax), [Vite 8](https://vitejs.dev/), [svelte-spa-router](https://github.com/ItalyPaleAle/svelte-spa-router), Custom Glassmorphic Design System (Vanilla CSS).
 - **Databases**: [PostgreSQL 16](https://www.postgresql.org/) with [`pgvector`](https://github.com/pgvector/pgvector) extension, [Neo4j Community 5](https://neo4j.com/).
-- **DevOps & Testing**: [Docker & Docker Compose](https://www.docker.com/), [uv](https://docs.astral.sh/uv/), [pytest](https://docs.pytest.org/) (54 passing tests), [Ruff](https://docs.astral.sh/ruff/).
+- **DevOps & Testing**: [Docker & Docker Compose](https://www.docker.com/), [uv](https://docs.astral.sh/uv/), [pytest](https://docs.pytest.org/) (71 passing tests in the current local validation suite), [Ruff](https://docs.astral.sh/ruff/).
 
 ---
 
