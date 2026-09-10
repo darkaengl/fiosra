@@ -1,7 +1,14 @@
 <script>
   import { onMount } from 'svelte';
+  import { routeParams } from '../lib/session.js';
 
   let courseProgress = 75;
+  let courseId = $state('');
+
+  onMount(() => {
+    const params = routeParams();
+    courseId = params.get('course_id') || '';
+  });
 </script>
 
 <div class="home-page">
@@ -32,7 +39,7 @@
               Synthesize primary source evidence from Arthur Young with historical analysis of Crown bankruptcy, Three Estates tax inequality (the <em>taille</em>), and Rousseau's Social Contract.
             </p>
           </div>
-          <a href="#/student" class="btn btn-primary" style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;">
+          <a href={courseId ? `#/student?course_id=${courseId}` : '#/student'} class="btn btn-primary" style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;">
             Resume Reasoning Canvas →
           </a>
         </div>
@@ -141,24 +148,24 @@
 
 <style>
   .home-page {
-    background-color: var(--color-bone);
+    background-color: var(--color-obsidian);
     min-height: calc(100vh - 56px);
   }
 
   .home-container {
-    max-width: 1060px;
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 40px 24px 80px 24px;
+    padding: 36px 24px 80px 24px;
     display: flex;
     flex-direction: column;
-    gap: 40px;
+    gap: 36px;
   }
 
   .greeting-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    border-bottom: 1px solid var(--color-bone-border);
+    border-bottom: 1px solid var(--color-graphite-border);
     padding-bottom: 24px;
   }
 
@@ -170,15 +177,15 @@
 
   .greeting-title {
     font-family: var(--font-brand);
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 
   .greeting-sub {
     font-size: 14px;
-    color: var(--color-slate-muted);
+    color: var(--color-slate-light);
     margin: 0;
   }
 
@@ -191,14 +198,14 @@
   .section-eyebrow {
     font-size: 11px;
     font-weight: 700;
-    color: var(--color-horizon-blue);
+    color: var(--color-horizon-bright);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
 
   .hero-focus-card {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-left: 5px solid var(--color-horizon-blue);
     border-radius: var(--radius-md);
     padding: 28px 32px;
@@ -225,13 +232,13 @@
     font-family: var(--font-brand);
     font-size: 20px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 
   .focus-desc {
     font-size: 13.5px;
-    color: #475569;
+    color: var(--color-slate-light);
     line-height: 1.5;
     max-width: 680px;
     margin: 0;
@@ -242,9 +249,9 @@
     align-items: center;
     gap: 20px;
     padding: 14px 18px;
-    background: #f8fafc;
+    background: var(--color-obsidian);
     border-radius: var(--radius-sm);
-    border: 1px solid var(--color-bone-border);
+    border: 1px solid var(--color-graphite-border);
   }
 
   .focus-stat-item {
@@ -263,13 +270,13 @@
   .focus-stat-value {
     font-size: 13.5px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--color-heading);
   }
 
   .divider {
     width: 1px;
     height: 28px;
-    background: var(--color-bone-border);
+    background: var(--color-graphite-border);
   }
 
   .kc-progress-grid {
@@ -279,8 +286,8 @@
   }
 
   .kc-progress-card {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     padding: 18px 20px;
     display: flex;
@@ -296,20 +303,20 @@
 
   .kc-card-code {
     font-size: 10.5px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     color: var(--color-slate-muted);
   }
 
   .kc-card-name {
     font-size: 14px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 
   .kc-status-bar {
     height: 6px;
-    background: #e2e8f0;
+    background: var(--pill-bg);
     border-radius: 999px;
     overflow: hidden;
   }
@@ -320,8 +327,8 @@
   }
 
   .upcoming-card {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     padding: 20px 24px;
     display: flex;
@@ -338,7 +345,7 @@
   .upcoming-title {
     font-size: 15px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 

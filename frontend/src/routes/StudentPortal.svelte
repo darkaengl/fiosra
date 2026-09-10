@@ -1,9 +1,68 @@
 <script>
+  import { onMount } from 'svelte';
+  import { routeParams } from '../lib/session.js';
+
   let activeTab = $state('courses'); // 'courses' | 'reader' | 'portfolio'
   let activeReaderDoc = $state('young');
+  let courses = $state([]);
+  let isLoading = $state(true);
 
   function setTab(tab) {
     activeTab = tab;
+  }
+
+  onMount(async () => {
+    try {
+      const res = await fetch('/courses');
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.courses || [];
+        
+        // Filter out automated test runner artifacts and clean course list
+        const cleanList = list.filter((c) => {
+          const title = c.title || '';
+          const creator = c.created_by || '';
+          if (creator.includes('test_') || creator.includes('canvas_test')) return false;
+          if (title.startsWith('test_') || /^HIST Canvas [0-9a-f]+/i.test(title)) return false;
+          return true;
+        });
+
+        // Deduplicate courses by normalized title
+        const seen = new Set();
+        const unique = [];
+        for (const c of cleanList.length > 0 ? cleanList : list) {
+          const key = (c.title || '').trim().toLowerCase();
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            unique.push(c);
+          }
+        }
+        courses = unique.slice(0, 3);
+      }
+    } catch (err) {
+      console.error('Failed to fetch courses:', err);
+    } finally {
+      isLoading = false;
+    }
+  });
+
+  function getFirstAssignment(course) {
+    if (course.modules) {
+      for (const mod of course.modules) {
+        if (mod.assignments && mod.assignments.length > 0) {
+          return mod.assignments[0];
+        }
+      }
+    }
+    return null;
+  }
+
+  function clipExcerptToWorkspace(passage) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fiosra_clipped_passage', passage);
+    }
+    const defaultCourseId = courses[0]?.course_id || '';
+    window.location.hash = defaultCourseId ? `#/student?course_id=${defaultCourseId}` : '#/student';
   }
 </script>
 
@@ -15,7 +74,11 @@
       <div class="greeting-left">
         <h1 class="greeting-name">Welcome back, Elena</h1>
         <p class="greeting-sub">
-          You are enrolled in 3 courses for Fall 2026. Next milestone due: <strong>Storming the Bastille: Sovereign Violence</strong> (HIST-201).
+          {#if isLoading}
+            Loading your Fall 2026 enrolled courses &amp; active milestones...
+          {:else}
+            You are enrolled in {courses.length} course{courses.length === 1 ? '' : 's'} for Fall 2026. Next milestone due: <strong>The Fiscal Breakdown: Sovereign Debt</strong>.
+          {/if}
         </p>
       </div>
 
@@ -41,84 +104,80 @@
     <!-- VIEW 1: ENROLLED COURSES -->
     {#if activeTab === 'courses'}
       <div class="courses-grid">
-        <!-- Course 1: HIST-201 -->
-        <div class="student-course-card">
-          <div class="card-top-row">
-            <div>
-              <span class="course-meta-code">HIST-201</span>
-              <h2 class="course-title">The French Revolution &amp; Modern Statehood</h2>
+        {#if isLoading}
+          <div class="student-course-card skeleton-card">
+            <div class="card-top-row">
+              <div style="height: 18px; width: 60px; background: var(--pill-hover); border-radius: 4px;"></div>
             </div>
-            <span class="badge badge-success">Unit 1 Active</span>
+            <div style="height: 24px; width: 70%; background: var(--pill-hover); border-radius: 4px; margin-top: 8px;"></div>
+            <div style="height: 80px; width: 100%; background: var(--pill-hover); border-radius: 6px; margin-top: 12px;"></div>
           </div>
+        {:else if courses.length > 0}
+          {#each courses as c}
+            {@const firstAssign = getFirstAssignment(c)}
+            <div class="student-course-card">
+              <div class="card-top-row">
+                <div>
+                  <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
+                  <h2 class="course-title">{c.title}</h2>
+                </div>
+                <span class="badge {firstAssign ? 'badge-success' : 'badge-info'}">
+                  {firstAssign ? 'Active Unit' : 'Enrolled'}
+                </span>
+              </div>
 
-          <div class="instructor-line">Instructor: Dr. Vance • 24 Students</div>
+              <div class="instructor-line">Instructor: {c.created_by || 'Prof. Somerville'} • {c.modules ? c.modules.length : 0} Modules</div>
 
-          <div class="active-task-box">
-            <span class="active-task-label">Current Active Reasoning Task</span>
-            <div class="active-task-title">Storming the Bastille: Violence as Sovereign Instrument</div>
-            <div class="active-task-meta">⏱️ ~45m remaining • Sectional Scaffold: 2/3 Drafted</div>
-          </div>
+              <div class="active-task-box">
+                <span class="active-task-label">{firstAssign ? 'Current Active Reasoning Task' : 'Course Overview'}</span>
+                <div class="active-task-title">{firstAssign ? firstAssign.title : 'Primary Source Inquiries & Epistemic Reasoning'}</div>
+                <div class="active-task-meta">
+                  {firstAssign ? '⏱️ Sectional Scaffold Active • 5 Canvas Sections' : 'Syllabus and grounding corpus configured'}
+                </div>
+              </div>
 
-          <div class="card-footer">
-            <a href="#/student/home" class="link-subtle">
-              View Course Map →
-            </a>
-            <a href="#/student" class="btn btn-primary" style="padding: 7px 14px; font-size: 12px;">
-              Resume Reasoning Canvas →
-            </a>
-          </div>
-        </div>
-
-        <!-- Course 2: PHIL-102 -->
-        <div class="student-course-card">
-          <div class="card-top-row">
-            <div>
-              <span class="course-meta-code">PHIL-102</span>
-              <h2 class="course-title">Moral Reasoning &amp; Epistemology</h2>
+              <div class="card-footer">
+                <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
+                  View Course Map →
+                </a>
+                <a 
+                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student?course_id=${c.course_id}`} 
+                  class="btn btn-primary" 
+                  style="padding: 7px 14px; font-size: 12px;"
+                >
+                  Resume Reasoning Canvas →
+                </a>
+              </div>
             </div>
-            <span class="badge" style="background: rgba(148,163,184,0.15); color: #475569;">Up to Date</span>
-          </div>
-
-          <div class="instructor-line">Instructor: Prof. Gallagher • 28 Students</div>
-
-          <div class="active-task-box" style="border-left-color: var(--color-signal-green);">
-            <span class="active-task-label" style="color: var(--color-signal-green-dark);">Last Evaluation Completed</span>
-            <div class="active-task-title">Deontological Boundaries in Epistemic Injustice</div>
-            <div class="active-task-meta">Approved Grade: 94% (Packet Z Verified)</div>
-          </div>
-
-          <div class="card-footer">
-            <span style="font-size: 12px; color: #94a3b8;">Next unit unlocks Monday</span>
-            <a href="#/student/trace" class="btn btn-secondary" style="padding: 7px 14px; font-size: 12px;">
-              View Evidence Trace ↗
-            </a>
-          </div>
-        </div>
-
-        <!-- Course 3: LIT-304 -->
-        <div class="student-course-card">
-          <div class="card-top-row">
-            <div>
-              <span class="course-meta-code">LIT-304</span>
-              <h2 class="course-title">Modernist Narratives &amp; Deconstruction</h2>
+          {/each}
+        {:else}
+          <div class="student-course-card">
+            <div class="card-top-row">
+              <div>
+                <span class="course-meta-code">HIST-205</span>
+                <h2 class="course-title">Revolutionary France &amp; Modern Statehood</h2>
+              </div>
+              <span class="badge badge-success">Unit 1 Active</span>
             </div>
-            <span class="badge badge-info">Seminar</span>
-          </div>
 
-          <div class="instructor-line">Instructor: Dr. Al-Mansoor • 18 Students</div>
+            <div class="instructor-line">Instructor: Dr. Vance • 24 Students</div>
 
-          <div class="active-task-box" style="border-left-color: var(--color-aurora);">
-            <span class="active-task-label" style="color: var(--color-aurora);">Upcoming Sectional Inquiry</span>
-            <div class="active-task-title">Temporal Dislocation in Virginia Woolf's To the Lighthouse</div>
-            <div class="active-task-meta">Opens Sep 12 • 4 Primary Texts Grounded</div>
-          </div>
+            <div class="active-task-box">
+              <span class="active-task-label">Current Active Reasoning Task</span>
+              <div class="active-task-title">The Fiscal Breakdown: Sovereign Debt &amp; Estates-General</div>
+              <div class="active-task-meta">⏱️ ~45m remaining • Sectional Scaffold: 2/3 Drafted</div>
+            </div>
 
-          <div class="card-footer" style="justify-content: flex-end;">
-            <button class="btn btn-secondary" style="padding: 7px 14px; font-size: 12px;" onclick={() => setTab('reader')}>
-              Read Primary Texts 📖
-            </button>
+            <div class="card-footer">
+              <a href="#/student/home" class="link-subtle">
+                View Course Map →
+              </a>
+              <a href="#/student" class="btn btn-primary" style="padding: 7px 14px; font-size: 12px;">
+                Resume Reasoning Canvas →
+              </a>
+            </div>
           </div>
-        </div>
+        {/if}
       </div>
     {/if}
 
@@ -158,9 +217,9 @@
             </div>
 
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <a href="#/student" class="btn btn-primary" style="font-size: 12px;">
+              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Arthur Young: Travels in France (1789) - Tail and Corvee exemptions")}>
                 📎 Clip Excerpt to Reasoning Canvas
-              </a>
+              </button>
             </div>
           {:else if activeReaderDoc === 'sieyes'}
             <div style="display: flex; justify-content: space-between; align-items: baseline;">
@@ -174,9 +233,9 @@
               "What is the Third Estate? Everything. What has it been heretofore in the political order? Nothing. What does it demand? To become something."
             </div>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <a href="#/student" class="btn btn-primary" style="font-size: 12px;">
+              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Abbé Sieyès: What is the Third Estate? (1789)")}>
                 📎 Clip Excerpt to Reasoning Canvas
-              </a>
+              </button>
             </div>
           {:else}
             <div style="display: flex; justify-content: space-between; align-items: baseline;">
@@ -190,9 +249,9 @@
               "A state whose credit is sound can find resources in extraordinary crises; but when mystery shrouds finances, distrust multiplies and rates become ruinous."
             </div>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <a href="#/student" class="btn btn-primary" style="font-size: 12px;">
+              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Jacques Necker: Compte Rendu au Roi (1781)")}>
                 📎 Clip Excerpt to Reasoning Canvas
-              </a>
+              </button>
             </div>
           {/if}
         </div>
@@ -261,7 +320,7 @@
 
 <style>
   .portal-page {
-    background-color: var(--color-bone);
+    background-color: var(--color-obsidian);
     min-height: calc(100vh - 56px);
   }
 
@@ -275,8 +334,8 @@
   }
 
   .greeting-banner {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-lg);
     padding: 28px 32px;
     display: flex;
@@ -295,13 +354,13 @@
     font-family: var(--font-brand);
     font-size: 26px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 
   .greeting-sub {
     font-size: 13.5px;
-    color: #64748b;
+    color: var(--color-slate-light);
     margin: 0;
   }
 
@@ -310,18 +369,18 @@
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    background: var(--color-signal-green-bg);
+    border: 1px solid rgba(16, 185, 129, 0.3);
     border-radius: var(--radius-full);
     font-size: 13px;
     font-weight: 600;
-    color: #065f46;
+    color: var(--color-signal-green);
   }
 
   .portal-nav {
     display: flex;
     gap: 12px;
-    border-bottom: 2px solid var(--color-bone-border);
+    border-bottom: 2px solid var(--color-graphite-border);
     padding-bottom: 2px;
   }
 
@@ -331,7 +390,7 @@
     font-family: var(--font-ui);
     font-size: 14.5px;
     font-weight: 600;
-    color: #64748b;
+    color: var(--color-slate-light);
     padding: 10px 18px;
     cursor: pointer;
     display: flex;
@@ -343,8 +402,8 @@
   }
 
   .portal-tab-btn:hover {
-    color: #0f172a;
-    background: rgba(0, 0, 0, 0.02);
+    color: var(--color-heading);
+    background: var(--pill-hover);
   }
 
   .portal-tab-btn.active {
@@ -368,8 +427,8 @@
   }
 
   .student-course-card {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     padding: 24px;
     display: flex;
@@ -382,7 +441,7 @@
   .student-course-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
-    border-color: #cbd5e1;
+    border-color: var(--color-horizon-blue);
   }
 
   .card-top-row {
@@ -394,7 +453,7 @@
   .course-meta-code {
     font-size: 11px;
     font-weight: 700;
-    color: var(--color-horizon-blue);
+    color: var(--color-horizon-bright);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -403,19 +462,19 @@
     font-family: var(--font-brand);
     font-size: 18px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
     line-height: 1.3;
     margin: 0;
   }
 
   .instructor-line {
     font-size: 12.5px;
-    color: #64748b;
+    color: var(--color-slate-light);
   }
 
   .active-task-box {
-    background: #f8fafc;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-obsidian);
+    border: 1px solid var(--color-graphite-border);
     border-left: 4px solid var(--color-horizon-blue);
     border-radius: var(--radius-xs);
     padding: 12px 14px;
@@ -428,19 +487,19 @@
     font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
-    color: var(--color-horizon-blue);
+    color: var(--color-horizon-bright);
     letter-spacing: 0.5px;
   }
 
   .active-task-title {
     font-size: 13.5px;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--color-heading);
   }
 
   .active-task-meta {
     font-size: 11.5px;
-    color: #64748b;
+    color: var(--color-slate-muted);
   }
 
   .card-footer {
@@ -454,27 +513,27 @@
   .link-subtle {
     font-size: 12.5px;
     font-weight: 600;
-    color: #64748b;
+    color: var(--color-slate-muted);
     text-decoration: none;
   }
   .link-subtle:hover {
-    color: #0f172a;
+    color: var(--color-heading);
   }
 
   .reader-grid {
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 24px;
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     overflow: hidden;
     min-height: 540px;
   }
 
   .reader-sidebar {
-    background: #f8fafc;
-    border-right: 1px solid var(--color-bone-border);
+    background: var(--color-obsidian);
+    border-right: 1px solid var(--color-graphite-border);
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -493,7 +552,7 @@
     font-family: var(--font-brand);
     font-size: 22px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
     margin: 0;
   }
 
@@ -501,8 +560,8 @@
     font-family: Georgia, serif;
     font-size: 16px;
     line-height: 1.7;
-    color: #334155;
-    background: #ffffff;
+    color: var(--color-slate-bright);
+    background: var(--color-obsidian);
     border-left: 3px solid var(--color-horizon-blue);
     padding: 16px 20px;
     margin: 8px 0;
@@ -516,8 +575,8 @@
   }
 
   .portfolio-stat {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     padding: 18px 20px;
     display: flex;
@@ -531,25 +590,25 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #64748b;
+    color: var(--color-slate-muted);
   }
 
   .portfolio-stat-val {
     font-family: var(--font-brand);
     font-size: 24px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-heading);
   }
 
   .portfolio-stat-sub {
     font-size: 12px;
-    color: var(--color-signal-green-dark);
+    color: var(--color-signal-green);
     font-weight: 600;
   }
 
   .endorsement-card {
-    background: #ffffff;
-    border: 1px solid var(--color-bone-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
     padding: 24px 28px;
     display: flex;
@@ -561,7 +620,7 @@
   .endorsement-quote {
     font-style: italic;
     font-size: 14px;
-    color: #334155;
+    color: var(--color-slate-bright);
     line-height: 1.6;
     border-left: 3px solid var(--color-signal-green);
     padding-left: 14px;

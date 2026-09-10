@@ -71,11 +71,64 @@
       assignment = await response.json();
     } else if (courseId) {
       const response = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
-      if (!response.ok) throw new Error(await responseError(response, 'Published assignments could not be loaded.'));
-      const assignments = await response.json();
-      assignment = assignments[0] || null;
-      assignmentId = assignment?.assignment_id || '';
+      if (response.ok) {
+        const assignments = await response.json();
+        assignment = assignments[0] || null;
+        assignmentId = assignment?.assignment_id || '';
+      }
+      if (!assignment) {
+        // try any assignment in this course
+        const anyRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}`);
+        if (anyRes.ok) {
+          const anyAssignments = await anyRes.json();
+          assignment = anyAssignments[0] || null;
+          assignmentId = assignment?.assignment_id || '';
+        }
+      }
     }
+
+    // Auto-discover active assignment across courses if neither assignment_id nor course_id was passed
+    if (!assignment) {
+      try {
+        const coursesRes = await fetch('/courses');
+        if (coursesRes.ok) {
+          const coursesList = await coursesRes.json();
+          const courses = Array.isArray(coursesList) ? coursesList : coursesList.courses || [];
+          for (const c of courses) {
+            const cid = c.course_id || c.id;
+            if (!cid) continue;
+            const res = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
+            if (res.ok) {
+              const list = await res.json();
+              if (list.length > 0) {
+                assignment = list[0];
+                assignmentId = assignment.assignment_id;
+                courseId = cid;
+                break;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Auto-discovering published assignment:', err);
+      }
+    }
+
+    if (!assignment) {
+      try {
+        const directRes = await fetch('/assignments');
+        if (directRes.ok) {
+          const allList = await directRes.json();
+          if (allList.length > 0) {
+            assignment = allList[0];
+            assignmentId = assignment.assignment_id;
+          }
+        }
+      } catch (err) {
+        console.warn('Direct assignment fallback fetch:', err);
+      }
+    }
+
     if (!assignment) return;
 
     studentId = getStudentId();

@@ -199,7 +199,7 @@
     font-family: var(--font-brand);
     font-size: 15px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .module-desc {
@@ -218,15 +218,15 @@
     font-weight: 600;
     padding: 3px 9px;
     border-radius: 9999px;
-    background: rgba(16, 185, 129, 0.1);
+    background: var(--color-signal-green-bg);
     color: var(--color-signal-green);
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    border: 1px solid rgba(16, 185, 129, 0.3);
   }
 
   .learning-objectives-bar {
     padding: 9px 22px;
     font-size: 12px;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--pill-bg);
     border-bottom: 1px solid var(--color-graphite-border);
     display: flex;
     align-items: center;
@@ -248,7 +248,7 @@
     gap: 10px;
     flex-wrap: wrap;
     border-bottom: 1px solid var(--color-graphite-border);
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--pill-bg);
   }
 
   .readiness-bar span {
@@ -267,7 +267,7 @@
   /* Resources Section */
   .resources-section {
     padding: 14px 22px;
-    background: rgba(15, 18, 25, 0.45);
+    background: var(--color-graphite-card);
     border-bottom: 1px solid var(--color-graphite-border);
     display: flex;
     flex-direction: column;
@@ -312,7 +312,7 @@
   }
 
   .resource-item:hover {
-    border-color: rgba(59, 130, 246, 0.35);
+    border-color: var(--color-horizon-blue);
   }
 
   .resource-left {
@@ -347,7 +347,7 @@
   .resource-name {
     font-size: 13px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--color-heading);
   }
 
   .resource-type-pill {
@@ -360,22 +360,22 @@
   }
 
   .resource-type-pill.pdf {
-    background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: var(--color-rose-bg);
+    color: var(--color-rose-text);
+    border: 1px solid var(--color-rose);
   }
 
   .resource-type-pill.external_link {
-    background: rgba(59, 130, 246, 0.12);
-    color: #60a5fa;
-    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: var(--pill-active-bg);
+    color: var(--color-horizon-bright);
+    border: 1px solid var(--pill-active-border);
   }
 
   .resource-type-pill.primary_source,
   .resource-type-pill.document {
-    background: rgba(168, 85, 247, 0.12);
-    color: #c084fc;
-    border: 1px solid rgba(168, 85, 247, 0.25);
+    background: var(--pill-active-bg);
+    color: var(--color-horizon-bright);
+    border: 1px solid var(--pill-active-border);
   }
 
   .pgvector-pill {
@@ -425,7 +425,7 @@
 
   .btn-delete:hover {
     color: var(--color-rose);
-    background: rgba(239, 68, 68, 0.12);
+    background: var(--color-rose-bg);
   }
 
   .resources-empty {
@@ -473,7 +473,7 @@
   .assignment-name {
     font-size: 13px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--color-heading);
     display: flex;
     align-items: center;
     gap: 8px;

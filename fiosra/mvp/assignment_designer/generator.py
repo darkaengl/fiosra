@@ -353,7 +353,15 @@ class AssignmentGenerator:
                 },
             )
             specs = result.scalars().all()
-        return [cls._to_public_spec(spec if isinstance(spec, dict) else json.loads(spec)) for spec in specs]
+        valid: list[PublicQuestionSpec] = []
+        for spec in specs:
+            try:
+                data = spec if isinstance(spec, dict) else json.loads(spec)
+                if isinstance(data, dict) and "question_id" in data:
+                    valid.append(cls._to_public_spec(data))
+            except Exception as e:
+                logger.warning("Skipping invalid assignment spec: %s", e)
+        return valid
 
     @classmethod
     async def publish_assignment(
