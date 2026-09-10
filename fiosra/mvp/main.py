@@ -17,6 +17,7 @@ from fiosra.mvp.knowledge_router import router as knowledge_router
 from fiosra.mvp.learning_canvas_router import router as learning_canvas_router
 from fiosra.mvp.learning_document_router import router as learning_document_router
 from fiosra.mvp.neo4j_client import neo4j_client
+from fiosra.mvp.socratic_probe_router import router as socratic_probe_router
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ app.include_router(knowledge_router)
 app.include_router(events_router)
 app.include_router(learning_canvas_router)
 app.include_router(learning_document_router)
+app.include_router(socratic_probe_router)
 app.include_router(dialogue_router)
 app.include_router(evidence_router)
 app.include_router(assignment_router)
