@@ -19,15 +19,23 @@
   let learningDocument = $state(null);
   let probes = $state([]);
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
+  let sessionEvents = $state([]);
+  let documentHeadings = $state([]);
   let isLoading = $state(true);
-  let isBriefOpen = $state(false);
-  let isQuestionDrawerOpen = $state(false);
+
+  // Sidebar and Panel Controls
+  let isSidebarOpen = $state(true);
+  let activeSidebarTab = $state('scope'); // 'scope' | 'outline' | 'trace'
+  let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
   let probeResponse = $state('');
   let probeNotice = $state('');
   let isProbeBusy = $state(false);
+  let sourceSearchQuery = $state('');
   let error = $state('');
   let probeTimer;
+  let editorRef = $state(null);
+
   let currentProbe = $derived(activeProbe());
 
   const QUIET_PERIOD_MS = 5000;
@@ -60,6 +68,19 @@
     if (!activeProbeId && probes[0]) activeProbeId = probes[0].probe_id;
   }
 
+  async function loadSessionEvents() {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`/events/session/${sessionId}`, { headers: sessionHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        sessionEvents = data.events || [];
+      }
+    } catch (err) {
+      console.warn('Loading session events for sidebar trace:', err);
+    }
+  }
+
   async function loadAssignment() {
     const params = routeParams();
     courseId = params.get('course_id') || '';
@@ -68,27 +89,23 @@
     if (assignmentId) {
       const response = await fetch(`/assignments/${assignmentId}`);
       if (!response.ok) throw new Error(await responseError(response, 'The requested assignment could not be loaded.'));
-      assignment = await response.json();
+      const found = await response.json();
+      if (found.status === 'published') {
+        assignment = found;
+      } else {
+        assignment = null;
+      }
     } else if (courseId) {
       const response = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
       if (response.ok) {
         const assignments = await response.json();
-        assignment = assignments[0] || null;
+        const pub = assignments.filter((a) => a.status === 'published');
+        assignment = pub[0] || null;
         assignmentId = assignment?.assignment_id || '';
-      }
-      if (!assignment) {
-        // try any assignment in this course
-        const anyRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}`);
-        if (anyRes.ok) {
-          const anyAssignments = await anyRes.json();
-          assignment = anyAssignments[0] || null;
-          assignmentId = assignment?.assignment_id || '';
-        }
       }
     }
 
-    // Auto-discover active assignment across courses if neither assignment_id nor course_id was passed
-    if (!assignment) {
+    if (!assignment && !courseId) {
       try {
         const coursesRes = await fetch('/courses');
         if (coursesRes.ok) {
@@ -100,8 +117,9 @@
             const res = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
             if (res.ok) {
               const list = await res.json();
-              if (list.length > 0) {
-                assignment = list[0];
+              const pubList = list.filter((a) => a.status === 'published');
+              if (pubList.length > 0) {
+                assignment = pubList[0];
                 assignmentId = assignment.assignment_id;
                 courseId = cid;
                 break;
@@ -114,13 +132,14 @@
       }
     }
 
-    if (!assignment) {
+    if (!assignment && !courseId) {
       try {
         const directRes = await fetch('/assignments');
         if (directRes.ok) {
           const allList = await directRes.json();
-          if (allList.length > 0) {
-            assignment = allList[0];
+          const pubList = allList.filter((a) => a.status === 'published');
+          if (pubList.length > 0) {
+            assignment = pubList[0];
             assignmentId = assignment.assignment_id;
           }
         }
@@ -173,6 +192,7 @@
 
     await loadDocument();
     await loadProbes();
+    await loadSessionEvents();
   }
 
   async function syncDocument(patch) {
@@ -210,18 +230,22 @@
       evidenceSummary = result.evidence_summary || evidenceSummary;
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
-        probeNotice = 'A focused question is ready when you are. It tests this paragraph’s reasoning, not your grade.';
+        probeNotice = 'A Socratic probe is ready. It tests this paragraph’s reasoning.';
+        isTutorPanelOpen = true;
       }
+      await loadSessionEvents();
     } catch (err) {
       probeNotice = err.message || 'Your writing is saved. A question could not be checked right now.';
     }
   }
 
-  function openQuestions() {
-    const current = activeProbe();
-    if (current) activeProbeId = current.probe_id;
-    isQuestionDrawerOpen = true;
-    probeNotice = '';
+  function toggleTutorPanel() {
+    isTutorPanelOpen = !isTutorPanelOpen;
+    if (isTutorPanelOpen) {
+      const current = activeProbe();
+      if (current) activeProbeId = current.probe_id;
+      probeNotice = '';
+    }
   }
 
   async function changeProbe(probeId, action, body = null) {
@@ -238,8 +262,9 @@
       probeNotice = result.message;
       probeResponse = '';
       await loadProbes();
+      await loadSessionEvents();
       activeProbeId = probes[0]?.probe_id || '';
-      if (!probes.length) isQuestionDrawerOpen = false;
+      if (!probes.length) isTutorPanelOpen = false;
     } catch (err) {
       probeNotice = err.message || 'This question could not be updated.';
     } finally {
@@ -256,11 +281,37 @@
     await changeProbe(probe.probe_id, 'responses', { response_text: probeResponse.trim() });
   }
 
+  function insertSourceFromSidebar(source) {
+    if (editorRef?.insertSourceQuote) {
+      editorRef.insertSourceQuote(source);
+    }
+  }
+
+  function addSectionFromSidebar(type) {
+    if (editorRef?.insertWritingFrame) {
+      editorRef.insertWritingFrame(type);
+    }
+  }
+
+  function handleHeadingJump(pos) {
+    if (editorRef?.scrollToHeading) {
+      editorRef.scrollToHeading(pos);
+    }
+  }
+
+  let filteredSources = $derived(
+    (assignment?.grounding_sources || []).filter((s) => {
+      if (!sourceSearchQuery) return true;
+      const q = sourceSearchQuery.toLowerCase();
+      return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
+    })
+  );
+
   onMount(async () => {
     try {
       await loadAssignment();
     } catch (err) {
-      error = err.message || 'The long-form learning workspace could not be initialized.';
+      error = err.message || 'The reasoning workspace could not be initialized.';
     } finally {
       isLoading = false;
     }
@@ -269,82 +320,1189 @@
   onDestroy(() => clearTimeout(probeTimer));
 </script>
 
+<svelte:window onkeydown={(e) => {
+  if (e.key === 'Escape') {
+    if (isTutorPanelOpen) isTutorPanelOpen = false;
+  }
+}} />
+
 {#if isLoading}
-  <main class="loading-view"><div class="spinner"></div><p>Opening your long-form writing workspace…</p></main>
+  <main class="loading-view">
+    <div class="spinner"></div>
+    <p>Opening your reasoning canvas…</p>
+  </main>
 {:else if error && !assignment}
-  <main class="empty-view"><h1>Workspace unavailable</h1><p>{error}</p><a class="btn btn-primary" href="#/courses">Return to courses</a></main>
+  <main class="empty-view">
+    <h1>Workspace unavailable</h1>
+    <p>{error}</p>
+    <div style="display: flex; gap: 12px; margin-top: 14px;">
+      {#if courseId}
+        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
+      {/if}
+      <a class="btn btn-primary" href="#/student/portal">Return to Timeline</a>
+    </div>
+  </main>
 {:else if !assignment}
-  <main class="empty-view"><h1>No published assignment selected</h1><p>Open a published assignment from a curriculum module to start a protected reasoning session.</p><a class="btn btn-primary" href="#/courses">Choose a course</a></main>
+  <main class="empty-view">
+    <h1>{courseId ? 'No published assignment in this course yet' : 'No active assignment selected'}</h1>
+    <p>
+      {courseId 
+        ? 'Your instructor has not published an active reasoning assignment for this course yet.' 
+        : 'Open an active milestone from your enrolled courses to start a protected reasoning session.'}
+    </p>
+    <div style="display: flex; gap: 12px; margin-top: 14px;">
+      {#if courseId}
+        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
+      {/if}
+      <a class="btn btn-primary" href="#/student/portal">Browse Student Timeline</a>
+    </div>
+  </main>
 {:else}
-  <main class="document-workspace">
-    <header class="assignment-bar">
-      <div class="assignment-identity">
-        <span class="eyebrow">Active writing</span>
-        <h1>{assignment.title || 'Reasoning assignment'}</h1>
-        <span class="document-type">Long-form document</span>
+  <div class="workspace-viewport">
+    <!-- Top Control Bar -->
+    <header class="workspace-topbar">
+      <div class="topbar-left">
+        <button 
+          class="sidebar-toggle-btn" 
+          class:active={isSidebarOpen}
+          onclick={() => isSidebarOpen = !isSidebarOpen}
+          title="Toggle Navigation & Learning Context Sidebar"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          <span>{isSidebarOpen ? 'Hide Sidebar' : 'Sidebar'}</span>
+        </button>
+
+        <div class="assignment-headline">
+          <span class="eyebrow">Reasoning Milestone</span>
+          <h1>{assignment.title || 'Reasoning Assignment'}</h1>
+        </div>
       </div>
-      <div class="assignment-actions">
-        <button class="quiet-control" onclick={() => isBriefOpen = true}>View brief</button>
-        {#if probes.length}
-          <button class="question-control" onclick={openQuestions} aria-label={`Open ${probes.length} evidence question${probes.length === 1 ? '' : 's'}`}>
-            Questions <span>{probes.length}</span>
-          </button>
-        {/if}
+
+      <div class="topbar-right">
+        <button 
+          class="tutor-toggle-btn" 
+          class:active={isTutorPanelOpen}
+          onclick={toggleTutorPanel}
+          title="Toggle Socratic Inquiry & Bounded Probes"
+        >
+          <span class="probe-dot" class:has-probes={probes.length > 0}></span>
+          <span>Socratic Probes</span>
+          {#if probes.length > 0}
+            <span class="probe-count-pill">{probes.length}</span>
+          {/if}
+        </button>
+
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
     </header>
 
-    <section class="workspace-intro">
-      <div><span class="eyebrow">Student writing space</span><h2>Build your argument in one document.</h2><p>Use headings to organize your ideas. There is no fixed page or essay limit; your work is saved as individual document blocks.</p></div>
-      <a class="trace-link" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>View reasoning trace ↗</a>
-    </section>
+    <!-- 3-Zone Workspace Layout Container -->
+    <div class="workspace-grid" class:sidebar-closed={!isSidebarOpen} class:tutor-open={isTutorPanelOpen}>
+      
+      <!-- ZONE 1: LEFT SIDEBAR WITH VERTICAL NAVIGATION -->
+      {#if isSidebarOpen}
+        <aside class="workspace-sidebar" aria-label="Learning Materials and Navigation Sidebar">
+          <!-- Vertically Stacked Navigation Switcher -->
+          <div class="sidebar-nav-stack" role="tablist">
+            <button 
+              class="nav-item-btn" 
+              class:active={activeSidebarTab === 'scope'}
+              onclick={() => activeSidebarTab = 'scope'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'scope'}
+            >
+              <div class="nav-item-left">
+                <span class="nav-icon">📋</span>
+                <span class="nav-title">Scope & Evidence</span>
+              </div>
+              <span class="nav-badge">{assignment.grounding_sources?.length || 0} sources</span>
+            </button>
 
-    {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-    {#if probeNotice && !isQuestionDrawerOpen}<button class="probe-notice" onclick={openQuestions}>{probeNotice}</button>{/if}
-    {#if learningDocument}
-      <LongFormDocumentEditor
-        {learningDocument}
-        disabled={sessionStatus !== 'active'}
-        onSync={syncDocument}
-        onSynced={scheduleProbeEvaluation}
-      />
-    {/if}
+            <button 
+              class="nav-item-btn" 
+              class:active={activeSidebarTab === 'outline'}
+              onclick={() => activeSidebarTab = 'outline'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'outline'}
+            >
+              <div class="nav-item-left">
+                <span class="nav-icon">📑</span>
+                <span class="nav-title">Document Outline</span>
+              </div>
+              <span class="nav-badge">{documentHeadings.length} sec</span>
+            </button>
 
-    <aside class:open={isQuestionDrawerOpen} class="question-drawer" aria-label="Evidence and questions" aria-hidden={!isQuestionDrawerOpen}>
-      <header>
-        <div><span class="eyebrow">Evidence & questions</span><h2>Test your reasoning</h2></div>
-        <button onclick={() => isQuestionDrawerOpen = false} aria-label="Close evidence questions">×</button>
-      </header>
-      {#if currentProbe}
-        <div class="question-context"><span>{currentProbe.section_label}</span><strong>{currentProbe.focus_type.replace('_', ' ')}</strong></div>
-        <p class="question-copy">{currentProbe.question}</p>
-        <p class="evidence-explainer">A response gives your evaluator evidence to consider. Choosing Later or Dismiss does not change a grade, but this claim remains without a response record.</p>
-        <label for="probe-response">Your reasoning</label>
-        <textarea id="probe-response" bind:value={probeResponse} disabled={isProbeBusy} placeholder="Explain the reasoning in your own words. This is separate from your essay."></textarea>
-        {#if probeNotice}<p class="probe-message" role="status">{probeNotice}</p>{/if}
-        <div class="question-actions">
-          <button class="primary-question-action" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>{isProbeBusy ? 'Saving…' : 'Save response'}</button>
-          <button onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>Later</button>
-          <button class="dismiss" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>Dismiss</button>
-        </div>
-      {:else}
-        <div class="empty-questions"><h3>No open questions</h3><p>Continue writing. When a saved paragraph contains reasoning worth testing, a question will appear here without interrupting your work.</p>{#if evidenceSummary.evidence_submitted}<span>{evidenceSummary.evidence_submitted} response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} saved for review</span>{/if}</div>
+            <button 
+              class="nav-item-btn" 
+              class:active={activeSidebarTab === 'trace'}
+              onclick={() => activeSidebarTab = 'trace'}
+              role="tab"
+              aria-selected={activeSidebarTab === 'trace'}
+            >
+              <div class="nav-item-left">
+                <span class="nav-icon">⏱️</span>
+                <span class="nav-title">Reasoning Trace</span>
+              </div>
+              <span class="nav-badge">{sessionEvents.length} events</span>
+            </button>
+          </div>
+
+          <!-- Active Sidebar View Body -->
+          <div class="sidebar-tab-body">
+            <!-- VIEW 1: CONSOLIDATED SCOPE & ALLOWED SOURCES -->
+            {#if activeSidebarTab === 'scope'}
+              <div class="tab-panel scope-panel">
+                <div class="section-card">
+                  <span class="card-eyebrow">Assignment Task</span>
+                  <p class="prompt-text">{assignment.prompt}</p>
+                </div>
+
+                <div class="section-card">
+                  <span class="card-eyebrow">Target Knowledge Components</span>
+                  <div class="kc-pills">
+                    {#each assignment.target_kcs || [] as kc}
+                      <span class="kc-pill">{kc}</span>
+                    {:else}
+                      <p class="empty-text">No target KCs specified.</p>
+                    {/each}
+                  </div>
+                </div>
+
+                <div class="section-card sources-section">
+                  <div class="sources-header-bar">
+                    <span class="card-eyebrow">Approved Primary Sources ({assignment.grounding_sources?.length || 0})</span>
+                  </div>
+                  
+                  <div class="source-search-box">
+                    <input 
+                      type="text" 
+                      placeholder="Filter allowed sources..."
+                      bind:value={sourceSearchQuery}
+                      class="sidebar-search-input"
+                    />
+                  </div>
+
+                  <div class="sources-stream">
+                    {#each filteredSources as source}
+                      <div class="source-evidence-card">
+                        <div class="source-top">
+                          <span class="source-tag">Primary Source</span>
+                          <h6>{source.title || 'Course Material'}</h6>
+                        </div>
+                        <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
+                        <div class="source-bottom">
+                          <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
+                            <span>+ Cite in Document</span>
+                          </button>
+                        </div>
+                      </div>
+                    {:else}
+                      <div class="empty-state">
+                        <p>No primary sources match your search.</p>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+
+            <!-- VIEW 2: DOCUMENT OUTLINE & SECTION STEPS (Migrated from toolbar) -->
+            {:else if activeSidebarTab === 'outline'}
+              <div class="tab-panel outline-panel">
+                <div class="section-card">
+                  <span class="card-eyebrow">Active Document Outline</span>
+                  <p class="outline-hint">Click any heading to jump to that section in your draft.</p>
+                  
+                  <div class="headings-tree">
+                    {#each documentHeadings as heading, i}
+                      <button 
+                        class="outline-tree-item level-{heading.level}"
+                        onclick={() => handleHeadingJump(heading.pos)}
+                      >
+                        <span class="heading-num">{i + 1}</span>
+                        <span class="heading-label">{heading.text}</span>
+                      </button>
+                    {:else}
+                      <div class="empty-outline-box">
+                        <p>No headings in document yet.</p>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+
+                <div class="section-card">
+                  <span class="card-eyebrow">+ Add Structured CER Section</span>
+                  <div class="preset-grid">
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('claim')}>
+                      <span>🎯 Working Claim</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('evidence')}>
+                      <span>📜 Source Observations</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reasoning')}>
+                      <span>⚡ Causal Mechanism</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('alternative')}>
+                      <span>🔄 Alternative Explanation</span>
+                    </button>
+                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reflection')}>
+                      <span>🔍 Revision Reflection</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            <!-- VIEW 3: REASONING TRACE & LIVE PROVENANCE -->
+            {:else if activeSidebarTab === 'trace'}
+              <div class="tab-panel trace-panel">
+                <div class="trace-header">
+                  <div>
+                    <span class="card-eyebrow">Session Audit Stream</span>
+                    <span class="trace-count">{sessionEvents.length} recorded events</span>
+                  </div>
+                  <a class="deep-trace-link" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>
+                    Full Trace ↗
+                  </a>
+                </div>
+
+                <div class="trace-timeline">
+                  {#each sessionEvents as ev}
+                    <div class="trace-node">
+                      <div class="node-dot"></div>
+                      <div class="node-content">
+                        <span class="node-type">{ev.event_type.replace(/_/g, ' ')}</span>
+                        <span class="node-time">{new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="empty-state">
+                      <p>No actions logged yet. Edits and probes will stream live here.</p>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        </aside>
       {/if}
-    </aside>
-  </main>
 
-  {#if isBriefOpen}
-    <div class="brief-overlay" role="presentation" onclick={() => isBriefOpen = false}>
-      <dialog class="brief-dialog" open aria-label="Assignment brief" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') isBriefOpen = false; }}>
-        <header><div><div class="eyebrow">Assignment brief</div><h2>{assignment.title || 'Reasoning assignment'}</h2></div><button onclick={() => isBriefOpen = false} aria-label="Close assignment brief">×</button></header>
-        <p class="brief-prompt">{assignment.prompt}</p>
-        <div class="brief-grid"><div><h3>Target knowledge components</h3>{#each assignment.target_kcs || [] as kc}<code>{kc}</code>{/each}</div><div><h3>Approved sources</h3>{#each assignment.grounding_sources || [] as source}<p><strong>{source.title || 'Course material'}</strong><span>{source.excerpt || ''}</span></p>{:else}<p>No source excerpts are available.</p>{/each}</div></div>
-        <footer><span>Questions test your reasoning and create transparent evidence; they do not provide answers or automatic grades.</span><button class="btn btn-primary" onclick={() => isBriefOpen = false}>Return to writing</button></footer>
-      </dialog>
+      <!-- ZONE 2: CENTER REASONING CANVAS -->
+      <main class="canvas-main-area">
+        {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+        {#if probeNotice && !isTutorPanelOpen}
+          <button class="probe-alert-bar" onclick={toggleTutorPanel}>
+            💡 {probeNotice} (Click to open Socratic panel)
+          </button>
+        {/if}
+
+        {#if learningDocument}
+          <LongFormDocumentEditor
+            bind:this={editorRef}
+            {learningDocument}
+            {assignment}
+            disabled={sessionStatus !== 'active'}
+            onSync={syncDocument}
+            onSynced={scheduleProbeEvaluation}
+            onOpenQuestions={toggleTutorPanel}
+            onHeadingsChange={(h) => documentHeadings = h}
+            probeCount={probes.length}
+          />
+        {/if}
+      </main>
+
+      <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout) -->
+      {#if isTutorPanelOpen}
+        <aside class="socratic-tutor-column" aria-label="Socratic Reasoning and Evidence Panel">
+          <header class="tutor-header">
+            <div>
+              <span class="eyebrow">Socratic Inquiry</span>
+              <h3>Evidence & Probes</h3>
+            </div>
+            <button class="close-panel-btn" onclick={() => isTutorPanelOpen = false} title="Close Panel (Esc)">✕</button>
+          </header>
+
+          <div class="tutor-body">
+            {#if currentProbe}
+              <div class="probe-card">
+                <div class="probe-meta">
+                  <span class="section-tag">{currentProbe.section_label || 'Active paragraph'}</span>
+                  <span class="focus-pill">{currentProbe.focus_type.replace(/_/g, ' ')}</span>
+                </div>
+
+                <p class="probe-question">{currentProbe.question}</p>
+
+                <div class="probe-pedagogy-tip">
+                  <p>This question tests the causal reasoning in your saved paragraph. Your answer is captured as student evidence for evaluation.</p>
+                </div>
+
+                <label for="probe-input" class="probe-input-label">Your Reasoning Explanation</label>
+                <textarea 
+                  id="probe-input"
+                  bind:value={probeResponse}
+                  disabled={isProbeBusy}
+                  placeholder="Explain your causal reasoning in your own words. This is preserved as distinct student evidence."
+                  class="probe-textarea"
+                ></textarea>
+
+                {#if probeNotice}<p class="probe-status-msg" role="status">{probeNotice}</p>{/if}
+
+                <div class="probe-actions">
+                  <button class="save-evidence-btn" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
+                    {isProbeBusy ? 'Saving…' : 'Save Response (Evidence)'}
+                  </button>
+                  <button class="defer-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
+                    Later
+                  </button>
+                  <button class="dismiss-btn" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            {:else}
+              <div class="empty-probe-state">
+                <h4>No Pending Probes</h4>
+                <p>Continue writing in your document. When a paragraph contains reasoning worth testing, a targeted Socratic probe will appear here.</p>
+                {#if evidenceSummary.evidence_submitted}
+                  <span class="evidence-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        </aside>
+      {/if}
+
     </div>
-  {/if}
+  </div>
 {/if}
 
 <style>
-  .document-workspace{background:var(--color-obsidian);color:var(--color-slate-bright);min-height:calc(100vh - 56px);padding:0 clamp(18px,5vw,76px) 70px}.assignment-bar{align-items:center;border-bottom:1px solid var(--color-graphite-border);display:flex;gap:18px;justify-content:space-between;min-height:82px}.assignment-identity{align-items:baseline;display:flex;gap:11px;min-width:0}.eyebrow{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.55px;text-transform:uppercase}.assignment-identity h1{color:#fff;font-family:var(--font-brand);font-size:16px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.document-type{color:var(--color-horizon-bright);font-size:11px;font-weight:700;white-space:nowrap}.assignment-actions{align-items:center;display:flex;gap:8px}.quiet-control,.question-control{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:11px;font-weight:700;padding:8px 10px}.quiet-control:hover,.question-control:hover{border-color:var(--color-horizon-bright);color:#fff}.question-control{border-color:rgba(96,165,250,.55);color:#dbeafe}.question-control span{background:var(--color-horizon-blue);border-radius:99px;color:#fff;margin-left:5px;padding:1px 5px}.session-badge{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:99px;color:#34d399;font-size:10px;font-weight:700;padding:5px 9px;text-transform:capitalize}.session-badge.submitted{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:var(--color-amber)}.workspace-intro{align-items:flex-end;display:flex;gap:25px;justify-content:space-between;margin:clamp(28px,6vh,64px) auto 0;max-width:920px}.workspace-intro h2{color:#fff;font-family:var(--font-brand);font-size:clamp(27px,3.6vw,42px);letter-spacing:-.7px;margin:6px 0 8px}.workspace-intro p{color:var(--color-slate-light);font-size:14px;line-height:1.6;margin:0;max-width:655px}.trace-link{border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#bae6fd;flex:0 0 auto;font-size:11px;font-weight:700;padding:9px 11px;text-decoration:none}.trace-link:hover{border-color:var(--color-horizon-blue);color:#fff}.error-banner{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:#fca5a5;font-size:12px;margin:20px auto 0;max-width:920px;padding:10px 12px}.probe-notice{background:rgba(59,130,246,.1);border:1px solid rgba(96,165,250,.32);border-radius:var(--radius-sm);color:#bfdbfe;cursor:pointer;display:block;font:600 12px var(--font-ui);margin:18px auto -10px;max-width:920px;padding:9px 12px;text-align:left;width:100%}.probe-notice:hover{background:rgba(59,130,246,.17);border-color:var(--color-horizon-bright)}.question-drawer{background:#111b27;border-left:1px solid var(--color-graphite-border);box-shadow:-22px 0 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:15px;height:100%;padding:22px;position:fixed;right:0;top:0;transform:translateX(105%);transition:transform .24s ease;visibility:hidden;width:min(420px,100vw);z-index:70}.question-drawer.open{transform:translateX(0);visibility:visible}.question-drawer header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:15px}.question-drawer h2{color:#fff;font-family:var(--font-brand);font-size:22px;margin:4px 0 0}.question-drawer header button{background:transparent;border:0;color:var(--color-slate-light);cursor:pointer;font-size:27px;line-height:1}.question-context{align-items:center;display:flex;gap:8px}.question-context span{color:#94a3b8;font-size:11px}.question-context strong{background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.28);border-radius:99px;color:#c4b5fd;font-size:10px;padding:3px 7px;text-transform:capitalize}.question-copy{color:#f8fafc;font-family:var(--font-brand);font-size:18px;line-height:1.5;margin:0}.evidence-explainer{background:#161f2a;border-left:2px solid var(--color-horizon-blue);color:#cbd5e1;font-size:12px;line-height:1.55;margin:0;padding:10px 12px}.question-drawer label{color:#e2e8f0;font-size:12px;font-weight:700;margin-top:2px}.question-drawer textarea{background:#0e151e;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#f8fafc;font:14px/1.55 var(--font-ui);min-height:145px;outline:none;padding:11px;resize:vertical}.question-drawer textarea:focus{border-color:var(--color-horizon-bright);box-shadow:0 0 0 3px rgba(59,130,246,.12)}.probe-message{color:#bae6fd;font-size:12px;line-height:1.45;margin:0}.question-actions{display:flex;flex-wrap:wrap;gap:8px}.question-actions button{background:#182433;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:#cbd5e1;cursor:pointer;font-size:12px;font-weight:700;padding:9px 11px}.question-actions button:hover:not(:disabled){border-color:var(--color-horizon-bright);color:#fff}.question-actions button:disabled{cursor:not-allowed;opacity:.55}.question-actions .primary-question-action{background:var(--color-horizon-blue);border-color:var(--color-horizon-blue);color:#fff}.question-actions .dismiss{color:#fbbf24}.empty-questions{background:#161f2a;border:1px solid var(--color-graphite-border);border-radius:var(--radius-md);margin-top:5px;padding:17px}.empty-questions h3{color:#fff;font-size:15px;margin:0 0 6px}.empty-questions p{color:#94a3b8;font-size:12px;line-height:1.55;margin:0}.empty-questions span{color:#86efac;display:block;font-size:11px;margin-top:12px}.brief-overlay{align-items:center;background:rgba(2,6,23,.75);display:flex;inset:0;justify-content:center;padding:24px;position:fixed;z-index:80}.brief-dialog{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);box-shadow:0 24px 70px rgba(0,0,0,.5);max-width:820px;padding:24px;width:min(100%,820px)}.brief-dialog header{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;padding-bottom:14px}.brief-dialog h2{color:#fff;font-size:20px;margin:4px 0 0}.brief-dialog header button{background:none;border:0;color:#94a3b8;cursor:pointer;font-size:25px;line-height:1}.brief-prompt{color:#e2e8f0;font-size:14px;line-height:1.65;margin:18px 0}.brief-grid{display:grid;gap:15px;grid-template-columns:.8fr 1.2fr}.brief-grid>div{background:#111b27;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:7px;padding:13px}.brief-grid h3{color:#e2e8f0;font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase}.brief-grid code{color:#c4b5fd;font-size:10px;overflow-wrap:anywhere}.brief-grid p{color:#94a3b8;font-size:11px;line-height:1.4;margin:0}.brief-grid p strong{color:#bae6fd;display:block;font-size:11px}.brief-grid p span{display:block;margin-top:3px}.brief-dialog footer{align-items:center;color:#94a3b8;display:flex;font-size:11px;gap:14px;justify-content:space-between;margin-top:17px}.loading-view,.empty-view{align-items:center;background:var(--color-obsidian);color:var(--color-slate-light);display:flex;flex-direction:column;gap:14px;justify-content:center;min-height:calc(100vh - 56px);padding:24px;text-align:center}.empty-view h1{color:#fff;font-family:var(--font-brand);font-size:24px}.empty-view p{max-width:520px}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:32px;width:32px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:780px){.document-workspace{padding:0 16px 56px}.assignment-bar{align-items:flex-start;flex-direction:column;gap:10px;padding:14px 0}.assignment-identity{align-items:flex-start;flex-wrap:wrap}.assignment-actions{width:100%}.quiet-control,.question-control{flex:1}.workspace-intro{align-items:flex-start;flex-direction:column;margin-top:30px}.brief-grid{grid-template-columns:1fr}.brief-dialog footer{align-items:stretch;flex-direction:column}.brief-dialog footer .btn{width:100%}.question-drawer{width:100%}}@media(max-width:480px){.workspace-intro h2{font-size:29px}}
+  .workspace-viewport {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 56px);
+    background: var(--color-obsidian);
+    overflow: hidden;
+  }
+
+  /* Top Control Bar */
+  .workspace-topbar {
+    background: var(--color-graphite);
+    border-bottom: 1px solid var(--color-graphite-border);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 52px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .sidebar-toggle-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sidebar-toggle-btn:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+  }
+
+  .sidebar-toggle-btn.active {
+    background: rgba(217, 119, 6, 0.12);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  .assignment-headline {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .eyebrow {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--color-horizon-blue);
+  }
+
+  .assignment-headline h1 {
+    margin: 0;
+    font-family: var(--font-brand);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .tutor-toggle-btn {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-sm);
+    color: #8b5cf6;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tutor-toggle-btn:hover, .tutor-toggle-btn.active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+  }
+
+  .probe-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #8b5cf6;
+  }
+
+  .probe-dot.has-probes {
+    animation: pulseGlow 2s infinite;
+  }
+
+  .probe-count-pill {
+    background: #8b5cf6;
+    color: #fff;
+    border-radius: 99px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .session-badge {
+    background: var(--color-signal-green-bg);
+    border: 1px solid rgba(5, 150, 105, 0.25);
+    border-radius: 99px;
+    color: var(--color-signal-green);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    text-transform: capitalize;
+  }
+
+  .session-badge.submitted {
+    background: var(--color-amber-bg);
+    color: var(--color-amber);
+    border-color: rgba(217, 119, 6, 0.25);
+  }
+
+  /* Main 3-Zone Workspace Grid */
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .workspace-grid.sidebar-closed {
+    grid-template-columns: 0px 1fr;
+  }
+
+  .workspace-grid.tutor-open {
+    grid-template-columns: 340px 1fr 380px;
+  }
+
+  .workspace-grid.sidebar-closed.tutor-open {
+    grid-template-columns: 0px 1fr 380px;
+  }
+
+  /* ZONE 1: LEFT SIDEBAR */
+  .workspace-sidebar {
+    background: var(--color-graphite);
+    border-right: 1px solid var(--color-graphite-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 5;
+  }
+
+  /* Vertical Navigation Menu */
+  .sidebar-nav-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--color-bone-muted);
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .nav-item-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-slate-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.12s ease;
+  }
+
+  .nav-item-btn:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+  }
+
+  .nav-item-btn.active {
+    background: var(--color-graphite);
+    border-color: var(--color-graphite-border);
+    color: var(--color-heading);
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .nav-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-icon { font-size: 14px; }
+  .nav-title { font-size: 12px; }
+
+  .nav-badge {
+    font-size: 10px;
+    color: var(--color-slate-subtle);
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    padding: 1px 5px;
+    border-radius: 99px;
+  }
+
+  .sidebar-tab-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .tab-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .section-card {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .card-eyebrow {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-slate-muted);
+  }
+
+  .prompt-text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--color-slate-bright);
+  }
+
+  .kc-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .kc-pill {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-horizon-blue);
+    padding: 2px 6px;
+  }
+
+  /* Sources section inside scope view */
+  .sources-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sidebar-search-input {
+    width: 100%;
+    background: var(--input-bg, var(--color-graphite));
+    border: 1px solid var(--input-border, var(--color-graphite-border));
+    border-radius: var(--radius-xs);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--color-slate-bright);
+    outline: none;
+    box-sizing: border-box;
+  }
+  .sidebar-search-input:focus {
+    border-color: var(--color-aurora);
+  }
+
+  .sources-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .source-evidence-card {
+    background: var(--color-graphite-card, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .source-top {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .source-tag {
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: rgba(2, 132, 199, 0.1);
+    color: var(--color-aurora);
+    padding: 1px 4px;
+    border-radius: 99px;
+  }
+
+  .source-top h6 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .source-body {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+    background: var(--color-bone-muted);
+    border-left: 2px solid var(--color-aurora);
+    padding: 6px 8px;
+    font-style: italic;
+  }
+
+  .cite-action-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-aurora);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 8px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .cite-action-btn:hover {
+    background: var(--color-aurora);
+    color: #fff;
+    border-color: var(--color-aurora);
+  }
+
+  /* Outline View */
+  .outline-hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+
+  .headings-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .outline-tree-item {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    padding: 6px 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-slate-bright);
+    font-size: 12px;
+    transition: all 0.12s ease;
+    width: 100%;
+  }
+
+  .outline-tree-item:hover {
+    background: var(--color-graphite-hover);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  .outline-tree-item.level-3 {
+    margin-left: 14px;
+    width: calc(100% - 14px);
+    font-size: 11px;
+    opacity: 0.85;
+  }
+
+  .heading-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-horizon-blue);
+    min-width: 14px;
+  }
+
+  .heading-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty-outline-box {
+    text-align: center;
+    padding: 12px 0;
+    color: var(--color-slate-muted);
+    font-size: 11px;
+  }
+
+  /* Outline Presets */
+  .preset-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .preset-btn {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-slate-bright);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .preset-btn:hover {
+    background: var(--color-graphite-hover);
+    border-color: var(--color-horizon-blue);
+    color: var(--color-horizon-blue);
+  }
+
+  /* Trace Timeline */
+  .trace-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .trace-count {
+    font-size: 10px;
+    color: var(--color-slate-muted);
+    display: block;
+  }
+
+  .deep-trace-link {
+    font-size: 11px;
+    color: var(--color-horizon-blue);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .deep-trace-link:hover { text-decoration: underline; }
+
+  .trace-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .trace-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .node-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-horizon-blue);
+  }
+
+  .node-content {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 11px;
+  }
+
+  .node-type {
+    color: var(--color-heading);
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .node-time {
+    color: var(--color-slate-subtle);
+    font-size: 10px;
+  }
+
+  /* ZONE 2: CENTER CANVAS MAIN AREA */
+  .canvas-main-area {
+    overflow-y: auto;
+    padding: 20px clamp(16px, 3vw, 40px) 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .probe-alert-bar {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-sm);
+    color: #8b5cf6;
+    font: 600 12px var(--font-ui);
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .probe-alert-bar:hover {
+    background: rgba(139, 92, 246, 0.18);
+  }
+
+  .error-banner {
+    background: var(--color-rose-bg);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--color-rose);
+    font-size: 12px;
+    padding: 10px 14px;
+    max-width: 960px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* ZONE 3: RIGHT SOCRATIC TUTOR PANEL */
+  .socratic-tutor-column {
+    background: var(--color-graphite);
+    border-left: 1px solid var(--color-graphite-border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    z-index: 5;
+    animation: slideInRight 0.2s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .tutor-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-graphite-border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    background: var(--color-bone-muted);
+  }
+
+  .tutor-header h3 {
+    margin: 2px 0 0;
+    font-family: var(--font-brand);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .close-panel-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-slate-subtle);
+    font-size: 15px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+  }
+  .close-panel-btn:hover {
+    color: var(--color-heading);
+    background: var(--color-graphite-hover);
+  }
+
+  .tutor-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .probe-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .probe-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-tag {
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+
+  .focus-pill {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.28);
+    border-radius: 99px;
+    color: #8b5cf6;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 7px;
+    text-transform: capitalize;
+  }
+
+  .probe-question {
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .probe-pedagogy-tip {
+    background: var(--color-bone-muted);
+    border-left: 2px solid var(--color-aurora);
+    padding: 8px 10px;
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  }
+
+  .probe-pedagogy-tip p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-slate-light);
+  }
+
+  .probe-input-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-heading);
+    margin-top: 4px;
+  }
+
+  .probe-textarea {
+    width: 100%;
+    background: var(--input-bg, var(--color-graphite));
+    border: 1px solid var(--input-border, var(--color-graphite-border));
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-bright);
+    font: 13px/1.55 var(--font-ui);
+    min-height: 120px;
+    outline: none;
+    padding: 10px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .probe-textarea:focus {
+    border-color: var(--color-horizon-blue);
+    box-shadow: 0 0 0 2px var(--color-horizon-glow);
+  }
+
+  .probe-status-msg {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-horizon-blue);
+  }
+
+  .probe-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .save-evidence-btn {
+    background: var(--color-horizon-blue);
+    border: 1px solid var(--color-horizon-bright);
+    border-radius: var(--radius-xs);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 7px 11px;
+    cursor: pointer;
+    flex: 1;
+  }
+  .save-evidence-btn:hover:not(:disabled) {
+    background: var(--color-horizon-bright);
+  }
+
+  .defer-btn {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-slate-light);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 7px 10px;
+    cursor: pointer;
+  }
+
+  .dismiss-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-slate-subtle);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 7px 8px;
+    cursor: pointer;
+  }
+  .dismiss-btn:hover { color: var(--color-amber); }
+
+  .empty-probe-state {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .empty-probe-state h4 {
+    margin: 0 0 6px;
+    font-size: 14px;
+    color: var(--color-heading);
+  }
+
+  .empty-probe-state p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--color-slate-muted);
+  }
+
+  .evidence-badge {
+    display: inline-block;
+    color: var(--color-signal-green);
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 10px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 16px 0;
+    color: var(--color-slate-muted);
+    font-size: 11px;
+  }
+
+  .loading-view, .empty-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 56px);
+    background: var(--color-obsidian);
+    color: var(--color-slate-light);
+    padding: 24px;
+    text-align: center;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(217, 119, 6, 0.2);
+    border-top-color: var(--color-horizon-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1024px) {
+    .workspace-grid {
+      grid-template-columns: 280px 1fr;
+    }
+    .workspace-grid.tutor-open {
+      grid-template-columns: 280px 1fr 320px;
+    }
+  }
+
+  @media (max-width: 800px) {
+    .workspace-grid {
+      grid-template-columns: 1fr;
+    }
+    .workspace-grid.tutor-open {
+      grid-template-columns: 1fr;
+    }
+    .workspace-sidebar {
+      display: none;
+    }
+    .socratic-tutor-column {
+      position: fixed;
+      inset: 52px 0 0 0;
+      z-index: 50;
+    }
+  }
 </style>
