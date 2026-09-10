@@ -1,5 +1,6 @@
 <script>
   import Router from 'svelte-spa-router';
+  import { wrap } from 'svelte-spa-router/wrap';
   import './css/design-system.css';
   import AppHeader from './lib/AppHeader.svelte';
 
@@ -9,7 +10,6 @@
   import StudioReview from './routes/StudioReview.svelte';
   import CohortDiagnostics from './routes/CohortDiagnostics.svelte';
   import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
-  import StudentWorkspace from './routes/StudentWorkspace.svelte';
   import StudentHome from './routes/StudentHome.svelte';
   import StudentPortal from './routes/StudentPortal.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
@@ -22,7 +22,7 @@
     '/review': StudioReview,
     '/diagnostics': CohortDiagnostics,
     '/graph': KnowledgeGraph,
-    '/student': StudentWorkspace,
+    '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
     '/student/home': StudentHome,
     '/student/portal': StudentPortal,
     '/student/trace': StudentTrace,
