@@ -37,6 +37,8 @@
   let editorRef = $state(null);
 
   let currentProbe = $derived(activeProbe());
+  let published = $derived(assignment?.published || null);
+  let publicSources = $derived(published?.source_pack || []);
 
   const QUIET_PERIOD_MS = 5000;
 
@@ -231,7 +233,7 @@
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
         probeNotice = 'A Socratic probe is ready. It tests this paragraph’s reasoning.';
-        isTutorPanelOpen = true;
+        isTutorPanelOpen = false;
       }
       await loadSessionEvents();
     } catch (err) {
@@ -300,7 +302,7 @@
   }
 
   let filteredSources = $derived(
-    (assignment?.grounding_sources || []).filter((s) => {
+    publicSources.filter((s) => {
       if (!sourceSearchQuery) return true;
       const q = sourceSearchQuery.toLowerCase();
       return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
@@ -374,7 +376,7 @@
 
         <div class="assignment-headline">
           <span class="eyebrow">Reasoning Milestone</span>
-          <h1>{assignment.title || 'Reasoning Assignment'}</h1>
+          <h1>{published?.title || 'Assignment'}</h1>
         </div>
       </div>
 
@@ -383,10 +385,10 @@
           class="tutor-toggle-btn" 
           class:active={isTutorPanelOpen}
           onclick={toggleTutorPanel}
-          title="Toggle Socratic Inquiry & Bounded Probes"
+          title="Open optional writing support"
         >
           <span class="probe-dot" class:has-probes={probes.length > 0}></span>
-          <span>Socratic Probes</span>
+          <span>Writing support</span>
           {#if probes.length > 0}
             <span class="probe-count-pill">{probes.length}</span>
           {/if}
@@ -413,9 +415,9 @@
             >
               <div class="nav-item-left">
                 <span class="nav-icon">📋</span>
-                <span class="nav-title">Scope & Evidence</span>
+                <span class="nav-title">Assignment</span>
               </div>
-              <span class="nav-badge">{assignment.grounding_sources?.length || 0} sources</span>
+              <span class="nav-badge">{publicSources.length} sources</span>
             </button>
 
             <button 
@@ -440,10 +442,10 @@
               aria-selected={activeSidebarTab === 'trace'}
             >
               <div class="nav-item-left">
-                <span class="nav-icon">⏱️</span>
-                <span class="nav-title">Reasoning Trace</span>
+                <span class="nav-icon">✓</span>
+                <span class="nav-title">Rubric</span>
               </div>
-              <span class="nav-badge">{sessionEvents.length} events</span>
+              <span class="nav-badge">{published?.public_rubric?.length || 0} criteria</span>
             </button>
           </div>
 
@@ -453,24 +455,27 @@
             {#if activeSidebarTab === 'scope'}
               <div class="tab-panel scope-panel">
                 <div class="section-card">
-                  <span class="card-eyebrow">Assignment Task</span>
-                  <p class="prompt-text">{assignment.prompt}</p>
+                  <span class="card-eyebrow">Why this matters</span>
+                  <p class="prompt-text">{published?.purpose}</p>
                 </div>
 
                 <div class="section-card">
-                  <span class="card-eyebrow">Target Knowledge Components</span>
-                  <div class="kc-pills">
-                    {#each assignment.target_kcs || [] as kc}
-                      <span class="kc-pill">{kc}</span>
-                    {:else}
-                      <p class="empty-text">No target KCs specified.</p>
-                    {/each}
-                  </div>
+                  <span class="card-eyebrow">Your task</span>
+                  <p class="prompt-text">{published?.task?.prompt}</p>
+                  <p class="scope-text"><strong>Scope:</strong> {published?.task?.scope}</p>
+                  <p class="scope-text"><strong>Deliverable:</strong> {published?.task?.deliverable}</p>
+                </div>
+
+                <div class="section-card">
+                  <span class="card-eyebrow">What you will practice</span>
+                  <ul class="goal-list">
+                    {#each published?.learning_goals || [] as goal}<li>{goal}</li>{/each}
+                  </ul>
                 </div>
 
                 <div class="section-card sources-section">
                   <div class="sources-header-bar">
-                    <span class="card-eyebrow">Approved Primary Sources ({assignment.grounding_sources?.length || 0})</span>
+                    <span class="card-eyebrow">Assigned materials ({publicSources.length})</span>
                   </div>
                   
                   <div class="source-search-box">
@@ -486,19 +491,21 @@
                     {#each filteredSources as source}
                       <div class="source-evidence-card">
                         <div class="source-top">
-                          <span class="source-tag">Primary Source</span>
+                          <span class="source-tag">Assigned material</span>
                           <h6>{source.title || 'Course Material'}</h6>
                         </div>
                         <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
+                        <p class="source-guidance">{source.relevance_guidance}</p>
                         <div class="source-bottom">
                           <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
-                            <span>+ Cite in Document</span>
+                            <span>+ Use in my draft</span>
                           </button>
+                          {#if source.source_url}<a class="source-link" href={source.source_url} target="_blank" rel="noreferrer">Open source ↗</a>{/if}
                         </div>
                       </div>
                     {:else}
                       <div class="empty-state">
-                        <p>No primary sources match your search.</p>
+                        <p>No assigned materials match your search.</p>
                       </div>
                     {/each}
                   </div>
@@ -530,53 +537,45 @@
                 </div>
 
                 <div class="section-card">
-                  <span class="card-eyebrow">+ Add Structured CER Section</span>
+                  <span class="card-eyebrow">+ Add a section</span>
                   <div class="preset-grid">
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('claim')}>
-                      <span>🎯 Working Claim</span>
+                      <span>🎯 Main idea</span>
                     </button>
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('evidence')}>
-                      <span>📜 Source Observations</span>
+                      <span>📜 Source notes</span>
                     </button>
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('reasoning')}>
-                      <span>⚡ Causal Mechanism</span>
+                      <span>⚡ Explanation</span>
                     </button>
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('alternative')}>
-                      <span>🔄 Alternative Explanation</span>
+                      <span>🔄 Consider another view</span>
                     </button>
                     <button class="preset-btn" onclick={() => addSectionFromSidebar('reflection')}>
-                      <span>🔍 Revision Reflection</span>
+                      <span>🔍 Revision notes</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-            <!-- VIEW 3: REASONING TRACE & LIVE PROVENANCE -->
+            <!-- VIEW 3: PUBLIC RUBRIC -->
             {:else if activeSidebarTab === 'trace'}
               <div class="tab-panel trace-panel">
                 <div class="trace-header">
                   <div>
-                    <span class="card-eyebrow">Session Audit Stream</span>
-                    <span class="trace-count">{sessionEvents.length} recorded events</span>
+                    <span class="card-eyebrow">How your work is evaluated</span>
+                    <span class="trace-count">Use this rubric to review your draft before submitting.</span>
                   </div>
-                  <a class="deep-trace-link" href={`#/student/trace?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(assignmentId)}&session_id=${encodeURIComponent(sessionId)}`}>
-                    Full Trace ↗
-                  </a>
                 </div>
 
-                <div class="trace-timeline">
-                  {#each sessionEvents as ev}
-                    <div class="trace-node">
-                      <div class="node-dot"></div>
-                      <div class="node-content">
-                        <span class="node-type">{ev.event_type.replace(/_/g, ' ')}</span>
-                        <span class="node-time">{new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-                  {:else}
-                    <div class="empty-state">
-                      <p>No actions logged yet. Edits and probes will stream live here.</p>
-                    </div>
+                <div class="rubric-list">
+                  {#each published?.public_rubric || [] as criterion}
+                    <article class="rubric-card">
+                      <div class="rubric-heading"><strong>{criterion.title}</strong>{#if criterion.weight}<span>{criterion.weight}%</span>{/if}</div>
+                      <p>{criterion.description}</p>
+                      <div class="rubric-levels">{#each criterion.levels as level}<div><strong>{level.label}</strong><small>{level.description}</small></div>{/each}</div>
+                      <p class="self-review"><strong>Self-review:</strong> {criterion.self_review_prompt}</p>
+                    </article>
                   {/each}
                 </div>
               </div>
@@ -590,7 +589,7 @@
         {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
         {#if probeNotice && !isTutorPanelOpen}
           <button class="probe-alert-bar" onclick={toggleTutorPanel}>
-            💡 {probeNotice} (Click to open Socratic panel)
+            💡 {probeNotice} (Open writing support)
           </button>
         {/if}
 
@@ -611,11 +610,11 @@
 
       <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout) -->
       {#if isTutorPanelOpen}
-        <aside class="socratic-tutor-column" aria-label="Socratic Reasoning and Evidence Panel">
+        <aside class="socratic-tutor-column" aria-label="Optional writing support">
           <header class="tutor-header">
             <div>
-              <span class="eyebrow">Socratic Inquiry</span>
-              <h3>Evidence & Probes</h3>
+                    <span class="eyebrow">Optional support</span>
+                    <h3>Writing support</h3>
             </div>
             <button class="close-panel-btn" onclick={() => isTutorPanelOpen = false} title="Close Panel (Esc)">✕</button>
           </header>
@@ -631,15 +630,15 @@
                 <p class="probe-question">{currentProbe.question}</p>
 
                 <div class="probe-pedagogy-tip">
-                  <p>This question tests the causal reasoning in your saved paragraph. Your answer is captured as student evidence for evaluation.</p>
+                  <p>Use this optional question only if it helps you develop or revise your response. Your educator evaluates the final work.</p>
                 </div>
 
-                <label for="probe-input" class="probe-input-label">Your Reasoning Explanation</label>
+                <label for="probe-input" class="probe-input-label">Your working note</label>
                 <textarea 
                   id="probe-input"
                   bind:value={probeResponse}
                   disabled={isProbeBusy}
-                  placeholder="Explain your causal reasoning in your own words. This is preserved as distinct student evidence."
+                  placeholder="Write a note that helps you continue your own draft."
                   class="probe-textarea"
                 ></textarea>
 
@@ -647,7 +646,7 @@
 
                 <div class="probe-actions">
                   <button class="save-evidence-btn" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
-                    {isProbeBusy ? 'Saving…' : 'Save Response (Evidence)'}
+                    {isProbeBusy ? 'Saving…' : 'Save note'}
                   </button>
                   <button class="defer-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
                     Later
@@ -660,7 +659,7 @@
             {:else}
               <div class="empty-probe-state">
                 <h4>No Pending Probes</h4>
-                <p>Continue writing in your document. When a paragraph contains reasoning worth testing, a targeted Socratic probe will appear here.</p>
+                <p>Use the assignment, materials, and rubric to continue your draft. Optional support will be available when it can help you take a next step.</p>
                 {#if evidenceSummary.evidence_submitted}
                   <span class="evidence-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
                 {/if}
@@ -1479,6 +1478,23 @@
   }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .scope-text { color: var(--color-slate-light); font-size: 11px; line-height: 1.45; margin: 0; }
+  .scope-text strong { color: var(--color-heading); }
+  .goal-list { color: var(--color-slate-light); display: flex; flex-direction: column; font-size: 11px; gap: 6px; line-height: 1.45; margin: 0; padding-left: 17px; }
+  .source-guidance { color: var(--color-slate-muted); font-size: 10px; line-height: 1.45; margin: 0; }
+  .source-link { color: var(--color-horizon-blue); display: inline-block; font-size: 10px; font-weight: 700; margin-top: 7px; text-decoration: none; }
+  .rubric-list { display: flex; flex-direction: column; gap: 10px; }
+  .rubric-card { background: var(--color-bone-surface, var(--color-graphite)); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 7px; padding: 11px; }
+  .rubric-heading { align-items: center; display: flex; justify-content: space-between; }
+  .rubric-heading strong { color: var(--color-heading); font-size: 12px; }
+  .rubric-heading span { color: var(--color-horizon-blue); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+  .rubric-card > p { color: var(--color-slate-light); font-size: 11px; line-height: 1.45; margin: 0; }
+  .rubric-levels { display: flex; flex-direction: column; gap: 5px; }
+  .rubric-levels > div { background: var(--color-bone-muted); border-left: 2px solid var(--color-horizon-blue); padding: 6px 7px; }
+  .rubric-levels strong { color: var(--color-heading); display: block; font-size: 10px; }
+  .rubric-levels small { color: var(--color-slate-light); display: block; font-size: 10px; line-height: 1.4; margin-top: 2px; }
+  .rubric-card .self-review { color: #93c5fd; font-size: 10px; }
 
   @media (max-width: 1024px) {
     .workspace-grid {
