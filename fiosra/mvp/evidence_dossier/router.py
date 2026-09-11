@@ -5,12 +5,31 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
 from fiosra.mvp.evidence_dossier.synthesizer import evidence_dossier_synthesizer
 from fiosra.mvp.socratic_probe_service import socratic_probe_service
 
 router = APIRouter(prefix="/evidence", tags=["Evidence & AutoSCORE Dossier"])
+
+
+async def _published_rubric(session_info: dict[str, Any]) -> list[dict[str, Any]] | None:
+    assignment_id = session_info.get("assignment_id")
+    if not assignment_id:
+        return None
+    assignment = await assignment_generator.get_public_assignment(assignment_id)
+    if not assignment:
+        return None
+    return [
+        {
+            "criterion_id": criterion.criterion_id,
+            "label": criterion.title,
+            "description": criterion.description,
+            "weight": criterion.weight,
+        }
+        for criterion in assignment.published.public_rubric
+    ]
 
 
 class FinaliseGradeRequest(BaseModel):
@@ -51,7 +70,11 @@ async def get_review_queue(
     for row in rows:
         session_info = await event_store.get_session_details(row["session_id"])
         events = await event_store.get_session_events(row["session_id"])
-        dossier = evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
+        dossier = evidence_dossier_synthesizer.synthesize_dossier(
+            session_info=session_info,
+            events=events,
+            rubric_criteria=await _published_rubric(session_info),
+        )
         summary = dossier.get("executive_summary", {})
         queue.append(
             {
@@ -75,7 +98,11 @@ async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     events = await event_store.get_session_events(session_id)
-    dossier = evidence_dossier_synthesizer.synthesize_dossier(session_info=session_info, events=events)
+    dossier = evidence_dossier_synthesizer.synthesize_dossier(
+        session_info=session_info,
+        events=events,
+        rubric_criteria=await _published_rubric(session_info),
+    )
     dossier["proactive_socratic_evidence"] = [
         record.model_dump(mode="json") for record in await socratic_probe_service.trace_records(session_id)
     ]

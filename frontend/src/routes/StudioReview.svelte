@@ -7,7 +7,7 @@
   let selected = $state(null);
   let dossier = $state(null);
   let trace = $state([]);
-  let grade = $state('A');
+  let grade = $state('');
   let feedback = $state('');
   let teacherId = $state('educator_workspace');
   let isLoading = $state(true);
@@ -30,7 +30,7 @@
     dossier = null;
     trace = [];
     feedback = '';
-    grade = item.suggested_grade || 'A';
+    grade = '';
     error = '';
     const [dossierResponse, traceResponse] = await Promise.all([
       fetch(`/evidence/dossier/${item.session_id}`),
@@ -111,7 +111,7 @@
               <button class:active={selected?.session_id === item.session_id} class="queue-item" onclick={() => selectItem(item)}>
                 <span class="student-mark">{item.student_id.slice(0, 2).toUpperCase()}</span>
                 <span class="item-copy"><strong>{item.student_id}</strong><small>{item.assignment_title}</small><small>{formatDate(item.submitted_at)}</small></span>
-                <span class="grade-pill">{item.suggested_grade}</span>
+                <span class="grade-pill">Review</span>
               </button>
             {/each}
           </div>
@@ -124,7 +124,7 @@
         {:else if !dossier}
           <div class="loading small"><div class="spinner"></div><span>Opening evidence dossier…</span></div>
         {:else}
-          <header class="dossier-header"><div><div class="eyebrow">Evidence packet</div><h2>{selected.student_id}</h2><p>{selected.assignment_title}</p></div><div class="suggestion"><span>Suggested grade</span><strong>{dossier.executive_summary?.suggested_grade}</strong></div></header>
+          <header class="dossier-header"><div><div class="eyebrow">Evidence packet</div><h2>{selected.student_id}</h2><p>{selected.assignment_title}</p></div><div class="suggestion"><span>Final decision</span><strong>Teacher review</strong></div></header>
           <div class="summary-strip"><div><span>Autonomy</span><strong>{dossier.executive_summary?.autonomy_rating}</strong></div><div><span>Hint dependency</span><strong>{Math.round((dossier.aggregate_metrics?.hint_dependency_ratio || 0) * 100)}%</strong></div><div><span>Misconceptions</span><strong>{dossier.aggregate_metrics?.total_misconceptions_encountered || 0}</strong></div></div>
           {@const studentRevisions = trace.filter((event) => event.event_type === 'canvas_section_saved')}
           {@const supportActions = trace.filter((event) => event.event_type.startsWith('canvas_suggestion_'))}
@@ -142,7 +142,7 @@
               <div class="probe-evidence-list">{#each proactiveEvidence as probe (probe.probe_id)}<article class:responded={probe.evidence_state === 'evidence_submitted'} class="probe-evidence-card"><div class="probe-card-meta"><span>{probe.section_label}</span><strong>{probe.focus_type.replaceAll('_', ' ')}</strong><em>{probe.status}</em></div><p class="probe-question">{probe.question}</p>{#if probe.response_text}<div class="probe-response"><span>Learner response</span><p>{probe.response_text}</p></div>{:else}<p class="probe-no-response">No learner response was submitted for this question.</p>{/if}</article>{/each}</div>
             </section>
           {/if}
-          <section class="evidence-section"><h3>Evidence by criterion</h3>{#each dossier.per_question_evidence || [] as question}{#each Object.entries(question.rubric_evidence || {}) as [, criterion]}<article class:met={criterion.met} class="criterion"><div><strong>{criterion.met ? 'Met' : 'Needs review'}</strong><span>{Math.round((criterion.confidence || 0) * 100)}% confidence</span></div><p>{criterion.evidence}</p><small>{criterion.explanation}</small></article>{/each}{/each}</section>
+          <section class="evidence-section"><h3>Evidence by published rubric criterion</h3>{#each dossier.per_question_evidence || [] as question}{#each Object.entries(question.rubric_evidence || {}) as [, criterion]}<article class:met={criterion.met} class="criterion"><div><strong>{criterion.label || (criterion.met ? 'Evidence found' : 'Needs review')}</strong><span>{Math.round((criterion.confidence || 0) * 100)}% evidence confidence</span></div><p class="criterion-description">{criterion.description}</p><p>{criterion.evidence}</p><small>{criterion.explanation}</small></article>{/each}{/each}</section>
           <section class="grade-form"><h3>Educator finalization</h3><div class="form-grid"><label>Approved grade<input bind:value={grade} placeholder="A, B+, 88%" /></label><label>Educator identifier<input bind:value={teacherId} /></label></div><label>Formative feedback<textarea bind:value={feedback} rows="3" placeholder="Optional feedback for the student’s next reasoning cycle."></textarea></label><button class="btn btn-success" onclick={finalise} disabled={isFinalizing}>{isFinalizing ? 'Finalizing…' : 'Finalize grade and seal session'}</button></section>
         {/if}
       </section>
