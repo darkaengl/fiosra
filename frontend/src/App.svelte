@@ -9,9 +9,6 @@
   import Courses from './routes/Courses.svelte';
   import CourseStudio from './routes/CourseStudio.svelte';
   import AssignmentDesigner from './routes/AssignmentDesigner.svelte';
-  import StudioReview from './routes/StudioReview.svelte';
-  import CohortDiagnostics from './routes/CohortDiagnostics.svelte';
-  import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
   import StudentHome from './routes/StudentHome.svelte';
   import StudentPortal from './routes/StudentPortal.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
@@ -24,9 +21,6 @@
     '/courses': Courses,
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
-    '/review': StudioReview,
-    '/diagnostics': CohortDiagnostics,
-    '/graph': KnowledgeGraph,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
     '/student/home': StudentHome,
     '/student/portal': StudentPortal,

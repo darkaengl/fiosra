@@ -136,7 +136,6 @@
     </div>
   </div>
 
-  {#if !parsed.isGlobalView}
     <nav class="nav-segmented" aria-label="Main Navigation">
       {#if parsed.isStudentView}
         <a
@@ -171,46 +170,13 @@
           Portfolio
         </a>
         <a
-          href="#/studio/course"
-          class="nav-pill {parsed.activeTab === 'studio' ? 'active' : ''}"
-        >
-          ✨ Studio
-        </a>
-        <a
           href="#/modules{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'modules' ? 'active' : ''}"
+          class="nav-pill {parsed.activeTab === 'modules' || parsed.activeTab === 'designer' || parsed.activeTab === 'review' || parsed.activeTab === 'diagnostics' || parsed.activeTab === 'graph' ? 'active' : ''}"
         >
           Curriculum
         </a>
-        <a
-          href="#/designer{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'designer' ? 'active' : ''}"
-        >
-          Designer
-        </a>
-        <a
-          href="#/review{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'review' ? 'active' : ''}"
-        >
-          AutoSCORE
-        </a>
-        <a
-          href="#/diagnostics{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'diagnostics' ? 'active' : ''}"
-        >
-          Cohort
-        </a>
-        <a
-          href="#/graph{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'graph' ? 'active' : ''}"
-        >
-          Graph
-        </a>
       {/if}
     </nav>
-  {:else}
-    <div class="header-center-placeholder"></div>
-  {/if}
 
   <div class="header-right">
     {#if !parsed.isStudentView}
@@ -240,11 +206,6 @@
         <span class="user-name">Julian Hayes</span>
       </div>
     {:else}
-      <div class="status-chip" title="Live Knowledge Graph Grounding Status">
-        <span class="status-dot"></span>
-        <span class="status-label">14 KCs Grounded</span>
-      </div>
-
       <a href="#/student/portal" class="role-switch-btn" title="Preview as Student">
         <span>Student View</span>
         <span class="switch-icon">↗</span>
@@ -265,9 +226,9 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--header-border);
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     padding: 0 20px;
     position: sticky;
     top: 0;
@@ -276,12 +237,14 @@
     transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
-  /* Left Cluster */
+  /* Left Cluster — its own column, so a long course title never pushes the
+     centered nav off-center (grid keeps the center column fixed-width). */
   .header-left {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-shrink: 0;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .brand-logo {
@@ -354,10 +317,6 @@
     border-color: var(--color-slate-subtle);
   }
 
-  .header-center-placeholder {
-    flex: 1;
-  }
-
   /* Center Segmented Navigation */
   .nav-segmented {
     display: flex;
@@ -404,7 +363,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-shrink: 0;
+    justify-self: end;
   }
 
   .assistant-launch {
@@ -457,28 +416,6 @@
     opacity: 1;
     background: var(--pill-active-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
-
-  .status-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 9px;
-    border-radius: var(--radius-full);
-    background: var(--color-signal-green-bg);
-    border: 1px solid rgba(78, 170, 122, 0.3);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-signal-green);
-    cursor: default;
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-signal-green);
-    box-shadow: 0 0 6px var(--color-signal-green);
   }
 
   .role-switch-btn {
@@ -553,12 +490,6 @@
   }
 
   @media (max-width: 1080px) {
-    .status-label {
-      display: none;
-    }
-    .status-chip {
-      padding: 5px;
-    }
     .nav-pill {
       padding: 5px 10px;
       font-size: 12px;

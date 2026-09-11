@@ -7,6 +7,8 @@
   import AddResourceModal from '../lib/AddResourceModal.svelte';
   import AddModuleModal from '../lib/AddModuleModal.svelte';
   import CohortRoster from '../lib/CohortRoster.svelte';
+  import CohortDiagnostics from './CohortDiagnostics.svelte';
+  import StudioReview from './StudioReview.svelte';
 
   let currentCourseId = $state('');
   let currentCourse = $state(null);
@@ -95,6 +97,19 @@
     } catch (err) { alert('Failed to delete resource: ' + err.message); }
   }
 
+  async function handleDeleteAssignment(assignmentId, title) {
+    if (!confirm(`Delete "${title || 'this assignment'}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/assignments/${assignmentId}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        await handleModuleCreated();
+      } else {
+        const detail = await res.json().catch(() => ({}));
+        alert(detail.detail || 'This assignment could not be deleted.');
+      }
+    } catch (err) { alert('Failed to delete assignment: ' + err.message); }
+  }
+
   onMount(() => { loadCourseWorkspace(); });
 </script>
 
@@ -126,6 +141,9 @@
       <button type="button" class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}" onclick={() => (activeTab = 'roster')}>
         <span>👥</span> Cohort Roster &amp; Autonomy Diagnostics ({rosterData.total_enrolled || rosterData.students?.length || 0} Students)
       </button>
+      <button type="button" class="view-tab-btn {activeTab === 'autoscore' ? 'active' : ''}" onclick={() => (activeTab = 'autoscore')}>
+        <span>⚡</span> AutoSCORE Review
+      </button>
       <button type="button" class="view-tab-btn {activeTab === 'concepts' ? 'active' : ''}" onclick={() => (activeTab = 'concepts')}>
         <span>◌</span> Curriculum Concept Graph
       </button>
@@ -149,6 +167,7 @@
               courseId={currentCourseId}
               onAddResource={handleOpenAddResource}
               onDeleteResource={handleDeleteResource}
+              onDeleteAssignment={handleDeleteAssignment}
             />
           {/each}
         {/if}
@@ -159,6 +178,12 @@
         courseId={currentCourseId}
         onDispatchScaffold={() => alert('Targeted Socratic micro-scaffold dispatched to flagged students.')}
       />
+      <!-- Preview: heatmap and flagged-student panels are not yet wired to live
+           misconception data (see the Cohort Diagnostics build note). Kept here
+           so the feature is easy to find and finish. -->
+      <CohortDiagnostics />
+    {:else if activeTab === 'autoscore'}
+      <StudioReview />
     {:else}
       <CourseConceptMap course={currentCourse} courseId={currentCourseId} />
     {/if}

@@ -148,3 +148,14 @@ async def publish_assignment(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/{assignment_id}", status_code=204)
+async def delete_assignment(assignment_id: UUID) -> None:
+    """Permanently delete a draft or published assignment with no student activity."""
+    try:
+        await assignment_generator.delete_assignment(assignment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

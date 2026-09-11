@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from fiosra.mvp.assignment_designer.distractor_engine import distractor_engine
 from fiosra.mvp.assignment_designer.schemas import (
@@ -792,6 +793,32 @@ class AssignmentGenerator:
             "title": row["title"],
             "status": "published",
         }
+
+    @classmethod
+    async def delete_assignment(cls, assignment_id: UUID | str) -> None:
+        """Permanently remove a draft or published assignment.
+
+        Refuses when a student has already interacted with it (a session, learning
+        document, or reasoning trace references this assignment_id) so a real student
+        submission can never be silently discarded — only the database's own foreign
+        key constraints enforce this, so the guard rail can't be bypassed here.
+        """
+        delete_sql = text("""
+            DELETE FROM assignments WHERE assignment_id = CAST(:assignment_id AS UUID)
+            RETURNING assignment_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            try:
+                result = await session.execute(delete_sql, {"assignment_id": str(assignment_id)})
+                row = result.mappings().first()
+                if not row:
+                    raise ValueError(f"Assignment '{assignment_id}' not found.")
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise RuntimeError(
+                    "This assignment has student sessions or submitted work and cannot be deleted."
+                ) from exc
 
 
 assignment_generator = AssignmentGenerator()
