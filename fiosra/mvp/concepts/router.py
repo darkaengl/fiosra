@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from fiosra.mvp.concepts.schemas import (
     ConceptCreate,
     ConceptGraphProposalApprovalRequest,
+    ConceptGraphProposalRequest,
     ConceptGraphProposalResponse,
     ConceptGraphResponse,
     ConceptRelationCreate,
@@ -38,10 +39,15 @@ async def get_concept_graph(course_id: UUID) -> ConceptGraphResponse:
 
 
 @router.post("/proposals/generate", response_model=ConceptGraphProposalResponse)
-async def generate_concept_graph_proposal(course_id: UUID) -> ConceptGraphProposalResponse:
+async def generate_concept_graph_proposal(
+    course_id: UUID,
+    payload: ConceptGraphProposalRequest | None = None,
+) -> ConceptGraphProposalResponse:
     """Generate a teacher-reviewable high-to-low concept graph from the course materials."""
     course = await _course_or_404(course_id)
-    proposal, generated_by = await concept_graph_service.generate_proposal(course)
+    proposal, generated_by = await concept_graph_service.generate_proposal(
+        course, instruction=payload.instruction if payload else None
+    )
     return ConceptGraphProposalResponse(proposal=proposal, generated_by=generated_by)
 
 

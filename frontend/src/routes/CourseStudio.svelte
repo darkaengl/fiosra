@@ -231,6 +231,19 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   function removeObjective(mod, idx) {
     mod.learning_objectives = mod.learning_objectives.filter((_, i) => i !== idx);
   }
+
+  onMount(() => {
+    const queryIndex = window.location.hash.indexOf('?');
+    if (queryIndex < 0) return;
+    const params = new URLSearchParams(window.location.hash.slice(queryIndex + 1));
+    if (params.get('assistant') !== 'course') return;
+    const direction = params.get('assistant_instruction') || '';
+    if (direction) {
+      titleHint = 'AI-assisted course design';
+      materialsText = `Educator design direction:\n${direction}`;
+      notice = 'The AI Design Assistant added your direction to the course studio. Review or expand it, then synthesize the editable curriculum draft.';
+    }
+  });
 </script>
 
 <div class="studio-shell">

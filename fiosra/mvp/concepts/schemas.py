@@ -119,6 +119,14 @@ class ConceptGraphProposalResponse(BaseModel):
     needs_teacher_validation: bool = True
 
 
+class ConceptGraphProposalRequest(BaseModel):
+    """Optional teacher direction for an automatic graph proposal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str | None = Field(default=None, max_length=1200)
+
+
 class ConceptGraphProposalApprovalRequest(BaseModel):
     """The teacher-approved subset of an automatically generated concept graph."""
 

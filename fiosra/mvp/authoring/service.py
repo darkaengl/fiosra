@@ -2,7 +2,6 @@ import json
 import logging
 import re
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import text
 
@@ -163,7 +162,7 @@ class CourseAuthoringService:
                 change_status="unchanged",
             ),
             DraftModuleSpec(
-                title=f"Unit 2: Structural Dynamics & Critical Inquiries",
+                title="Unit 2: Structural Dynamics & Critical Inquiries",
                 description="Deep dive into causal mechanisms, competing perspectives, and secondary literature debate.",
                 learning_objectives=[
                     "Examine causal interactions and institutional pressures",
@@ -181,7 +180,7 @@ class CourseAuthoringService:
                 change_status="unchanged",
             ),
             DraftModuleSpec(
-                title=f"Unit 3: Synthesis, Historiography & Modern Implications",
+                title="Unit 3: Synthesis, Historiography & Modern Implications",
                 description="Culminating synthesis applying learned knowledge components to broader academic and contemporary debates.",
                 learning_objectives=[
                     "Construct rigorous, source-grounded academic arguments",
@@ -406,7 +405,7 @@ class CourseAuthoringService:
                 title=f"{draft.title} - Complete Curriculum",
                 domain=draft.domain,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - publishing must survive non-critical ingestion failures.
             logger.warning(f"Syllabus vectorization during publish encountered warning: {e}")
 
         course_response = await course_service.get_course(course_id)
@@ -431,8 +430,19 @@ class AssignmentAuthoringService:
                 course = await course_service.get_course(req.course_id)
                 if course:
                     context_text += f"Course: {course.title}\nCourse Overview: {course.syllabus_context or ''}\n"
-            except Exception:
-                pass
+                    if req.module_id:
+                        module = next(
+                            (item for item in course.modules if item.module_id == req.module_id),
+                            None,
+                        )
+                        if module:
+                            context_text += (
+                                f"Module: {module.title}\n"
+                                f"Module Scope: {module.description or ''}\n"
+                                f"Module Learning Objectives: {', '.join(module.learning_objectives or [])}\n"
+                            )
+            except Exception as error:  # noqa: BLE001 - preserve a draftable fallback without course context.
+                logger.warning("Course context was unavailable for assignment drafting: %s", error)
 
         system_prompt = (
             "You are an expert Socratic assignment designer and learning sciences specialist. "
@@ -468,7 +478,8 @@ class AssignmentAuthoringService:
                 user_prompt=context_text,
                 purpose="assignment_draft_synthesis",
                 temperature=0.3,
-                max_tokens=2000,
+                max_tokens=1200,
+                timeout_seconds=35.0,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {

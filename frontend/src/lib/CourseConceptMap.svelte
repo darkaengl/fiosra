@@ -84,13 +84,17 @@
     }
   }
 
-  async function generateProposal() {
+  async function generateProposal(direction = '') {
     if (!courseId || isGeneratingProposal) return;
     isGeneratingProposal = true;
     error = '';
     notice = '';
     try {
-      const res = await fetch(`/courses/${courseId}/concept-graph/proposals/generate`, { method: 'POST' });
+      const res = await fetch(`/courses/${courseId}/concept-graph/proposals/generate`, {
+        method: 'POST',
+        headers: direction ? { 'Content-Type': 'application/json' } : undefined,
+        body: direction ? JSON.stringify({ instruction: direction }) : undefined,
+      });
       if (!res.ok) throw new Error(await responseError(res, 'The automatic concept map proposal could not be generated.'));
       const data = await res.json();
       proposal = data;
@@ -216,7 +220,11 @@
   onMount(() => {
     async function initialise() {
       await loadGraph();
-      if (!graph.nodes.length) await generateProposal();
+      const queryIndex = window.location.hash.indexOf('?');
+      const params = queryIndex < 0 ? new URLSearchParams() : new URLSearchParams(window.location.hash.slice(queryIndex + 1));
+      const assistantDirection = params.get('assistant') === 'graph' ? params.get('assistant_instruction') || '' : '';
+      if (assistantDirection) await generateProposal(assistantDirection);
+      else if (!graph.nodes.length) await generateProposal();
     }
     initialise();
   });

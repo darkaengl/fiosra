@@ -449,7 +449,9 @@ class ConceptGraphService:
             prerequisites=prerequisites,
         )
 
-    async def generate_proposal(self, course: Any) -> tuple[ConceptGraphProposal, str]:
+    async def generate_proposal(
+        self, course: Any, instruction: str | None = None
+    ) -> tuple[ConceptGraphProposal, str]:
         """Generate a teacher-reviewable high-to-low concept graph from course materials."""
         if settings.FIOSRA_LLM_PROVIDER.strip().lower() == "deterministic":
             return self._deterministic_proposal(course), "deterministic course structure"
@@ -480,6 +482,7 @@ class ConceptGraphService:
                     "hierarchy": "Use course_theme -> strand -> topic -> subtopic -> atomic_concept as appropriate.",
                     "module_positions": "Only reference supplied module positions.",
                     "teacher_validation": "Every node and edge remains a proposal until the educator approves it.",
+                    "teacher_direction": instruction or "No additional direction supplied.",
                 },
             },
             ensure_ascii=False,

@@ -15,7 +15,10 @@
   let isLoading = $state(true);
   let isAnalyzing = $state(false);
   let isGenerating = $state(false);
+  let isProposing = $state(false);
   let isSaving = $state(false);
+  let agentProposal = $state(null);
+  let assistantInstruction = $state('');
   let notice = $state('');
   let error = $state('');
 
@@ -73,6 +76,39 @@
       error = err.message || 'Scope analysis could not be completed.';
     } finally {
       isAnalyzing = false;
+    }
+  }
+
+  async function proposeAssignment(direction = assistantInstruction) {
+    if (!courseId || !moduleId) {
+      error = 'Select a course and module before asking the AI to prepare an assignment proposal.';
+      return;
+    }
+    isProposing = true;
+    error = '';
+    notice = '';
+    try {
+      const module = course?.modules?.find((item) => item.module_id === moduleId);
+      const response = await fetch('/authoring/assignments/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_topic: direction?.trim() || `Source-grounded inquiry for ${module?.title || 'this module'}`,
+          course_id: courseId,
+          module_id: moduleId,
+          domain: course?.domain || domain,
+          pedagogical_focus: direction?.trim() || 'Develop a contestable, evidence-grounded claim and probe likely misconceptions.',
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, 'The AI assignment proposal could not be prepared.'));
+      agentProposal = await response.json();
+      topic = agentProposal.title;
+      prompt = agentProposal.task_brief;
+      notice = 'The AI prepared an assignment proposal from the selected module. Edit the task brief, then analyze scope to generate the protected scaffold.';
+    } catch (err) {
+      error = err.message || 'The AI assignment proposal could not be prepared.';
+    } finally {
+      isProposing = false;
     }
   }
 
@@ -157,6 +193,11 @@
   onMount(async () => {
     try {
       await loadContext();
+      const params = routeParams();
+      if (params.get('assistant') === 'draft') {
+        assistantInstruction = params.get('assistant_instruction') || '';
+        await proposeAssignment(assistantInstruction);
+      }
     } catch (err) {
       error = err.message || 'Course context could not be initialized.';
     } finally {
@@ -190,6 +231,11 @@
             <option value={module.module_id}>{module.position}. {module.title}</option>
           {/each}
         </select>
+        <section class="agent-draft-card">
+          <div><span>Proactive AI draft</span><strong>Turn this module into an evidence-grounded Socratic assignment</strong><p>The assistant uses the selected course and module scope to propose a task, source boundaries, hint ladder, cognitive traps, and rubric criteria. You remain in control of scope analysis, saving, and publication.</p></div>
+          <button type="button" class="btn btn-primary" disabled={!moduleId || isProposing} onclick={() => proposeAssignment()}>{isProposing ? 'Drafting with AI…' : '✦ Draft assignment for this module'}</button>
+          {#if agentProposal}<div class="agent-proposal-summary"><strong>{agentProposal.title}</strong><span>{agentProposal.learning_objectives?.length || 0} objectives · {agentProposal.allowed_sources?.length || 0} proposed sources · {agentProposal.cognitive_traps?.length || 0} misconception checks</span></div>{/if}
+        </section>
         <label for="prompt">Prompt</label>
         <textarea id="prompt" rows="9" bind:value={prompt} placeholder="Write the inquiry students should investigate. Include a context, a claim or question, and the evidence expectations."></textarea>
         <button class="btn btn-secondary" onclick={analyzeScope} disabled={!prompt.trim() || isAnalyzing}>
@@ -310,6 +356,7 @@
   .form-card input,.form-card select,.form-card textarea,.diagnosis textarea{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);box-sizing:border-box;color:var(--color-slate-bright);font:inherit;font-size:13px;padding:10px 12px;width:100%}
   .form-card input:focus,.form-card select:focus,.form-card textarea:focus,.diagnosis textarea:focus{border-color:var(--color-horizon-blue);outline:none}
   .helper-text{color:var(--color-slate-muted);font-size:12px;line-height:1.6;margin:0}
+  .agent-draft-card{background:linear-gradient(135deg,rgba(59,130,246,.12),rgba(124,58,237,.08));border:1px solid rgba(96,165,250,.3);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:10px;padding:14px}.agent-draft-card>div:first-child>span{color:var(--color-horizon-bright);display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}.agent-draft-card>div:first-child>strong{color:var(--color-heading);display:block;font-size:13px;margin-top:4px}.agent-draft-card>div:first-child>p{color:var(--color-slate-light);font-size:11px;line-height:1.5;margin:5px 0 0}.agent-draft-card .btn{align-self:flex-start}.agent-proposal-summary{background:rgba(15,23,42,.6);border:1px solid rgba(148,163,184,.16);border-radius:var(--radius-sm);padding:9px}.agent-proposal-summary strong{color:var(--color-heading);display:block;font-size:11px}.agent-proposal-summary span{color:var(--color-slate-muted);font-size:10px}
   .diagnosis{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:10px;padding:16px}
   .diagnosis.clear{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.25)}
   .diagnosis-header{display:flex;justify-content:space-between;gap:12px;color:#fde68a;font-size:13px}

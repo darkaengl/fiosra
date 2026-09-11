@@ -2,6 +2,7 @@
   import Router from 'svelte-spa-router';
   import { wrap } from 'svelte-spa-router/wrap';
   import './css/design-system.css';
+  import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
   import AppHeader from './lib/AppHeader.svelte';
 
   import Modules from './routes/Modules.svelte';
@@ -37,6 +38,7 @@
   <div class="route-viewport">
     <Router {routes} />
   </div>
+  <AIDesignAssistant />
 </div>
 
 <style>

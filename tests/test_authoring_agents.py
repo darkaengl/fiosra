@@ -4,15 +4,11 @@ from httpx import ASGITransport, AsyncClient
 from fiosra.mvp.authoring.schemas import (
     AssignmentDraftRequest,
     AssignmentDraftRevisionRequest,
-    AssignmentDraftSpec,
-    CognitiveTrapSpec,
     CourseDraftRequest,
     CourseDraftRevisionRequest,
     CourseDraftSpec,
     DraftAssignmentMilestoneSpec,
     DraftModuleSpec,
-    HintRungSpec,
-    PublishAssignmentDraftRequest,
     PublishCourseDraftRequest,
 )
 from fiosra.mvp.authoring.service import (
