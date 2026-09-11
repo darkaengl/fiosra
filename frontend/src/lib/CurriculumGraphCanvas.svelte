@@ -91,11 +91,10 @@
     <div class="canvas-scroll">
       <svg class="graph-canvas" viewBox="0 0 1200 720" role="img" aria-label="Course concept graph">
         <defs>
-          <pattern id="curriculum-grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M 36 0 L 0 0 0 36" fill="none" stroke="rgba(148,163,184,.06)" stroke-width="1" /></pattern>
           <marker id="contains-arrow" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8Z" fill="#60a5fa" /></marker>
           <marker id="prereq-arrow" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8Z" fill="#c084fc" /></marker>
         </defs>
-        <rect width="1200" height="720" fill="url(#curriculum-grid)" />
+        <rect width="1200" height="720" fill="#0d1119" />
         <g transform="translate(600 360) scale({scale}) translate(-600 -360)">
           {#each graph.edges || [] as edge}
             {@const related = !selectedConceptId || edge.source === selectedConceptId || edge.target === selectedConceptId}
@@ -121,7 +120,7 @@
 </div>
 
 <style>
-  .canvas-shell { background: #0b0f17; display: flex; flex: 1; flex-direction: column; min-height: 520px; overflow: hidden; }
+  .canvas-shell { background: #0d1119; display: flex; flex: 1; flex-direction: column; min-height: 520px; overflow: hidden; }
   .canvas-toolbar { align-items: center; background: rgba(22,27,34,.88); border-bottom: 1px solid var(--color-graphite-border); display: flex; justify-content: space-between; padding: 10px 14px; }
   .canvas-key { color: var(--color-slate-light); display: flex; font-size: 10px; gap: 14px; }
   .canvas-key span { align-items: center; display: flex; gap: 5px; }
