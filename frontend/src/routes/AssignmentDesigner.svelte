@@ -58,18 +58,28 @@
 
   function publicRubric(rules = []) {
     const rawTotal = rules.reduce((total, rule) => total + Number(rule.weight || 0), 0);
-    return rules.map((rule, index) => ({
-      criterion_id: rule.criterion_id || `criterion_${index + 1}`,
-      title: rule.label || `Criterion ${index + 1}`,
-      description: rule.description || 'Demonstrates the stated assignment requirement.',
-      weight: rawTotal ? Math.round((Number(rule.weight || 0) / rawTotal) * 10000) / 100 : 0,
-      levels: [
-        { level_id: 'developing', label: 'Developing', description: 'Begins to address this criterion but needs a clearer, more complete response.' },
-        { level_id: 'secure', label: 'Secure', description: 'Addresses this criterion clearly with relevant detail and explanation.' },
-        { level_id: 'strong', label: 'Strong', description: 'Addresses this criterion precisely, using well-chosen material and a well-developed explanation.' },
-      ],
-      self_review_prompt: `Where does your completed work show ${(rule.label || 'this criterion').toLowerCase()}?`,
-    }));
+    let allocated = 0;
+    return rules.map((rule, index) => {
+      let weight = rawTotal ? Math.round((Number(rule.weight || 0) / rawTotal) * 10000) / 100 : 0;
+      // The last criterion absorbs the rounding remainder so weights always sum to exactly
+      // 100 — matching the backend's _public_rubric normalization (see generator.py).
+      if (rawTotal && index === rules.length - 1) {
+        weight = Math.round((100 - allocated) * 100) / 100;
+      }
+      allocated += weight;
+      return {
+        criterion_id: rule.criterion_id || `criterion_${index + 1}`,
+        title: rule.label || `Criterion ${index + 1}`,
+        description: rule.description || 'Demonstrates the stated assignment requirement.',
+        weight,
+        levels: [
+          { level_id: 'developing', label: 'Developing', description: 'Begins to address this criterion but needs a clearer, more complete response.' },
+          { level_id: 'secure', label: 'Secure', description: 'Addresses this criterion clearly with relevant detail and explanation.' },
+          { level_id: 'strong', label: 'Strong', description: 'Addresses this criterion precisely, using well-chosen material and a well-developed explanation.' },
+        ],
+        self_review_prompt: `Where does your completed work show ${(rule.label || 'this criterion').toLowerCase()}?`,
+      };
+    });
   }
 
   function materializeContract(nextScaffold) {
@@ -337,7 +347,7 @@
           {#if contract}<section class="editor-section"><h3>Student-facing brief</h3><label for="contract-title">Title</label><input id="contract-title" bind:value={contract.title} /><label for="purpose">Why this matters</label><textarea id="purpose" rows="3" bind:value={contract.purpose}></textarea><label for="task">Your task</label><textarea id="task" rows="5" bind:value={contract.task.prompt}></textarea><div class="two-col"><div><label for="scope">Scope</label><textarea id="scope" rows="3" bind:value={contract.task.scope}></textarea></div><div><label for="deliverable">Deliverable</label><input id="deliverable" bind:value={contract.task.deliverable} /></div></div><label>Student learning goals</label><div class="string-list">{#each contract.learning_goals as goal, index}<input aria-label={`Learning goal ${index + 1}`} bind:value={contract.learning_goals[index]} />{/each}</div></section>{/if}
 
         {:else if activeStep === 'materials'}
-          {#if contract}<section class="editor-section"><div class="section-title"><div><h3>Student source pack</h3><p>Students receive readable excerpts, relevance guidance, and source access—not chunk IDs or graph diagnostics.</p></div><span class:success-pill>{contract.source_pack.length} ready</span></div>{#each contract.source_pack as source, index}<article class="source-editor"><div class="source-number">{index + 1}</div><div><label>Display title</label><input bind:value={source.title} /><label>Why this is assigned</label><textarea rows="2" bind:value={source.relevance_guidance}></textarea><label>Student excerpt</label><textarea rows="5" bind:value={source.excerpt}></textarea><label>Original link (optional)</label><input bind:value={source.source_url} placeholder="https://…" /></div></article>{:else}<div class="empty-state"><strong>No substantive source is available yet.</strong><p>Attach or import a readable module resource before publishing.</p></div>{/each}</section>{:else}<div class="empty-state"><strong>Create a brief first.</strong><p>Source-pack editing becomes available after an assignment contract is generated.</p></div>{/if}
+          {#if contract}<section class="editor-section"><div class="section-title"><div><h3>Student source pack</h3><p>Students receive readable excerpts, relevance guidance, and source access—not chunk IDs or graph diagnostics.</p></div><span class="success-pill">{contract.source_pack.length} ready</span></div>{#each contract.source_pack as source, index}<article class="source-editor"><div class="source-number">{index + 1}</div><div><label>Display title</label><input bind:value={source.title} /><label>Why this is assigned</label><textarea rows="2" bind:value={source.relevance_guidance}></textarea><label>Student excerpt</label><textarea rows="5" bind:value={source.excerpt}></textarea><label>Original link (optional)</label><input bind:value={source.source_url} placeholder="https://…" /></div></article>{:else}<div class="empty-state"><strong>No substantive source is available yet.</strong><p>Attach or import a readable module resource before publishing.</p></div>{/each}</section>{:else}<div class="empty-state"><strong>Create a brief first.</strong><p>Source-pack editing becomes available after an assignment contract is generated.</p></div>{/if}
 
         {:else if activeStep === 'rubric'}
           {#if contract}<section class="editor-section"><div class="section-title"><div><h3>Public rubric</h3><p>These criteria are published to students and are the standards AutoSCORE must follow.</p></div><button class="btn btn-secondary" onclick={addCriterion}>+ Add criterion</button></div>{#each contract.public_rubric as criterion, index}<article class="criterion-editor"><div class="criterion-index">{index + 1}</div><div class="criterion-main"><div class="two-col"><div><label>Criterion name</label><input bind:value={criterion.title} /></div><div><label>Weight (%)</label><input type="number" min="0" max="100" bind:value={criterion.weight} /></div></div><label>What it evaluates</label><textarea rows="2" bind:value={criterion.description}></textarea><div class="level-grid">{#each criterion.levels as level}<div><label>{level.label}</label><textarea rows="3" bind:value={level.description}></textarea></div>{/each}</div><label>Student self-review prompt</label><input bind:value={criterion.self_review_prompt} /></div></article>{/each}</section>{:else}<div class="empty-state"><strong>Create a brief first.</strong></div>{/if}
@@ -349,7 +359,7 @@
           {#if contract && evaluationPlan}<section class="editor-section private-plan"><div class="section-title"><div><span class="private-label">Teacher and agent only</span><h3>AutoSCORE evaluation plan</h3><p>Each internal mapping must serve a public rubric criterion. This plan produces educator-review evidence, never an autonomous grade.</p></div></div>{#each evaluationPlan.public_rubric_map as mapping, index}<article class="mapping-row"><strong>{contract.public_rubric.find((criterion) => criterion.criterion_id === mapping.public_criterion_id)?.title || mapping.public_criterion_id}</strong><span>Public criterion</span><p>{mapping.evidence_expectation}</p><small>{mapping.concept_ids.length} concept target(s) · {mapping.source_chunk_ids.length} source evidence item(s)</small></article>{/each}<div class="policy-list"><h4>Support boundary</h4>{#each evaluationPlan.support_policy as policy}<p>{policy}</p>{/each}<h4>Teacher review boundary</h4><p>{evaluationPlan.review_policy}</p></div></section>{:else}<div class="empty-state"><strong>Create a brief first.</strong></div>{/if}
 
         {:else if activeStep === 'review'}
-          {#if contract}<section class="editor-section"><div class="section-title"><div><h3>Publication review</h3><p>Publication freezes the student contract and keeps the private evaluation plan teacher-only.</p></div><button class="btn btn-secondary" disabled={!draft || isSaving} onclick={saveStudio}>Refresh checks</button></div><div class:ready={readiness.is_publishable} class="readiness-banner"><strong>{readiness.is_publishable ? 'Ready to publish' : 'Action needed before publishing'}</strong><p>{readiness.is_publishable ? 'The public contract and private plan are aligned.' : `${readiness.items.length} required check${readiness.items.length === 1 ? '' : 's'} remain.`}</p></div>{#each readiness.items || [] as item}<div class="readiness-item"><span>!</span><p>{item.message}</p></div>{/each}<div class="review-actions"><button class="btn btn-secondary" onclick={() => previewTab = 'rubric'}>Review public rubric</button><button class="btn btn-primary" disabled={!draft || !readiness.is_publishable || isSaving || draft.status === 'published'} onclick={publish}>{draft?.status === 'published' ? 'Published' : 'Publish to students'}</button></div>{#if draft?.status === 'published'}<a class="btn btn-success launch" href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(draft.assignment_id)}`}>Open published student experience →</a>{/if}</section>{:else}<div class="empty-state"><strong>Save a draft to validate it.</strong></div>{/if}
+          {#if contract}<section class="editor-section"><div class="section-title"><div><h3>Publication review</h3><p>Publication freezes the student contract and keeps the private evaluation plan teacher-only.</p></div><button class="btn btn-secondary" disabled={!draft || isSaving} onclick={saveStudio}>Refresh checks</button></div><div class:ready={draft && readiness.is_publishable} class="readiness-banner"><strong>{!draft ? 'Not yet checked' : readiness.is_publishable ? 'Ready to publish' : 'Action needed before publishing'}</strong><p>{!draft ? 'Save a draft to run publish checks.' : readiness.is_publishable ? 'The public contract and private plan are aligned.' : `${readiness.items.length} required check${readiness.items.length === 1 ? '' : 's'} remain.`}</p></div>{#each readiness.items || [] as item}<div class="readiness-item"><span>!</span><p>{item.message}</p></div>{/each}<div class="review-actions"><button class="btn btn-secondary" onclick={() => previewTab = 'rubric'}>Review public rubric</button><button class="btn btn-primary" disabled={!draft || !readiness.is_publishable || isSaving || draft.status === 'published'} onclick={publish}>{draft?.status === 'published' ? 'Published' : 'Publish to students'}</button></div>{#if draft?.status === 'published'}<a class="btn btn-success launch" href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(draft.assignment_id)}`}>Open published student experience →</a>{/if}</section>{:else}<div class="empty-state"><strong>Save a draft to validate it.</strong></div>{/if}
         {/if}
       </section>
 
