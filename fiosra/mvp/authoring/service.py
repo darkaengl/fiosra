@@ -5,7 +5,10 @@ from typing import Any
 
 from sqlalchemy import text
 
+from fiosra.mvp.assignment_designer.generator import assignment_generator
+from fiosra.mvp.assignment_designer.schemas import ClarifyAndScaffoldRequest
 from fiosra.mvp.authoring.schemas import (
+    AssignmentDraftPackage,
     AssignmentDraftRequest,
     AssignmentDraftRevisionRequest,
     AssignmentDraftRevisionResponse,
@@ -550,6 +553,28 @@ class AssignmentAuthoringService:
                 "Thesis Defense: Addresses counter-arguments and structural causality",
             ],
         )
+
+    @classmethod
+    async def propose_assignment_package(cls, req: AssignmentDraftRequest) -> AssignmentDraftPackage:
+        """Generate one editable AI proposal that can be saved through the standard assignment lifecycle."""
+        draft = await cls.generate_assignment_draft(req)
+        source_titles = ", ".join(draft.allowed_sources[:3]) or "the assigned module materials"
+        answers = {
+            "Q1_TEMPORAL": draft.context_scope,
+            "Q2_MISCONCEPTIONS": "; ".join(trap.description for trap in draft.cognitive_traps[:2]),
+            "Q3_EVIDENCE": source_titles,
+        }
+        scaffold = await assignment_generator.generate_scaffolding_plan(
+            ClarifyAndScaffoldRequest(
+                raw_prompt=draft.task_brief,
+                domain=draft.domain,
+                answers=answers,
+                course_id=req.course_id,
+                module_id=req.module_id,
+            ),
+            allow_live_enhancement=False,
+        )
+        return AssignmentDraftPackage(draft=draft, scaffold=scaffold)
 
     @classmethod
     async def revise_assignment_draft(cls, req: AssignmentDraftRevisionRequest) -> AssignmentDraftRevisionResponse:

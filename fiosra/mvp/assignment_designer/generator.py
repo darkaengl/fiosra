@@ -73,7 +73,12 @@ class AssignmentGenerator:
         ]
 
     @classmethod
-    async def generate_scaffolding_plan(cls, req: ClarifyAndScaffoldRequest) -> ScaffoldingPlan:
+    async def generate_scaffolding_plan(
+        cls,
+        req: ClarifyAndScaffoldRequest,
+        *,
+        allow_live_enhancement: bool = True,
+    ) -> ScaffoldingPlan:
         """Generate an answer-blind scaffold constrained to the selected course corpus when present."""
         grounding_sources = await cls._load_grounding_sources(req.course_id, req.module_id)
         source_titles = ", ".join(source.title for source in grounding_sources[:2])
@@ -110,6 +115,7 @@ class AssignmentGenerator:
             pseudonymous_seed=f"assignment:{req.course_id or 'unbound'}:{req.module_id or 'unbound'}:{base_prompt}",
             max_characters=1600,
             max_tokens=240,
+            allow_live=allow_live_enhancement,
         )
         clarified_prompt = generation.content
 
@@ -359,7 +365,7 @@ class AssignmentGenerator:
                 data = spec if isinstance(spec, dict) else json.loads(spec)
                 if isinstance(data, dict) and "question_id" in data:
                     valid.append(cls._to_public_spec(data))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - one malformed legacy spec must not hide valid assignments.
                 logger.warning("Skipping invalid assignment spec: %s", e)
         return valid
 

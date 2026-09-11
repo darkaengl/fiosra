@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 
 from fiosra.mvp.authoring.schemas import (
+    AssignmentDraftPackage,
     AssignmentDraftRequest,
     AssignmentDraftRevisionRequest,
     AssignmentDraftRevisionResponse,
@@ -40,10 +41,10 @@ async def draft_course(payload: CourseDraftRequest) -> CourseDraftSpec:
     try:
         return await course_authoring_service.generate_course_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to draft course: {e}", exc_info=True)
+        logger.exception("Failed to draft course")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Course draft synthesis failed: {str(e)}",
+            detail=f"Course draft synthesis failed: {e!s}",
         )
 
 
@@ -57,10 +58,10 @@ async def revise_course_draft(payload: CourseDraftRevisionRequest) -> CourseDraf
     try:
         return await course_authoring_service.revise_course_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to revise course draft: {e}", exc_info=True)
+        logger.exception("Failed to revise course draft")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Course draft revision failed: {str(e)}",
+            detail=f"Course draft revision failed: {e!s}",
         )
 
 
@@ -74,16 +75,33 @@ async def publish_course_draft(payload: PublishCourseDraftRequest) -> CourseResp
     try:
         return await course_authoring_service.publish_course_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to publish course draft: {e}", exc_info=True)
+        logger.exception("Failed to publish course draft")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Course publication failed: {str(e)}",
+            detail=f"Course publication failed: {e!s}",
         )
 
 
 # ----------------------------------------------------------------------
 # Assignment & Scaffold Authoring
 # ----------------------------------------------------------------------
+
+@router.post(
+    "/assignments/propose",
+    response_model=AssignmentDraftPackage,
+    status_code=status.HTTP_200_OK,
+    summary="Create a complete AI assignment proposal ready for teacher review and persistence",
+)
+async def propose_assignment(payload: AssignmentDraftRequest) -> AssignmentDraftPackage:
+    try:
+        return await assignment_authoring_service.propose_assignment_package(payload)
+    except Exception as e:
+        logger.exception("Failed to create assignment proposal")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Assignment proposal generation failed: {e!s}",
+        )
+
 
 @router.post(
     "/assignments/draft",
@@ -95,10 +113,10 @@ async def draft_assignment(payload: AssignmentDraftRequest) -> AssignmentDraftSp
     try:
         return await assignment_authoring_service.generate_assignment_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to draft assignment: {e}", exc_info=True)
+        logger.exception("Failed to draft assignment")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Assignment draft synthesis failed: {str(e)}",
+            detail=f"Assignment draft synthesis failed: {e!s}",
         )
 
 
@@ -112,10 +130,10 @@ async def revise_assignment_draft(payload: AssignmentDraftRevisionRequest) -> As
     try:
         return await assignment_authoring_service.revise_assignment_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to revise assignment draft: {e}", exc_info=True)
+        logger.exception("Failed to revise assignment draft")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Assignment draft revision failed: {str(e)}",
+            detail=f"Assignment draft revision failed: {e!s}",
         )
 
 
@@ -129,8 +147,8 @@ async def publish_assignment_draft(payload: PublishAssignmentDraftRequest) -> di
     try:
         return await assignment_authoring_service.publish_assignment_draft(payload)
     except Exception as e:
-        logger.error(f"Failed to publish assignment draft: {e}", exc_info=True)
+        logger.exception("Failed to publish assignment draft")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Assignment publication failed: {str(e)}",
+            detail=f"Assignment publication failed: {e!s}",
         )

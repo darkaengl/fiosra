@@ -1,9 +1,8 @@
-from datetime import datetime
-from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from fiosra.mvp.assignment_designer.schemas import ScaffoldingPlan
 
 # ----------------------------------------------------------------------
 # Course Drafting Schemas
@@ -93,6 +92,13 @@ class AssignmentDraftRequest(BaseModel):
     module_id: UUID | None = Field(default=None, description="Parent module ID for grounding")
     domain: str = Field(default="History", description="Academic discipline")
     pedagogical_focus: str | None = Field(default=None, description="Optional pedagogical emphasis")
+
+
+class AssignmentDraftPackage(BaseModel):
+    """One teacher-reviewable proposal that flows directly into assignment persistence."""
+
+    draft: AssignmentDraftSpec
+    scaffold: ScaffoldingPlan
 
 
 class AssignmentDraftRevisionRequest(BaseModel):

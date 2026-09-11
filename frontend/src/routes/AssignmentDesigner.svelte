@@ -89,7 +89,7 @@
     notice = '';
     try {
       const module = course?.modules?.find((item) => item.module_id === moduleId);
-      const response = await fetch('/authoring/assignments/draft', {
+      const response = await fetch('/authoring/assignments/propose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -102,9 +102,12 @@
       });
       if (!response.ok) throw new Error(await responseError(response, 'The AI assignment proposal could not be prepared.'));
       agentProposal = await response.json();
-      topic = agentProposal.title;
-      prompt = agentProposal.task_brief;
-      notice = 'The AI prepared an assignment proposal from the selected module. Edit the task brief, then analyze scope to generate the protected scaffold.';
+      topic = agentProposal.draft.title;
+      prompt = agentProposal.scaffold.clarified_prompt;
+      scaffold = agentProposal.scaffold;
+      diagnosis = null;
+      draft = null;
+      notice = 'The AI prepared a complete assignment package with an editable student task, course-grounded sources, support ladder, and review criteria. Review it, then save or publish through this same designer.';
     } catch (err) {
       error = err.message || 'The AI assignment proposal could not be prepared.';
     } finally {
@@ -234,7 +237,7 @@
         <section class="agent-draft-card">
           <div><span>Proactive AI draft</span><strong>Turn this module into an evidence-grounded Socratic assignment</strong><p>The assistant uses the selected course and module scope to propose a task, source boundaries, hint ladder, cognitive traps, and rubric criteria. You remain in control of scope analysis, saving, and publication.</p></div>
           <button type="button" class="btn btn-primary" disabled={!moduleId || isProposing} onclick={() => proposeAssignment()}>{isProposing ? 'Drafting with AI…' : '✦ Draft assignment for this module'}</button>
-          {#if agentProposal}<div class="agent-proposal-summary"><strong>{agentProposal.title}</strong><span>{agentProposal.learning_objectives?.length || 0} objectives · {agentProposal.allowed_sources?.length || 0} proposed sources · {agentProposal.cognitive_traps?.length || 0} misconception checks</span></div>{/if}
+          {#if agentProposal}<div class="agent-proposal-summary"><strong>{agentProposal.draft.title}</strong><span>{agentProposal.draft.learning_objectives?.length || 0} objectives · {agentProposal.scaffold.grounding_sources?.length || 0} grounded sources · {agentProposal.draft.cognitive_traps?.length || 0} misconception checks</span></div>{/if}
         </section>
         <label for="prompt">Prompt</label>
         <textarea id="prompt" rows="9" bind:value={prompt} placeholder="Write the inquiry students should investigate. Include a context, a claim or question, and the evidence expectations."></textarea>

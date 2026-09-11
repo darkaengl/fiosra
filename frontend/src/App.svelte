@@ -16,6 +16,8 @@
   import StudentPortal from './routes/StudentPortal.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
 
+  let assistantOpen = $state(false);
+
   const routes = {
     '/': Modules,
     '/modules': Modules,
@@ -35,10 +37,12 @@
 
 <div class="app-root">
   <AppHeader />
-  <div class="route-viewport">
-    <Router {routes} />
+  <div class:assistant-open={assistantOpen} class="app-body">
+    <div class="route-viewport">
+      <Router {routes} />
+    </div>
+    <AIDesignAssistant bind:open={assistantOpen} />
   </div>
-  <AIDesignAssistant />
 </div>
 
 <style>
@@ -57,9 +61,17 @@
     min-height: 100vh;
   }
 
+  .app-body { display: flex; flex: 1; min-height: 0; }
+  .app-body.assistant-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 32vw); }
+
   .route-viewport {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+  }
+
+  @media (max-width: 940px) {
+    .app-body.assistant-open { display: flex; flex-direction: column; }
   }
 </style>

@@ -156,6 +156,23 @@ async def test_assignment_draft_synthesis_revision_and_publish():
         module_id = course_data["modules"][0]["module_id"]
         course_id = course_data["course_id"]
 
+        proposal_res = await ac.post(
+            "/authoring/assignments/propose",
+            json={
+                "task_topic": "Source-grounded inquiry into fiscal deficits",
+                "course_id": course_id,
+                "module_id": module_id,
+                "domain": "History",
+                "pedagogical_focus": "Develop a coherent explanation from the selected course materials.",
+            },
+        )
+        assert proposal_res.status_code == 200
+        proposal = proposal_res.json()
+        assert proposal["draft"]["title"]
+        assert proposal["scaffold"]["clarified_prompt"]
+        assert len(proposal["scaffold"]["hint_ladder"]) >= 3
+        assert len(proposal["scaffold"]["rubric_rules"]) >= 3
+
         # Publish assignment to that module
         a_res = await ac.post(
             "/authoring/assignments/publish",
