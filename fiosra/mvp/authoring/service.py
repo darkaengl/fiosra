@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
-from fiosra.mvp.assignment_designer.schemas import ClarifyAndScaffoldRequest
+from fiosra.mvp.assignment_designer.schemas import ClarifyAndScaffoldRequest, HintRung
 from fiosra.mvp.authoring.schemas import (
     AssignmentDraftPackage,
     AssignmentDraftRequest,
@@ -116,28 +116,29 @@ class CourseAuthoringService:
         )
 
         if settings.FIOSRA_LLM_PROVIDER.strip().lower() != "deterministic":
-            provider = LiteLLMProvider.from_settings()
-            comp_req = CompletionRequest(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                purpose="course_draft_synthesis",
-                max_tokens=2500,
-                temperature=0.3,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "course_draft",
-                        "schema": CourseDraftSpec.model_json_schema(),
+            try:
+                provider = LiteLLMProvider.from_settings()
+                comp_req = CompletionRequest(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    purpose="course_draft_synthesis",
+                    max_tokens=2500,
+                    temperature=0.3,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "course_draft",
+                            "schema": CourseDraftSpec.model_json_schema(),
+                        },
                     },
-                },
-            )
-            result = await provider.complete(comp_req)
-            parsed = _extract_json_block(result.content)
-            if not parsed or "title" not in parsed or "modules" not in parsed:
-                raise RuntimeError(
-                    f"LLM did not return a valid course draft JSON. Provider output: {result.content[:300]}"
                 )
-            return CourseDraftSpec.model_validate(parsed)
+                result = await provider.complete(comp_req)
+                parsed = _extract_json_block(result.content)
+                if not parsed or "title" not in parsed or "modules" not in parsed:
+                    raise RuntimeError("The provider did not return a valid course draft JSON.")
+                return CourseDraftSpec.model_validate(parsed)
+            except Exception as error:  # noqa: BLE001 - course drafting must remain usable with local models.
+                logger.warning("Course draft generation fell back to deterministic proposal: %s", error)
 
         # High quality deterministic synthesis fallback
         lines = [line.strip() for line in req.materials_text.splitlines() if line.strip()]
@@ -428,6 +429,10 @@ class AssignmentAuthoringService:
         Synthesizes an AssignmentDraftSpec including 3-Rung Hint Ladder and Cognitive Traps.
         """
         context_text = f"Assignment Topic: {req.task_topic}\nDomain: {req.domain}\n"
+        module_title = ""
+        module_description = ""
+        module_objectives: list[str] = []
+        assigned_source_titles: list[str] = []
         if req.course_id:
             try:
                 course = await course_service.get_course(req.course_id)
@@ -439,11 +444,30 @@ class AssignmentAuthoringService:
                             None,
                         )
                         if module:
+                            module_title = module.title
+                            module_description = module.description or ""
+                            module_objectives = module.learning_objectives or []
                             context_text += (
                                 f"Module: {module.title}\n"
                                 f"Module Scope: {module.description or ''}\n"
                                 f"Module Learning Objectives: {', '.join(module.learning_objectives or [])}\n"
                             )
+                    sources = await syllabus_parser.list_chunks(
+                        course_id=req.course_id,
+                        module_id=req.module_id,
+                    )
+                    usable_sources = [source for source in sources if syllabus_parser.has_substantive_content(source.content)]
+                    assigned_source_titles = [
+                        source.title or "Assigned course material" for source in (usable_sources or sources)[:5]
+                    ]
+                    if assigned_source_titles:
+                        context_text += f"Assigned source titles: {', '.join(assigned_source_titles)}\n"
+                    source_excerpts = [
+                        f"- {source.title}: {source.content[:500]}"
+                        for source in usable_sources[:3]
+                    ]
+                    if source_excerpts:
+                        context_text += "Assigned source excerpts (use only these as evidence context):\n" + "\n".join(source_excerpts) + "\n"
             except Exception as error:  # noqa: BLE001 - preserve a draftable fallback without course context.
                 logger.warning("Course context was unavailable for assignment drafting: %s", error)
 
@@ -454,6 +478,8 @@ class AssignmentAuthoringService:
             "Rung 2: Source-bounded directional cue (directing student to specific evidence), "
             "Rung 3: Structural scaffold (step-by-step reasoning breakdown without giving the answer). "
             "Also define potential cognitive traps/misconceptions and AutoSCORE rubric criteria. "
+            "The module title, learning objectives, and assigned materials are authoritative. Never substitute a different "
+            "course, period, country, case, or example. Reference assigned source titles only when they are supplied. "
             "Respond ONLY with a JSON object strictly matching:\n"
             "{\n"
             '  "title": "Assignment Title",\n'
@@ -500,57 +526,59 @@ class AssignmentAuthoringService:
             except Exception as error:  # noqa: BLE001 - an assistant proposal must remain available offline.
                 logger.warning("Assignment draft generation fell back to deterministic proposal: %s", error)
 
-        # Deterministic fallback
+        # Deterministic fallback remains specific to the selected module when the local model is unavailable.
+        focus = module_title or req.task_topic
+        objective_text = module_objectives or [
+            f"Explain the central dynamics of {focus}",
+            f"Use assigned material to develop a well-supported interpretation of {focus}",
+        ]
+        source_plan = assigned_source_titles or ["The assigned module materials"]
         return AssignmentDraftSpec(
-            title=f"Inquiry Analysis: {req.task_topic[:60]}",
+            title=f"Inquiry: {focus[:80]}",
             domain=req.domain,
-            task_brief=f"Examine the core historical/disciplinary dynamics of {req.task_topic}. Synthesize primary evidence into a defensible thesis while addressing counter-arguments.",
-            context_scope=f"Focused pedagogical scope concerning {req.task_topic}.",
-            learning_objectives=[
-                f"Evaluate evidentiary claims regarding {req.task_topic}",
-                "Construct a structured academic argument defended against cognitive traps",
-                "Demonstrate autonomous reasoning without over-reliance on explicit hints",
-            ],
-            allowed_sources=[
-                f"Primary Account on {req.task_topic}",
-                "Archival Document Series A",
-                "Secondary Historiographical Essay",
-            ],
+            task_brief=(
+                f"Using the assigned materials for {focus}, develop an explanation that addresses the task: "
+                f"{req.task_topic}. Select relevant evidence, explain how it supports your interpretation, "
+                "and revise your response to acknowledge a meaningful limitation or alternative account."
+            ),
+            context_scope=module_description or f"The conceptual and historical boundaries of {focus}.",
+            learning_objectives=objective_text,
+            allowed_sources=source_plan,
             hint_ladder=[
                 HintRungSpec(
                     rung=1,
                     title="Orienting Question",
-                    content=f"What primary factors or institutional conditions initially framed {req.task_topic}?",
+                    content=f"Which learning objective for {focus} should guide your first reading of the assigned material?",
                 ),
                 HintRungSpec(
                     rung=2,
                     title="Source Evidence Cue",
-                    content="Consult the primary account excerpt—how does the author explain the immediate fiscal or institutional pressures?",
+                    content=f"Return to {source_plan[0]}. Which detail helps you address the task without going beyond the module's scope?",
                 ),
                 HintRungSpec(
                     rung=3,
                     title="Structural Scaffold",
-                    content="Break your argument into three parts: (1) Immediate triggers, (2) Structural institutional factors, and (3) Long-term consequences. Ground each in a cited source.",
+                    content="Plan the next section around one relevant detail, your explanation of its significance, and a revision that tests its limits. Ground each step in the assigned material.",
                 ),
             ],
             cognitive_traps=[
                 CognitiveTrapSpec(
                     trap_id="TRAP_SINGLE_CAUSE",
                     name="Monocausal Fallacy",
-                    description="Attributing a complex event to a single isolated cause while ignoring structural context.",
-                    remediation_hint="Notice how multiple economic and social pressures intersected—what other dimensions contributed?",
+                    description=f"Reducing {focus} to one isolated factor while ignoring the module's stated context.",
+                    remediation_hint="Compare the selected detail with the other conditions identified in the assigned material and module objectives.",
                 ),
                 CognitiveTrapSpec(
                     trap_id="TRAP_ANACHRONISM",
                     name="Anachronistic Judgment",
-                    description="Judging historical actors through contemporary modern values rather than contemporary constraints.",
-                    remediation_hint="Consider the institutional constraints and available information in the specific historical era.",
+                    description="Replacing evidence from the assigned material with assumptions that are outside the task's historical or disciplinary setting.",
+                    remediation_hint="Return to the assigned source and explain what it establishes before extending the interpretation.",
                 ),
             ],
             rubric_criteria=[
-                "Evidence Grounding: Cites verified allowed sources accurately",
-                "Cognitive Autonomy: Develops reasoning independently without trap collapse",
-                "Thesis Defense: Addresses counter-arguments and structural causality",
+                f"Module alignment: demonstrates the selected learning objectives for {focus}",
+                f"Evidence use: connects details from {source_plan[0]} to the task's central question",
+                "Reasoning and revision: develops an explanation, tests a limitation, and improves the final response",
             ],
         )
 
@@ -573,6 +601,49 @@ class AssignmentAuthoringService:
                 module_id=req.module_id,
             ),
             allow_live_enhancement=False,
+        )
+        target_kc = scaffold.target_kcs[0]
+        proposal_hints = [
+            HintRung(
+                level=0,
+                hint_type="task_orientation",
+                content=(
+                    f"Read the task once, then choose which course objective you will address first: "
+                    f"{draft.learning_objectives[0] if draft.learning_objectives else draft.task_brief}"
+                ),
+            ),
+            *[
+                HintRung(
+                    level=item.rung,
+                    hint_type=item.title.lower().replace(" ", "_"),
+                    content=item.content,
+                )
+                for item in draft.hint_ladder[:3]
+            ],
+            HintRung(
+                level=4,
+                hint_type="educator_only",
+                content="Educator-only reference support is locked and never exposed in the student workspace.",
+                is_locked=True,
+            ),
+        ]
+        proposal_rules = [
+            {
+                "criterion_id": f"proposal_rule_{index + 1}",
+                "label": criterion.split(":", maxsplit=1)[0].strip() or f"Assignment criterion {index + 1}",
+                "description": criterion.split(":", maxsplit=1)[-1].strip() or criterion,
+                "target_kc": target_kc,
+                "nli_threshold": 0.80,
+                "weight": 1.0,
+            }
+            for index, criterion in enumerate(draft.rubric_criteria[:4])
+        ]
+        scaffold = scaffold.model_copy(
+            update={
+                "hint_ladder": proposal_hints,
+                "rubric_rules": proposal_rules or scaffold.rubric_rules,
+                "distractor_traps": [trap.model_dump() for trap in draft.cognitive_traps] or scaffold.distractor_traps,
+            }
         )
         return AssignmentDraftPackage(draft=draft, scaffold=scaffold)
 

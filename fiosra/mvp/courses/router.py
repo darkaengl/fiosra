@@ -185,10 +185,18 @@ async def add_module_resource(
         )
 
     try:
+        resource_content = payload.content
+        if payload.resource_type == "external_link" and payload.source_url:
+            try:
+                resource_content = await syllabus_parser.fetch_external_source(payload.source_url)
+            except ValueError as error:
+                if not syllabus_parser.has_substantive_content(payload.content):
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+                logger.info("Using educator-provided notes for link %s: %s", payload.source_url, error)
         await concept_graph_service.sync_course_structure(course)
         chunks = await syllabus_parser.ingest_syllabus(
             course_id=course_id,
-            content=payload.content,
+            content=resource_content,
             title=payload.title,
             module_id=module_id,
             domain=course.domain,

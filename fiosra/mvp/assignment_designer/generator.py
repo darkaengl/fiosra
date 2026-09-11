@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 from typing import Any, ClassVar
 from uuid import UUID
@@ -62,7 +63,7 @@ class AssignmentGenerator:
                 },
             )
             rows = result.mappings().all()
-        return [
+        sources = [
             GroundingSource(
                 chunk_id=str(row["chunk_id"]),
                 title=row["title"] or "Assigned course material",
@@ -71,6 +72,39 @@ class AssignmentGenerator:
             )
             for row in rows
         ]
+        substantive_sources = [source for source in sources if cls._has_substantive_content(source.excerpt)]
+        return substantive_sources or sources
+
+    @staticmethod
+    def _has_substantive_content(content: str) -> bool:
+        return len(content.split()) >= 20
+
+    @staticmethod
+    def _select_objective(task: str, objectives: list[str]) -> str:
+        if not objectives:
+            return "complete the assignment's stated learning goal"
+        task_words = {word.lower() for word in re.findall(r"[A-Za-z]{4,}", task)}
+        return max(
+            objectives,
+            key=lambda objective: len(task_words & {word.lower() for word in re.findall(r"[A-Za-z]{4,}", objective)}),
+        )
+
+    @classmethod
+    async def _load_module_context(cls, module_id: UUID | str | None) -> tuple[str, str, list[str]]:
+        if not module_id:
+            return "", "", []
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text("SELECT title, description, learning_objectives FROM modules WHERE module_id = CAST(:module_id AS UUID)"),
+                {"module_id": str(module_id)},
+            )
+            row = result.mappings().first()
+        if not row:
+            return "", "", []
+        raw_objectives = row["learning_objectives"] or []
+        if isinstance(raw_objectives, str):
+            raw_objectives = json.loads(raw_objectives)
+        return row["title"] or "", row["description"] or "", list(raw_objectives)
 
     @classmethod
     async def generate_scaffolding_plan(
@@ -81,14 +115,17 @@ class AssignmentGenerator:
     ) -> ScaffoldingPlan:
         """Generate an answer-blind scaffold constrained to the selected course corpus when present."""
         grounding_sources = await cls._load_grounding_sources(req.course_id, req.module_id)
+        module_title, module_description, module_objectives = await cls._load_module_context(req.module_id)
         source_titles = ", ".join(source.title for source in grounding_sources[:2])
         temporal = req.answers.get("Q1_TEMPORAL", "").strip()
         misconception = req.answers.get("Q2_MISCONCEPTIONS", "").strip()
         evidence_anchor = req.answers.get("Q3_EVIDENCE", "").strip()
 
-        evidence = evidence_anchor or source_titles or "the assigned course materials"
+        evidence = source_titles or evidence_anchor or "the assigned course materials"
         scope = temporal or "the setting and boundaries named in the educator's prompt"
         cognitive_trap = misconception or "moving from an observation to an unsupported broad conclusion"
+        objective = cls._select_objective(req.raw_prompt, module_objectives)
+        module_focus = module_title or module_description or scope
         base_prompt = req.raw_prompt.strip()
         clarification = (
             f"Work within {scope}. Use {evidence} to distinguish direct observations from justified inferences, "
@@ -116,6 +153,7 @@ class AssignmentGenerator:
             max_characters=1600,
             max_tokens=240,
             allow_live=allow_live_enhancement,
+            request_timeout_seconds=15.0,
         )
         clarified_prompt = generation.content
 
@@ -124,38 +162,37 @@ class AssignmentGenerator:
         if not target_kcs:
             target_kcs = cls.FALLBACK_KCS.get(req.domain.lower(), ["KC_GENERAL"])
 
-        source_label = source_titles or evidence
+        source_label = grounding_sources[0].title if grounding_sources else evidence
         target_label = target_kcs[0]
         hint_ladder = [
             HintRung(
                 level=0,
                 hint_type="metacognitive",
                 content=(
-                    "State a provisional claim, then name the observation that most directly supports it. "
-                    "What remains uncertain?"
+                    f"Start with the module goal: {objective}. Which part of the task asks you to demonstrate that goal?"
                 ),
             ),
             HintRung(
                 level=1,
                 hint_type="conceptual",
                 content=(
-                    f"Return to {source_label}. Which detail is evidence, and which conclusion would require an inference?"
+                    f"Return to {source_label}. Which detail is most useful for {module_focus}, and how does it move your response forward?"
                 ),
             ),
             HintRung(
                 level=2,
                 hint_type="procedural",
                 content=(
-                    f"Write one sentence for the observation, one for the claim it supports, and one for an "
-                    f"alternative explanation. Use the task boundary: {scope}."
+                    f"Draft the next section in three moves: identify a relevant detail, explain its significance for {objective}, "
+                    f"then connect it back to the task boundary: {scope}."
                 ),
             ),
             HintRung(
                 level=3,
                 hint_type="worked_analogy",
                 content=(
-                    "A map can show that a road connects two places, but it cannot alone prove why the road was built. "
-                    "Apply that distinction between what the source shows and what you infer."
+                    f"Use a revision pass: underline the sentence that addresses {objective}, then check that every nearby "
+                    "source detail actively supports that sentence rather than simply appearing beside it."
                 ),
             ),
             HintRung(
@@ -168,24 +205,24 @@ class AssignmentGenerator:
         rubric_rules = [
             {
                 "criterion_id": "rule_claim_precision",
-                "label": "Bounded claim",
-                "description": "Makes a defensible claim that remains within the task's stated scope.",
+                "label": "Module objective alignment",
+                "description": f"Demonstrates the module objective: {objective}.",
                 "target_kc": target_label,
                 "nli_threshold": 0.80,
                 "weight": 2.0,
             },
             {
                 "criterion_id": "rule_evidence_reasoning",
-                "label": "Evidence and inference",
-                "description": f"Uses {evidence} and distinguishes direct support from a broader inference.",
+                "label": "Assigned material in use",
+                "description": f"Uses {evidence} to develop the task rather than merely listing source information.",
                 "target_kc": target_kcs[min(1, len(target_kcs) - 1)],
                 "nli_threshold": 0.80,
                 "weight": 2.0,
             },
             {
                 "criterion_id": "rule_alternative_explanation",
-                "label": "Reasoning under uncertainty",
-                "description": f"Addresses the risk of {cognitive_trap} by testing an alternative explanation.",
+                "label": "Explanation and revision",
+                "description": f"Builds an explanation within {scope} and revises it to address the risk of {cognitive_trap}.",
                 "target_kc": target_label,
                 "nli_threshold": 0.80,
                 "weight": 1.0,
