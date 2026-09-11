@@ -370,7 +370,7 @@
       {#if courseId}
         <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
       {/if}
-      <a class="btn btn-primary" href="#/student/portal">Return to Timeline</a>
+      <a class="btn btn-primary" href="#/student/portal">Return to Courses</a>
     </div>
   </main>
 {:else if !assignment}
@@ -385,7 +385,7 @@
       {#if courseId}
         <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
       {/if}
-      <a class="btn btn-primary" href="#/student/portal">Browse Student Timeline</a>
+      <a class="btn btn-primary" href="#/student/portal">Browse Available Courses</a>
     </div>
   </main>
 {:else}
@@ -410,6 +410,17 @@
       </div>
 
       <div class="topbar-right">
+        {#if courseId}
+          <a
+            class="role-switch-btn"
+            style="padding: 5px 10px; font-size: 11.5px; text-decoration: none;"
+            href={`#/student/sources?course_id=${encodeURIComponent(courseId)}`}
+            title="Open Course Primary Sources Reader"
+          >
+            <span>📖 Sources</span>
+          </a>
+        {/if}
+
         <button 
           class="tutor-toggle-btn" 
           class:active={isTutorPanelOpen}

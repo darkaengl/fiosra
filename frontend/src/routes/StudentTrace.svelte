@@ -52,9 +52,16 @@
     courseId = params.get('course_id') || '';
     assignmentId = params.get('assignment_id') || '';
     sessionId = params.get('session_id') || '';
+
+    // If session_id is not in URL, try restoring persisted session for the assignment
+    if (!sessionId && assignmentId) {
+      const persisted = localStorage.getItem(sessionStorageKey(assignmentId, getStudentId()));
+      if (persisted) sessionId = persisted;
+    }
+
     if (!sessionId) return;
     const persistedSessionId = localStorage.getItem(sessionStorageKey(assignmentId, getStudentId()));
-    if (persistedSessionId !== sessionId) {
+    if (persistedSessionId && persistedSessionId !== sessionId) {
       throw new Error('Open the protected canvas from this browser to view this reasoning trace.');
     }
     sessionAccessToken = localStorage.getItem(sessionAccessTokenStorageKey(sessionId)) || '';
@@ -110,9 +117,35 @@
   {#if isLoading}
     <div class="loading"><div class="spinner"></div><span>Assembling your evidence packet…</span></div>
   {:else if !sessionId}
-    <div class="empty"><h1>No active reasoning trace</h1><p>Open a student canvas and begin a reasoning session to build an evidence trace.</p><a class="btn btn-primary" href="#/courses">Choose a course</a></div>
+    <div class="empty">
+      <div class="empty-icon" style="font-size: 36px; margin-bottom: 8px;">🔍</div>
+      <h1>No Active Reasoning Session Selected</h1>
+      <p>The Evidence Flight Recorder captures claims, Socratic probes, and self-corrections during an active reasoning session.</p>
+      <div style="display: flex; gap: 12px; margin-top: 14px; justify-content: center; flex-wrap: wrap;">
+        <a class="btn btn-primary" href={courseId ? `#/student?course_id=${encodeURIComponent(courseId)}` : '#/student'}>
+          ✍️ Open Reasoning Canvas
+        </a>
+        <a class="btn btn-secondary" href={courseId ? `#/student/home?course_id=${encodeURIComponent(courseId)}` : '#/student/portal'}>
+          Course Map
+        </a>
+        <a class="btn btn-secondary" href="#/student/timeline">
+          📈 View Progression Timeline
+        </a>
+      </div>
+    </div>
   {:else if error && !dossier}
-    <div class="empty"><h1>Trace unavailable</h1><p>{error}</p><a class="btn btn-secondary" href="#/student">Return to canvas</a></div>
+    <div class="empty">
+      <h1>Trace Unavailable</h1>
+      <p>{error}</p>
+      <div style="display: flex; gap: 12px; margin-top: 14px; justify-content: center;">
+        <a class="btn btn-primary" href={courseId ? `#/student?course_id=${encodeURIComponent(courseId)}` : '#/student'}>
+          Return to Canvas
+        </a>
+        <a class="btn btn-secondary" href="#/student/portal">
+          All Courses
+        </a>
+      </div>
+    </div>
   {:else}
     <header class="trace-header">
       <div><div class="eyebrow">Student evidence packet</div><h1>A path made visible</h1><p>Review the chronological record of your claims, requested support, and revisions before sharing it with your educator.</p></div>

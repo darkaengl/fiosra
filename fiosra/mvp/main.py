@@ -25,7 +25,31 @@ from fiosra.mvp.socratic_probe_router import router as socratic_probe_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup and shutdown hooks."""
-    # Startup
+    # Startup: ensure the enrollments table exists (migration 008).
+    # docker-entrypoint-initdb.d only runs on first DB init; this is
+    # idempotent so it is safe to run on every startup.
+    from sqlalchemy import text as _text
+
+    from fiosra.mvp.database import engine as _engine
+
+    async with _engine.begin() as conn:
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS enrollments (
+                enrollment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                course_id     UUID NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
+                student_id    VARCHAR(64) NOT NULL,
+                enrolled_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                UNIQUE (course_id, student_id)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments (student_id);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments (course_id);"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()

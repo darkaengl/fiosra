@@ -1,16 +1,52 @@
 <script>
   import { onMount } from 'svelte';
-  import { routeParams } from '../lib/session.js';
+  import { getStudentId, routeParams } from '../lib/session.js';
 
   let courseProgress = $state(75);
   let courseId = $state('');
   let currentCourse = $state(null);
   let activeAssignment = $state(null);
   let isLoading = $state(true);
+  let isEnrolled = $state(true); // assume enrolled until checked
+  let enrollBusy = $state(false);
+  let studentId = '';
+
+  async function checkEnrollment() {
+    if (!courseId || !studentId) return;
+    try {
+      const res = await fetch(`/courses/enrolled?student_id=${encodeURIComponent(studentId)}`);
+      if (res.ok) {
+        const enrolled = await res.json();
+        isEnrolled = enrolled.some((c) => c.course_id === courseId);
+      }
+    } catch {
+      // If the endpoint fails, allow access (graceful degradation)
+      isEnrolled = true;
+    }
+  }
+
+  async function enrollAndReload() {
+    enrollBusy = true;
+    try {
+      const res = await fetch(`/courses/${courseId}/enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      if (res.ok) {
+        isEnrolled = true;
+      }
+    } catch (err) {
+      console.error('Enrollment failed:', err);
+    } finally {
+      enrollBusy = false;
+    }
+  }
 
   onMount(async () => {
     const params = routeParams();
     courseId = params.get('course_id') || '';
+    studentId = getStudentId();
 
     try {
       const coursesRes = await fetch('/courses');
@@ -42,6 +78,9 @@
         }
       }
 
+      // Check enrollment status
+      await checkEnrollment();
+
       if (courseId && !activeAssignment) {
         const assignRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
         if (assignRes.ok) {
@@ -60,6 +99,23 @@
 
 <div class="home-page">
   <main class="home-container">
+
+    {#if !isLoading && !isEnrolled}
+      <!-- Enrollment Guard -->
+      <div class="enrollment-guard">
+        <div class="guard-icon">🔒</div>
+        <h2 class="guard-title">You are not enrolled in this course</h2>
+        <p class="guard-desc">
+          You need to enroll in <strong>{currentCourse?.title || 'this course'}</strong> before you can access its content and assignments.
+        </p>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button class="btn btn-primary" onclick={enrollAndReload} disabled={enrollBusy} style="padding: 10px 24px;">
+            {enrollBusy ? 'Enrolling...' : 'Enroll Now →'}
+          </button>
+          <a href="#/student/portal" class="link-subtle" style="font-size: 13px;">← Back to Courses</a>
+        </div>
+      </div>
+    {:else}
     
     <!-- Greeting -->
     <div class="greeting-header">
@@ -75,6 +131,7 @@
       </span>
     </div>
 
+
     <!-- 1. What should I work on now? -->
     <section class="focus-section">
       <span class="section-eyebrow">Active Focus • What to work on now</span>
@@ -89,13 +146,22 @@
                 {activeAssignment.prompt || 'Synthesize evidence and evaluate reasoning using assigned primary sources and rubric criteria.'}
               </p>
             </div>
-            <a 
-              href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(activeAssignment.assignment_id)}`} 
-              class="btn btn-primary" 
-              style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;"
-            >
-              Resume Reasoning Canvas →
-            </a>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <a 
+                href={`#/student/sources?course_id=${encodeURIComponent(courseId)}`} 
+                class="btn btn-secondary" 
+                style="padding: 12px 18px; font-size: 13.5px; white-space: nowrap;"
+              >
+                📖 Primary Sources
+              </a>
+              <a 
+                href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(activeAssignment.assignment_id)}`} 
+                class="btn btn-primary" 
+                style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;"
+              >
+                Resume Reasoning Canvas →
+              </a>
+            </div>
           </div>
 
           <div class="focus-status-row">
@@ -141,7 +207,7 @@
               </p>
             </div>
             <a href="#/student/portal" class="btn btn-secondary" style="padding: 12px 24px; font-size: 13.5px; white-space: nowrap;">
-              Return to Timeline ↗
+              Return to Courses ↗
             </a>
           </div>
         </div>
@@ -210,6 +276,7 @@
       </div>
     </section>
 
+    {/if}
   </main>
 </div>
 
@@ -420,5 +487,49 @@
     font-size: 12.5px;
     color: var(--color-slate-muted);
     margin: 0;
+  }
+
+  .enrollment-guard {
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-left: 4px solid var(--color-amber);
+    border-radius: var(--radius-md);
+    padding: 40px 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+    margin: 60px auto;
+    max-width: 520px;
+  }
+
+  .guard-icon {
+    font-size: 36px;
+  }
+
+  .guard-title {
+    font-family: var(--font-brand);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-heading);
+    margin: 0;
+  }
+
+  .guard-desc {
+    font-size: 13.5px;
+    color: var(--color-slate-light);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .link-subtle {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-slate-muted);
+    text-decoration: none;
+  }
+  .link-subtle:hover {
+    color: var(--color-heading);
   }
 </style>

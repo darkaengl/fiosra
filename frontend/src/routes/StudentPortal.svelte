@@ -1,25 +1,35 @@
 <script>
   import { onMount } from 'svelte';
-  import { routeParams } from '../lib/session.js';
+  import { getStudentId, routeParams } from '../lib/session.js';
 
-  let activeTab = $state('courses'); // 'courses' | 'reader' | 'portfolio'
-  let activeReaderDoc = $state('young');
-  let courses = $state([]);
+  let enrolledCourses = $state([]);
+  let availableCourses = $state([]);
   let isLoading = $state(true);
-
-  function setTab(tab) {
-    activeTab = tab;
-  }
+  let enrollingId = $state(''); // course_id currently being enrolled
+  let droppingId = $state(''); // course_id currently being dropped
+  let studentId = '';
 
   onMount(async () => {
+    studentId = getStudentId();
+    await loadCourses();
+  });
+
+  async function loadCourses() {
+    isLoading = true;
     try {
-      const res = await fetch('/courses');
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : data.courses || [];
-        
-        // Filter out automated test runner artifacts and clean course list
-        const cleanList = list.filter((c) => {
+      // Fetch enrolled courses
+      const enrolledRes = await fetch(`/courses/enrolled?student_id=${encodeURIComponent(studentId)}`);
+      const enrolled = enrolledRes.ok ? await enrolledRes.json() : [];
+      enrolledCourses = Array.isArray(enrolled) ? enrolled : [];
+
+      // Fetch all courses, filter out the enrolled ones
+      const allRes = await fetch('/courses');
+      if (allRes.ok) {
+        const data = await allRes.json();
+        const allList = Array.isArray(data) ? data : data.courses || [];
+
+        // Filter out test artifacts
+        const cleanList = allList.filter((c) => {
           const title = c.title || '';
           const creator = c.created_by || '';
           if (creator.includes('test_') || creator.includes('canvas_test')) return false;
@@ -27,24 +37,67 @@
           return true;
         });
 
-        // Deduplicate courses by normalized title
+        // Deduplicate by normalized title
         const seen = new Set();
         const unique = [];
-        for (const c of cleanList.length > 0 ? cleanList : list) {
+        for (const c of cleanList.length > 0 ? cleanList : allList) {
           const key = (c.title || '').trim().toLowerCase();
           if (key && !seen.has(key)) {
             seen.add(key);
             unique.push(c);
           }
         }
-        courses = unique.slice(0, 3);
+
+        // Remove enrolled courses from the available list
+        const enrolledIds = new Set(enrolledCourses.map((c) => c.course_id));
+        availableCourses = unique.filter((c) => !enrolledIds.has(c.course_id));
       }
     } catch (err) {
       console.error('Failed to fetch courses:', err);
     } finally {
       isLoading = false;
     }
-  });
+  }
+
+  async function enrollInCourse(courseId) {
+    enrollingId = courseId;
+    try {
+      const res = await fetch(`/courses/${courseId}/enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      if (res.ok) {
+        await loadCourses();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Enrollment failed:', err.detail || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Enrollment request failed:', err);
+    } finally {
+      enrollingId = '';
+    }
+  }
+
+  async function dropCourse(courseId) {
+    droppingId = courseId;
+    try {
+      const res = await fetch(`/courses/${courseId}/enroll/${encodeURIComponent(studentId)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok || res.status === 204) {
+        await loadCourses();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Drop failed:', err.detail || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Drop request failed:', err);
+    } finally {
+      droppingId = '';
+    }
+  }
 
   function getFirstAssignment(course) {
     if (course.modules) {
@@ -57,14 +110,6 @@
     }
     return null;
   }
-
-  function clipExcerptToWorkspace(passage) {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('fiosra_clipped_passage', passage);
-    }
-    const defaultCourseId = courses[0]?.course_id || '';
-    window.location.hash = defaultCourseId ? `#/student?course_id=${defaultCourseId}` : '#/student';
-  }
 </script>
 
 <div class="portal-page">
@@ -76,34 +121,35 @@
         <h1 class="greeting-name">Welcome back, Elena</h1>
         <p class="greeting-sub">
           {#if isLoading}
-            Loading your Fall 2026 enrolled courses &amp; active milestones...
+            Loading your Fall 2026 courses & milestones...
           {:else}
-            You are enrolled in {courses.length} course{courses.length === 1 ? '' : 's'} for Fall 2026. Next milestone due: <strong>The Fiscal Breakdown: Sovereign Debt</strong>.
+            You are enrolled in {enrolledCourses.length} course{enrolledCourses.length === 1 ? '' : 's'} for Fall 2026.
+            {#if enrolledCourses.length > 0}
+              {#if getFirstAssignment(enrolledCourses[0])}
+                Next milestone due: <strong>{getFirstAssignment(enrolledCourses[0]).title}</strong>.
+              {:else}
+                Explore your courses below.
+              {/if}
+            {:else}
+              Browse available courses below to get started.
+            {/if}
           {/if}
         </p>
       </div>
 
-      <div class="portfolio-pill">
+      <a href="#/student/timeline" class="portfolio-pill" title="View Longitudinal Progression Timeline">
         <span>🛡️</span>
-        <span>Autonomy Rating: <strong>88.4% (Level 4 Independent)</strong></span>
+        <span>Autonomy Rating: <strong>88.4% (Level 4 Independent) →</strong></span>
+      </a>
+    </div>
+
+    <!-- ENROLLED COURSES SECTION -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-eyebrow">📚 My Enrolled Courses</span>
+        <span class="section-count">{enrolledCourses.length} enrolled</span>
       </div>
-    </div>
 
-    <!-- Portal Navigation Tabs -->
-    <div class="portal-nav">
-      <button class="portal-tab-btn" class:active={activeTab === 'courses'} onclick={() => setTab('courses')}>
-        <span>📚</span> Enrolled Courses &amp; Milestones
-      </button>
-      <button class="portal-tab-btn" class:active={activeTab === 'reader'} onclick={() => setTab('reader')}>
-        <span>📖</span> Primary Source Grounding &amp; Syllabus
-      </button>
-      <button class="portal-tab-btn" class:active={activeTab === 'portfolio'} onclick={() => setTab('portfolio')}>
-        <span>🎓</span> Verified Reasoning Portfolio &amp; Transcript
-      </button>
-    </div>
-
-    <!-- VIEW 1: ENROLLED COURSES -->
-    {#if activeTab === 'courses'}
       <div class="courses-grid">
         {#if isLoading}
           <div class="student-course-card skeleton-card">
@@ -113,10 +159,10 @@
             <div style="height: 24px; width: 70%; background: var(--pill-hover); border-radius: 4px; margin-top: 8px;"></div>
             <div style="height: 80px; width: 100%; background: var(--pill-hover); border-radius: 6px; margin-top: 12px;"></div>
           </div>
-        {:else if courses.length > 0}
-          {#each courses as c}
+        {:else if enrolledCourses.length > 0}
+          {#each enrolledCourses as c (c.course_id)}
             {@const firstAssign = getFirstAssignment(c)}
-            <div class="student-course-card">
+            <div class="student-course-card enrolled-card">
               <div class="card-top-row">
                 <div>
                   <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
@@ -127,7 +173,9 @@
                 </span>
               </div>
 
-              <div class="instructor-line">Instructor: {c.created_by || 'Prof. Somerville'} • {c.modules ? c.modules.length : 0} Modules</div>
+              <div class="instructor-line">
+                Instructor: {c.created_by || 'Faculty'} • {c.modules ? c.modules.length : 0} Modules • {c.assignments_count || 0} Assignments
+              </div>
 
               <div class="active-task-box">
                 <span class="active-task-label">{firstAssign ? 'Current Active Reasoning Task' : 'Course Overview'}</span>
@@ -138,12 +186,21 @@
               </div>
 
               <div class="card-footer">
-                <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
-                  View Course Map →
-                </a>
-                <a 
-                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`} 
-                  class="btn btn-primary" 
+                <div class="card-footer-left">
+                  <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
+                    View Course Map →
+                  </a>
+                  <button
+                    class="link-drop"
+                    onclick={() => dropCourse(c.course_id)}
+                    disabled={droppingId === c.course_id}
+                  >
+                    {droppingId === c.course_id ? 'Dropping...' : 'Drop Course'}
+                  </button>
+                </div>
+                <a
+                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`}
+                  class="btn btn-primary"
                   style="padding: 7px 14px; font-size: 12px;"
                 >
                   {firstAssign ? 'Resume Reasoning Canvas →' : 'Explore Course Map →'}
@@ -152,169 +209,66 @@
             </div>
           {/each}
         {:else}
-          <div class="student-course-card">
-            <div class="card-top-row">
-              <div>
-                <span class="course-meta-code">HIST-205</span>
-                <h2 class="course-title">Revolutionary France &amp; Modern Statehood</h2>
-              </div>
-              <span class="badge badge-success">Unit 1 Active</span>
-            </div>
-
-            <div class="instructor-line">Instructor: Dr. Vance • 24 Students</div>
-
-            <div class="active-task-box">
-              <span class="active-task-label">Current Active Reasoning Task</span>
-              <div class="active-task-title">The Fiscal Breakdown: Sovereign Debt &amp; Estates-General</div>
-              <div class="active-task-meta">⏱️ ~45m remaining • Sectional Scaffold: 2/3 Drafted</div>
-            </div>
-
-            <div class="card-footer">
-              <a href="#/student/home" class="link-subtle">
-                View Course Map →
-              </a>
-              <a href="#/student" class="btn btn-primary" style="padding: 7px 14px; font-size: 12px;">
-                Resume Reasoning Canvas →
-              </a>
-            </div>
+          <div class="empty-state-card">
+            <div class="empty-icon">📭</div>
+            <h3 class="empty-title">No Enrolled Courses</h3>
+            <p class="empty-desc">You haven't enrolled in any courses yet. Browse available courses below to get started.</p>
           </div>
         {/if}
       </div>
-    {/if}
+    </div>
 
-    <!-- VIEW 2: PRIMARY SOURCE READER -->
-    {#if activeTab === 'reader'}
-      <div class="reader-grid">
-        <div class="reader-sidebar">
-          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">
-            HIST-201 Grounded Corpus
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <button class="btn" class:btn-primary={activeReaderDoc === 'young'} class:btn-secondary={activeReaderDoc !== 'young'} style="justify-content: flex-start; text-align: left; font-size: 12px; padding: 8px 12px;" onclick={() => activeReaderDoc = 'young'}>
-              📄 Arthur Young: Travels in France (1789)
-            </button>
-            <button class="btn" class:btn-primary={activeReaderDoc === 'sieyes'} class:btn-secondary={activeReaderDoc !== 'sieyes'} style="justify-content: flex-start; text-align: left; font-size: 12px; padding: 8px 12px;" onclick={() => activeReaderDoc = 'sieyes'}>
-              📄 Abbé Sieyès: What is the Third Estate? (1789)
-            </button>
-            <button class="btn" class:btn-primary={activeReaderDoc === 'necker'} class:btn-secondary={activeReaderDoc !== 'necker'} style="justify-content: flex-start; text-align: left; font-size: 12px; padding: 8px 12px;" onclick={() => activeReaderDoc = 'necker'}>
-              📄 Necker's Compte Rendu au Roi (1781)
-            </button>
-          </div>
-        </div>
-
-        <div class="reader-content">
-          {#if activeReaderDoc === 'young'}
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <h2 class="reading-source-title">Arthur Young: Travels in France (July 1789 Excerpt)</h2>
-              <span style="font-size: 11px; font-family: var(--font-mono); color: #64748b;">SHA-256: 4f98...e1b2</span>
-            </div>
-
-            <p style="font-size: 13.5px; color: #475569; line-height: 1.6;">
-              Arthur Young, an English agricultural observer, recorded meticulous first-hand accounts of agrarian poverty and the institutional inequalities that sparked rural insurrections in the summer of 1789.
-            </p>
-
-            <div class="reading-passage">
-              "The abuses attending the levy of the taille and the corvée are of a magnitude that foreigners can scarcely conceive. The nobility and clergy are exempt from the former; and the whole weight falls upon the peasantry, who are crushed beneath the load while privileged orders enjoy the fruits of fertile land without contributing a sol to the public treasury."
-            </div>
-
-            <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Arthur Young: Travels in France (1789) - Tail and Corvee exemptions")}>
-                📎 Clip Excerpt to Reasoning Canvas
-              </button>
-            </div>
-          {:else if activeReaderDoc === 'sieyes'}
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <h2 class="reading-source-title">Abbé Sieyès: What is the Third Estate? (January 1789)</h2>
-              <span style="font-size: 11px; font-family: var(--font-mono); color: #64748b;">SHA-256: 9ac3...77d1</span>
-            </div>
-            <p style="font-size: 13.5px; color: #475569; line-height: 1.6;">
-              Emmanuel-Joseph Sieyès issued the definitive political manifesto defining national sovereignty against feudal privilege.
-            </p>
-            <div class="reading-passage">
-              "What is the Third Estate? Everything. What has it been heretofore in the political order? Nothing. What does it demand? To become something."
-            </div>
-            <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Abbé Sieyès: What is the Third Estate? (1789)")}>
-                📎 Clip Excerpt to Reasoning Canvas
-              </button>
-            </div>
-          {:else}
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <h2 class="reading-source-title">Jacques Necker: Compte Rendu au Roi (1781)</h2>
-              <span style="font-size: 11px; font-family: var(--font-mono); color: #64748b;">SHA-256: db81...00f4</span>
-            </div>
-            <p style="font-size: 13.5px; color: #475569; line-height: 1.6;">
-              Necker made public the state budget for the first time in French royal history, concealing extraordinary military war debts.
-            </p>
-            <div class="reading-passage">
-              "A state whose credit is sound can find resources in extraordinary crises; but when mystery shrouds finances, distrust multiplies and rates become ruinous."
-            </div>
-            <div style="display: flex; gap: 12px; margin-top: 12px;">
-              <button class="btn btn-primary" style="font-size: 12px;" onclick={() => clipExcerptToWorkspace("Jacques Necker: Compte Rendu au Roi (1781)")}>
-                📎 Clip Excerpt to Reasoning Canvas
-              </button>
-            </div>
-          {/if}
-        </div>
+    <!-- AVAILABLE COURSES SECTION -->
+    <div class="section-block">
+      <div class="section-header">
+        <span class="section-eyebrow">🔍 Available Courses</span>
+        <span class="section-count">{availableCourses.length} available</span>
       </div>
-    {/if}
 
-    <!-- VIEW 3: VERIFIED REASONING PORTFOLIO -->
-    {#if activeTab === 'portfolio'}
-      <div class="portfolio-view">
-        <div class="portfolio-ribbon">
-          <div class="portfolio-stat">
-            <span class="portfolio-stat-label">Autonomy Index</span>
-            <span class="portfolio-stat-val" style="color: var(--color-horizon-blue);">88.4%</span>
-            <span class="portfolio-stat-sub">Top Decile Independent</span>
+      <div class="courses-grid">
+        {#if isLoading}
+          <div class="student-course-card skeleton-card">
+            <div style="height: 18px; width: 80px; background: var(--pill-hover); border-radius: 4px;"></div>
+            <div style="height: 24px; width: 60%; background: var(--pill-hover); border-radius: 4px; margin-top: 8px;"></div>
           </div>
+        {:else if availableCourses.length > 0}
+          {#each availableCourses as c (c.course_id)}
+            <div class="student-course-card available-card">
+              <div class="card-top-row">
+                <div>
+                  <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
+                  <h2 class="course-title">{c.title}</h2>
+                </div>
+                <span class="badge badge-neutral">Open</span>
+              </div>
 
-          <div class="portfolio-stat">
-            <span class="portfolio-stat-label">Verifiable Claims Entailed</span>
-            <span class="portfolio-stat-val" style="color: var(--color-signal-green-dark);">18 / 20</span>
-            <span class="portfolio-stat-sub">90% Entailment (DeBERTa-v3)</span>
-          </div>
+              <div class="instructor-line">Instructor: {c.created_by || 'Faculty'} • {c.modules ? c.modules.length : 0} Modules • {c.assignments_count || 0} Assignments</div>
 
-          <div class="portfolio-stat">
-            <span class="portfolio-stat-label">Autonomous Self-Corrections</span>
-            <span class="portfolio-stat-val" style="color: #7c3aed;">4 Nodes</span>
-            <span class="portfolio-stat-sub">Zero Teacher Interventions</span>
-          </div>
+              {#if c.syllabus_context}
+                <p class="course-synopsis">{c.syllabus_context.slice(0, 160)}{c.syllabus_context.length > 160 ? '...' : ''}</p>
+              {/if}
 
-          <div class="portfolio-stat">
-            <span class="portfolio-stat-label">Avg Hint Ceiling</span>
-            <span class="portfolio-stat-val">0.18</span>
-            <span class="portfolio-stat-sub">Minimal Scaffolding Used</span>
-          </div>
-        </div>
-
-        <div class="endorsement-card">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div class="avatar" style="background: #1e293b; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;">DV</div>
-              <div>
-                <div style="font-weight: 700; color: #0f172a;">Dr. Vance • Department of History</div>
-                <div style="font-size: 11.5px; color: #64748b;">Formal Reasoning Trace Endorsement (HIST-201)</div>
+              <div class="card-footer">
+                <span></span>
+                <button
+                  class="btn btn-enroll"
+                  onclick={() => enrollInCourse(c.course_id)}
+                  disabled={enrollingId === c.course_id}
+                >
+                  {enrollingId === c.course_id ? 'Enrolling...' : 'Enroll →'}
+                </button>
               </div>
             </div>
-            <span class="badge badge-success">Cryptographically Signed</span>
+          {/each}
+        {:else}
+          <div class="empty-state-card" style="border-left-color: var(--color-slate-muted);">
+            <p class="empty-desc" style="margin: 0;">
+              {enrolledCourses.length > 0 ? 'You are enrolled in all available courses.' : 'No courses are available at the moment. Check back when your institution publishes new courses.'}
+            </p>
           </div>
-
-          <p class="endorsement-quote">
-            "Elena demonstrated exceptional conceptual maturity during the Fiscal Insolvency reasoning canvas. When initially tempted by the moralized 'luxury spending' trope, she autonomously revised her claim upon inspecting Necker's Compte Rendu data, framing the crisis around systemic debt servicing and fiscal exemption. Her reasoning trace reflects authentic scholarly discipline."
-          </p>
-
-          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-bone-border); padding-top: 14px;">
-            <span style="font-size: 11px; font-family: monospace; color: #64748b;">
-              Evidence Packet: Z-HIST201-STU081-REV24 • Verified via AAAI-2026 AutoSCORE Protocol
-            </span>
-            <button class="btn btn-secondary" style="font-size: 11.5px; padding: 6px 12px;" onclick={() => alert('Downloading W3C Verifiable Credential (JSON-LD)...')}>
-              📄 Export Verifiable Proof of Reasoning (.json-ld)
-            </button>
-          </div>
-        </div>
+        {/if}
       </div>
-    {/if}
+    </div>
 
   </main>
 </div>
@@ -343,6 +297,8 @@
     justify-content: space-between;
     align-items: center;
     box-shadow: var(--shadow-sm);
+    gap: 20px;
+    flex-wrap: wrap;
   }
 
   .greeting-left {
@@ -376,55 +332,46 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--color-signal-green);
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
 
-  .portal-nav {
-    display: flex;
-    gap: 12px;
-    border-bottom: 2px solid var(--color-graphite-border);
-    padding-bottom: 2px;
+  .portfolio-pill:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
   }
 
-  .portal-tab-btn {
-    background: none;
-    border: none;
-    font-family: var(--font-ui);
-    font-size: 14.5px;
-    font-weight: 600;
-    color: var(--color-slate-light);
-    padding: 10px 18px;
-    cursor: pointer;
+  /* Section blocks */
+  .section-block {
     display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 8px;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    transition: all 0.15s ease;
-    position: relative;
   }
 
-  .portal-tab-btn:hover {
-    color: var(--color-heading);
-    background: var(--pill-hover);
+  .section-eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-horizon-bright);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
-  .portal-tab-btn.active {
-    color: var(--color-horizon-blue);
-  }
-
-  .portal-tab-btn.active::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--color-horizon-blue);
+  .section-count {
+    font-size: 11.5px;
+    color: var(--color-slate-muted);
+    font-weight: 600;
   }
 
   .courses-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: 24px;
+    gap: 20px;
   }
 
   .student-course-card {
@@ -436,19 +383,37 @@
     flex-direction: column;
     gap: 16px;
     box-shadow: var(--shadow-sm);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   }
 
   .student-course-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+  }
+
+  .enrolled-card {
+    border-left: 3px solid var(--color-horizon-blue);
+  }
+
+  .enrolled-card:hover {
     border-color: var(--color-horizon-blue);
+  }
+
+  .available-card {
+    border-left: 3px solid var(--color-slate-muted);
+    opacity: 0.92;
+  }
+
+  .available-card:hover {
+    border-color: var(--color-signal-green);
+    opacity: 1;
   }
 
   .card-top-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    gap: 12px;
   }
 
   .course-meta-code {
@@ -464,8 +429,8 @@
     font-size: 18px;
     font-weight: 700;
     color: var(--color-heading);
+    margin: 4px 0 0 0;
     line-height: 1.3;
-    margin: 0;
   }
 
   .instructor-line {
@@ -473,11 +438,17 @@
     color: var(--color-slate-light);
   }
 
+  .course-synopsis {
+    font-size: 12.5px;
+    color: var(--color-slate-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
   .active-task-box {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-left: 4px solid var(--color-horizon-blue);
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-sm);
     padding: 12px 14px;
     display: flex;
     flex-direction: column;
@@ -485,15 +456,15 @@
   }
 
   .active-task-label {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    color: var(--color-horizon-bright);
+    color: var(--color-slate-muted);
     letter-spacing: 0.5px;
   }
 
   .active-task-title {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--color-heading);
   }
@@ -507,124 +478,109 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: auto;
+    border-top: 1px solid var(--color-graphite-border);
     padding-top: 12px;
+  }
+
+  .card-footer-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
   }
 
   .link-subtle {
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--color-slate-muted);
+    color: var(--color-horizon-bright);
     text-decoration: none;
+    transition: opacity 0.15s ease;
   }
+
   .link-subtle:hover {
     color: var(--color-heading);
   }
 
-  .reader-grid {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 24px;
+  .link-drop {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--color-slate-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-family: var(--font-ui);
+    transition: color 0.15s ease;
+  }
+  .link-drop:hover {
+    color: #ef4444;
+  }
+  .link-drop:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-enroll {
+    background: var(--color-signal-green-dark);
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 700;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .btn-enroll:hover {
+    background: #059669;
+    transform: translateY(-1px);
+  }
+  .btn-enroll:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .badge-neutral {
+    background: var(--pill-bg);
+    color: var(--color-slate-muted);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* Empty state */
+  .empty-state-card {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
+    border-left: 3px solid var(--color-horizon-blue);
     border-radius: var(--radius-md);
-    overflow: hidden;
-    min-height: 540px;
-  }
-
-  .reader-sidebar {
-    background: var(--color-obsidian);
-    border-right: 1px solid var(--color-graphite-border);
-    padding: 20px;
+    padding: 32px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    grid-column: 1 / -1;
   }
 
-  .reader-content {
-    padding: 32px 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    overflow-y: auto;
+  .empty-icon {
+    font-size: 32px;
   }
 
-  .reading-source-title {
+  .empty-title {
     font-family: var(--font-brand);
-    font-size: 22px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--color-heading);
     margin: 0;
   }
 
-  .reading-passage {
-    font-family: Georgia, serif;
-    font-size: 16px;
-    line-height: 1.7;
-    color: var(--color-slate-bright);
-    background: var(--color-obsidian);
-    border-left: 3px solid var(--color-horizon-blue);
-    padding: 16px 20px;
-    margin: 8px 0;
-  }
-
-  .portfolio-ribbon {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .portfolio-stat {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 18px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .portfolio-stat-label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .empty-desc {
+    font-size: 13px;
     color: var(--color-slate-muted);
-  }
-
-  .portfolio-stat-val {
-    font-family: var(--font-brand);
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .portfolio-stat-sub {
-    font-size: 12px;
-    color: var(--color-signal-green);
-    font-weight: 600;
-  }
-
-  .endorsement-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 24px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .endorsement-quote {
-    font-style: italic;
-    font-size: 14px;
-    color: var(--color-slate-bright);
-    line-height: 1.6;
-    border-left: 3px solid var(--color-signal-green);
-    padding-left: 14px;
-    margin: 4px 0;
+    max-width: 400px;
+    line-height: 1.5;
   }
 </style>
