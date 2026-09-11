@@ -35,6 +35,8 @@
   let error = $state('');
   let probeTimer;
   let editorRef = $state(null);
+  let supportResult = $state(null);
+  let isSupportBusy = $state(false);
 
   let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
@@ -232,7 +234,7 @@
       evidenceSummary = result.evidence_summary || evidenceSummary;
       if (result.created?.length) {
         activeProbeId = result.created[0].probe_id;
-        probeNotice = 'A Socratic probe is ready. It tests this paragraph’s reasoning.';
+        probeNotice = 'An optional writing prompt is available if you would like support with your next step.';
         isTutorPanelOpen = false;
       }
       await loadSessionEvents();
@@ -247,6 +249,33 @@
       const current = activeProbe();
       if (current) activeProbeId = current.probe_id;
       probeNotice = '';
+    }
+  }
+
+  function documentExcerpt() {
+    return (learningDocument?.blocks || [])
+      .map((block) => block.plaintext || '')
+      .join('\n')
+      .slice(-12000);
+  }
+
+  async function requestCompletionSupport(actionId) {
+    if (!assignmentId) return;
+    isSupportBusy = true;
+    probeNotice = '';
+    try {
+      const response = await fetch(`/assignments/${assignmentId}/support`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action_id: actionId, document_excerpt: documentExcerpt() }),
+      });
+      if (!response.ok) throw new Error(await responseError(response, 'Writing support is unavailable right now.'));
+      supportResult = await response.json();
+      isTutorPanelOpen = true;
+    } catch (err) {
+      probeNotice = err.message || 'Writing support is unavailable right now.';
+    } finally {
+      isSupportBusy = false;
     }
   }
 
@@ -620,7 +649,26 @@
           </header>
 
           <div class="tutor-body">
-            {#if currentProbe}
+            {#if published?.support_menu?.length}
+              <div class="completion-support-menu">
+                <span class="card-eyebrow">Choose what would help now</span>
+                {#each published.support_menu as item}
+                  <button class="completion-support-action" disabled={isSupportBusy} onclick={() => requestCompletionSupport(item.action_id)}>
+                    <strong>{item.title}</strong><small>{item.description}</small>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            {#if supportResult}
+              <div class="support-result-card">
+                <div class="probe-meta"><span class="section-tag">Next useful step</span></div>
+                <h4>{supportResult.title}</h4>
+                <p>{supportResult.guidance}</p>
+                <ol>{#each supportResult.next_steps as step}<li>{step}</li>{/each}</ol>
+                <button class="defer-btn" onclick={() => supportResult = null}>Choose another support option</button>
+              </div>
+            {:else if currentProbe}
               <div class="probe-card">
                 <div class="probe-meta">
                   <span class="section-tag">{currentProbe.section_label || 'Active paragraph'}</span>
@@ -1495,6 +1543,16 @@
   .rubric-levels strong { color: var(--color-heading); display: block; font-size: 10px; }
   .rubric-levels small { color: var(--color-slate-light); display: block; font-size: 10px; line-height: 1.4; margin-top: 2px; }
   .rubric-card .self-review { color: #93c5fd; font-size: 10px; }
+  .completion-support-menu { border-bottom: 1px solid var(--color-graphite-border); display: flex; flex-direction: column; gap: 7px; padding: 0 0 14px; }
+  .completion-support-action { background: var(--color-bone-surface, var(--color-graphite)); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-sm); color: var(--color-slate-light); cursor: pointer; padding: 9px 10px; text-align: left; }
+  .completion-support-action:hover { border-color: var(--color-horizon-blue); background: rgba(59,130,246,.08); }
+  .completion-support-action:disabled { cursor: wait; opacity: .65; }
+  .completion-support-action strong { color: var(--color-heading); display: block; font-size: 11px; }
+  .completion-support-action small { color: var(--color-slate-muted); display: block; font-size: 10px; line-height: 1.4; margin-top: 3px; }
+  .support-result-card { background: rgba(59,130,246,.07); border: 1px solid rgba(96,165,250,.25); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 9px; padding: 12px; }
+  .support-result-card h4 { color: var(--color-heading); font-size: 14px; margin: 0; }
+  .support-result-card p,.support-result-card li { color: var(--color-slate-light); font-size: 11px; line-height: 1.5; margin: 0; }
+  .support-result-card ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
 
   @media (max-width: 1024px) {
     .workspace-grid {

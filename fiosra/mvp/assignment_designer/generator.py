@@ -258,12 +258,19 @@ class AssignmentGenerator:
     def _public_rubric(rules: list[dict[str, Any]]) -> list[PublicRubricCriterion]:
         weights = [float(rule.get("weight", 0.0)) for rule in rules]
         total_weight = sum(weights)
-        return [
-            PublicRubricCriterion(
+        criteria: list[PublicRubricCriterion] = []
+        allocated = 0.0
+        for index, rule in enumerate(rules):
+            normalized_weight = round((weights[index] / total_weight * 100) if total_weight else 0.0, 2)
+            if total_weight and index == len(rules) - 1:
+                normalized_weight = round(100.0 - allocated, 2)
+            allocated += normalized_weight
+            criteria.append(
+                PublicRubricCriterion(
                 criterion_id=rule.get("criterion_id", f"criterion_{index + 1}"),
                 title=rule.get("label", f"Criterion {index + 1}"),
                 description=rule.get("description", "Demonstrates the stated assignment requirement."),
-                weight=round((weights[index] / total_weight * 100) if total_weight else 0.0, 2),
+                weight=normalized_weight,
                 levels=[
                     RubricLevel(
                         level_id="developing",
@@ -282,9 +289,9 @@ class AssignmentGenerator:
                     ),
                 ],
                 self_review_prompt=f"Where does your completed work show {rule.get('label', 'this criterion').lower()}?",
+                )
             )
-            for index, rule in enumerate(rules)
-        ]
+        return criteria
 
     @classmethod
     def _build_public_contract(
@@ -630,6 +637,57 @@ class AssignmentGenerator:
         if not spec:
             return None
         return cls._to_public_spec(spec if isinstance(spec, dict) else json.loads(spec))
+
+    @staticmethod
+    def completion_support(assignment: PublicQuestionSpec, action_id: str, document_excerpt: str) -> dict[str, Any]:
+        """Offer an optional next step from the public assignment contract without judging student claims."""
+        published = assignment.published
+        excerpt_words = len(document_excerpt.split())
+        actions = {item.action_id: item for item in published.support_menu}
+        requested = actions.get(action_id)
+        if not requested:
+            raise ValueError("This support action is not enabled for the published assignment.")
+
+        if action_id == "understand_task":
+            return {
+                "action_id": action_id,
+                "title": "Understand the task",
+                "guidance": (
+                    f"The task asks you to {published.task.prompt.strip()} Work within {published.task.scope.strip()} "
+                    f"and produce {published.task.deliverable.strip()}."
+                ),
+                "next_steps": [
+                    "Underline the main action word in the task.",
+                    "Write one sentence describing the response you will create.",
+                    "Check that your planned response stays within the stated scope.",
+                ],
+            }
+        if action_id == "use_materials":
+            source_titles = ", ".join(source.title for source in published.source_pack[:2]) or "the assigned materials"
+            return {
+                "action_id": action_id,
+                "title": "Work with assigned materials",
+                "guidance": f"Open {source_titles}. Look for a detail that can help you address the task, then explain why that detail matters in your own words.",
+                "next_steps": [
+                    "Choose one relevant detail from an assigned source.",
+                    "Place the detail beside the part of your draft it supports.",
+                    "Add a sentence explaining the connection instead of only quoting the source.",
+                ],
+            }
+        phase = "beginning" if excerpt_words < 40 else "developing"
+        return {
+            "action_id": action_id,
+            "title": "Plan or revise your response",
+            "guidance": (
+                f"Your draft is currently {phase}. Use one visible rubric criterion as the focus for your next revision; "
+                "make the next change yourself, then check whether the change makes the task response clearer."
+            ),
+            "next_steps": [
+                f"Choose one rubric criterion: {published.public_rubric[0].title if published.public_rubric else 'the assignment criteria'}.",
+                "Identify the next paragraph or section that would most improve your response.",
+                "Revise that section, then use the rubric's self-review prompt to check it.",
+            ],
+        }
 
     @classmethod
     async def list_public_assignments(

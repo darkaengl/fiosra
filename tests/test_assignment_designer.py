@@ -208,3 +208,14 @@ async def test_public_assignment_contract_excludes_private_autoscore_plan():
         assert "vault_token" not in public
         assert "target_kcs" not in public
         assert "grounding_sources" not in public
+
+        publish_res = await client.post(f"/assignments/{assignment_id}/publish")
+        assert publish_res.status_code == 200, publish_res.text
+        support_res = await client.post(
+            f"/assignments/{assignment_id}/support",
+            json={"action_id": "plan_or_revise", "document_excerpt": "A draft sentence about source evidence."},
+        )
+        assert support_res.status_code == 200
+        support = support_res.json()
+        assert support["title"] == "Plan or revise your response"
+        assert len(support["next_steps"]) == 3

@@ -141,6 +141,18 @@ class AssignmentAuthoringUpdate(BaseModel):
     canvas_sections: list[CanvasSectionDefinition] | None = None
 
 
+class CompletionSupportRequest(BaseModel):
+    action_id: str
+    document_excerpt: str = Field(default="", max_length=12_000)
+
+
+class CompletionSupportResponse(BaseModel):
+    action_id: str
+    title: str
+    guidance: str
+    next_steps: list[str] = Field(default_factory=list)
+
+
 class ClarificationQuestion(BaseModel):
     question_id: str
     dimension: str

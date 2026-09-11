@@ -11,6 +11,8 @@ from fiosra.mvp.assignment_designer.schemas import (
     AssignmentAuthoringUpdate,
     AssignmentReadiness,
     ClarifyAndScaffoldRequest,
+    CompletionSupportRequest,
+    CompletionSupportResponse,
     PublicQuestionSpec,
     QuestionDraftRequest,
     QuestionSpec,
@@ -76,6 +78,23 @@ async def get_assignment(assignment_id: UUID) -> PublicQuestionSpec:
     if not assignment:
         raise HTTPException(status_code=404, detail=f"Assignment '{assignment_id}' not found.")
     return assignment
+
+
+@router.post("/{assignment_id}/support", response_model=CompletionSupportResponse)
+async def get_completion_support(
+    assignment_id: UUID,
+    request: CompletionSupportRequest,
+) -> CompletionSupportResponse:
+    """Return student-selected, completion-oriented help from the published contract."""
+    assignment = await assignment_generator.get_public_assignment(assignment_id)
+    if not assignment or assignment.status != "published":
+        raise HTTPException(status_code=404, detail="Published assignment not found.")
+    try:
+        return CompletionSupportResponse(
+            **assignment_generator.completion_support(assignment, request.action_id, request.document_excerpt)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{assignment_id}/authoring")
