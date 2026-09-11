@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # prefix where required, allowing the application to switch without code changes.
     OPENROUTER_API_KEY: str | None = None
     OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_MODEL: str = "openrouter/openrouter/free"
+    OPENROUTER_MODEL: str = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
     OPENAI_API_KEY: str | None = None
     OPENAI_API_BASE: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
@@ -41,7 +41,12 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini/gemini-2.5-flash"
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "ollama/llama3.2"
-    OPENROUTER_TIMEOUT_SECONDS: float = 12.0
+    # Local models can take longer than hosted providers to generate a complete
+    # structured draft, so they receive an independent timeout budget.
+    OLLAMA_TIMEOUT_SECONDS: float = 150.0
+    # Free OpenRouter routes can queue before generation begins, so authoring
+    # requests need more than the short default used by interactive probes.
+    OPENROUTER_TIMEOUT_SECONDS: float = 90.0
     ANTHROPIC_API_KEY: str | None = None
 
     # Verifiers & Scaffolding

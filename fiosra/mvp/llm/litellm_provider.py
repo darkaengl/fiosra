@@ -57,13 +57,18 @@ class LiteLLMProvider:
         except ImportError as exc:  # pragma: no cover - dependency is declared in pyproject
             raise LLMProviderError("LiteLLM is not installed.") from exc
 
+        timeout_seconds = request.timeout_seconds or (
+            settings.OLLAMA_TIMEOUT_SECONDS
+            if self.provider_name == "ollama"
+            else settings.OPENROUTER_TIMEOUT_SECONDS
+        )
         call_options: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
             ],
-            "timeout": settings.OPENROUTER_TIMEOUT_SECONDS,
+            "timeout": timeout_seconds,
             "num_retries": 0,
         }
         # GPT-5 models reject the legacy max_tokens/temperature combination.
@@ -82,12 +87,14 @@ class LiteLLMProvider:
         # privacy by using an opaque, per-session pseudonym supplied by the caller.
         if request.metadata.get("user"):
             call_options["user"] = request.metadata["user"]
+        if request.response_format:
+            call_options["response_format"] = request.response_format
 
         started_at = time.perf_counter()
         try:
             response = await asyncio.wait_for(
                 acompletion(**call_options),
-                timeout=settings.OPENROUTER_TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
             )
         except Exception as exc:
             raise LLMProviderError(

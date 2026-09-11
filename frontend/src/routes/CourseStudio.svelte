@@ -25,6 +25,11 @@
   let notice = $state('');
   let error = $state('');
   let showCritiqueChips = $state(true);
+  let activeCopilotModuleIndex = $state(-1);
+  let copilotCollapsed = $state(false);
+  let currentCopilotModule = $derived(
+    activeCopilotModuleIndex >= 0 ? currentDraft?.modules?.[activeCopilotModuleIndex] : null,
+  );
 
   const quickPrompts = [
     "Align learning objectives with Bloom's Taxonomy verbs",
@@ -87,6 +92,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
       currentDraft = await res.json();
       revisionCount = 1;
       expandedModules = { 0: true };
+      activeCopilotModuleIndex = 0;
       revisionHistory = [
         {
           role: 'assistant',
@@ -115,6 +121,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
         body: JSON.stringify({
           current_draft: currentDraft,
           review_comments: commentToSend,
+          target_module_index: activeCopilotModuleIndex >= 0 ? activeCopilotModuleIndex : null,
           conversation_history: revisionHistory,
         }),
       });
@@ -165,6 +172,12 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
 
   function toggleModule(idx) {
     expandedModules[idx] = !expandedModules[idx];
+  }
+
+  function focusCopilotModule(idx) {
+    activeCopilotModuleIndex = idx;
+    expandedModules[idx] = true;
+    copilotCollapsed = false;
   }
 
   function expandAll() {
@@ -407,90 +420,87 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
 
   <!-- STAGE 2: Clutter-Free Interactive Studio Workspace -->
   {:else}
-    <div class="workspace-layout">
-      <!-- Left: Sleek Co-Pilot Conversation Assistant -->
+    <div class:copilot-collapsed={copilotCollapsed} class="workspace-layout">
+      <!-- Left: Resizable teacher co-pilot workbench -->
       <aside class="copilot-sidebar">
         <div class="copilot-header">
           <div class="copilot-title">
-            <span class="bot-icon">🤖</span>
+            <span class="bot-icon">✦</span>
             <div>
-              <h3>Curriculum Co-Pilot</h3>
-              <span class="bot-sub">Multi-turn revision assistant</span>
+              <h3>Teacher Co-Pilot</h3>
+              <span class="bot-sub">Discuss, review, then apply curriculum changes</span>
             </div>
           </div>
-        </div>
-
-        {#if latestChangeSummary}
-          <div class="ai-diff-banner">
-            <div class="diff-title">Latest Applied Revision</div>
-            <p>{latestChangeSummary}</p>
-          </div>
-        {/if}
-
-        <!-- Collapsible Suggestions -->
-        <div class="critique-section">
-          <div class="critique-header">
-            <span>Quick Refinement Prompts</span>
-            <button
-              type="button"
-              class="toggle-btn"
-              onclick={() => (showCritiqueChips = !showCritiqueChips)}
-            >
-              {showCritiqueChips ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {#if showCritiqueChips}
-            <div class="prompt-chips">
-              {#each quickPrompts as prompt}
-                <button
-                  type="button"
-                  class="prompt-chip"
-                  disabled={isRevising}
-                  onclick={() => handleApplyRevision(prompt)}
-                >
-                  {prompt}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Chat Stream -->
-        <div class="chat-stream">
-          {#each revisionHistory as turn}
-            <div class="chat-msg chat-{turn.role}">
-              <div class="msg-header">
-                {turn.role === 'user' ? 'Educator Feedback' : 'AI Architect'}
-              </div>
-              <div class="msg-text">{turn.content}</div>
-            </div>
-          {/each}
-        </div>
-
-        <!-- Input Bar -->
-        <div class="copilot-input-bar">
-          <textarea
-            class="chat-input"
-            rows="2"
-            placeholder="Ask AI to refine modules, add primary sources, or restructure units…"
-            bind:value={reviewComment}
-            disabled={isRevising}
-            onkeydown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleApplyRevision();
-              }
-            }}
-          ></textarea>
-          <button
-            type="button"
-            class="btn-send-revision"
-            disabled={isRevising || !reviewComment.trim()}
-            onclick={() => handleApplyRevision()}
-          >
-            {isRevising ? 'Refining…' : 'Send Instructions ↵'}
+          <button type="button" class="copilot-collapse" onclick={() => (copilotCollapsed = !copilotCollapsed)} title={copilotCollapsed ? 'Expand co-pilot' : 'Collapse co-pilot'}>
+            {copilotCollapsed ? '→' : '←'}
           </button>
         </div>
+
+        {#if !copilotCollapsed}
+          <div class="copilot-context">
+            <div class="context-copy">
+              <span class="context-label">Current design context</span>
+              <strong>{currentCopilotModule ? `Unit ${currentCopilotModule.position}: ${currentCopilotModule.title}` : 'Whole-course architecture'}</strong>
+              <small>{currentCopilotModule ? `${currentCopilotModule.learning_objectives?.length || 0} objectives · ${currentCopilotModule.knowledge_components?.length || 0} concept markers` : `${currentDraft.modules.length} modules available for revision`}</small>
+            </div>
+            {#if currentCopilotModule}
+              <button type="button" class="context-reset" onclick={() => (activeCopilotModuleIndex = -1)}>Use whole course</button>
+            {/if}
+          </div>
+
+          {#if latestChangeSummary}
+            <div class="ai-diff-banner">
+              <div class="diff-title">Latest applied change</div>
+              <p>{latestChangeSummary}</p>
+            </div>
+          {/if}
+
+          <div class="critique-section">
+            <div class="critique-header">
+              <span>Suggested next moves</span>
+              <button type="button" class="toggle-btn" onclick={() => (showCritiqueChips = !showCritiqueChips)}>
+                {showCritiqueChips ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {#if showCritiqueChips}
+              <div class="prompt-chips">
+                {#each quickPrompts as prompt}
+                  <button type="button" class="prompt-chip" disabled={isRevising} onclick={() => handleApplyRevision(prompt)}>{prompt}</button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="chat-stream" aria-label="Curriculum co-pilot conversation">
+            {#if revisionHistory.length === 0}
+              <div class="chat-empty"><strong>Start a design conversation.</strong><span>Ask for a revision, select a unit for focused help, or use a suggested next move.</span></div>
+            {:else}
+              {#each revisionHistory as turn}
+                <div class="chat-msg chat-{turn.role}">
+                  <div class="msg-header">{turn.role === 'user' ? 'Your direction' : 'Co-pilot proposal'}</div>
+                  <div class="msg-text">{turn.content}</div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+
+          <div class="copilot-input-bar">
+            <textarea
+              class="chat-input"
+              rows="3"
+              placeholder={currentCopilotModule ? `Ask about Unit ${currentCopilotModule.position}: objectives, concepts, evidence, or sequence…` : 'Ask AI to refine the course sequence, clarify concepts, add evidence, or restructure units…'}
+              bind:value={reviewComment}
+              disabled={isRevising}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleApplyRevision();
+                }
+              }}
+            ></textarea>
+            <div class="composer-footer"><span>Enter to send · Shift+Enter for a new line</span><button type="button" class="btn-send-revision" disabled={isRevising || !reviewComment.trim()} onclick={() => handleApplyRevision()}>{isRevising ? 'Refining…' : 'Propose revision'}</button></div>
+          </div>
+        {/if}
       </aside>
 
       <!-- Right: Clean Blueprint Canvas -->
@@ -574,6 +584,14 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
                 </div>
 
                 <div class="unit-bar-right">
+                  <button
+                    type="button"
+                    class:active={activeCopilotModuleIndex === modIdx}
+                    class="btn-focus-copilot"
+                    onclick={(e) => { e.stopPropagation(); focusCopilotModule(modIdx); }}
+                  >
+                    Focus co-pilot
+                  </button>
                   <span class="unit-meta-preview">
                     {mod.learning_objectives?.length || 0} Objectives
                   </span>
@@ -1105,32 +1123,50 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   /* Workspace 2-Column Expansive Layout */
   .workspace-layout {
     display: grid;
-    grid-template-columns: 360px 1fr;
-    gap: 28px;
+    grid-template-columns: minmax(430px, 0.82fr) minmax(0, 1.18fr);
+    gap: 24px;
     align-items: start;
+    transition: grid-template-columns 0.2s ease;
   }
 
-  /* Left: Sleek Co-Pilot */
+  .workspace-layout.copilot-collapsed {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  /* Left: Teacher co-pilot workbench */
   .copilot-sidebar {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md);
-    padding: 16px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     position: sticky;
     top: 16px;
     max-height: calc(100vh - 100px);
-    overflow-y: auto;
+    min-height: 560px;
+    overflow: hidden;
+  }
+
+  .copilot-collapsed .copilot-sidebar {
+    align-items: center;
+    min-height: 0;
+    padding: 10px 8px;
+  }
+
+  .copilot-collapsed .copilot-title > div {
+    display: none;
   }
 
   .copilot-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 10px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--color-graphite-border);
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   .copilot-title {
@@ -1140,7 +1176,15 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   }
 
   .bot-icon {
-    font-size: 18px;
+    align-items: center;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    border-radius: 9px;
+    color: white;
+    display: inline-flex;
+    font-size: 17px;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
   }
 
   .copilot-title h3 {
@@ -1154,6 +1198,35 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     font-size: 10.5px;
     color: var(--color-slate-muted);
   }
+
+  .copilot-collapse {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    color: var(--color-slate-light);
+    cursor: pointer;
+    font-size: 12px;
+    height: 26px;
+    width: 26px;
+  }
+  .copilot-collapse:hover { color: var(--color-heading); border-color: var(--color-horizon-blue); }
+
+  .copilot-context {
+    align-items: flex-start;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.24);
+    border-radius: var(--radius-sm);
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+  .context-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .context-label { color: var(--color-horizon-bright); font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+  .context-copy strong { color: var(--color-heading); font-size: 12px; line-height: 1.35; }
+  .context-copy small { color: var(--color-slate-muted); font-size: 10px; }
+  .context-reset { background: transparent; border: 0; color: var(--color-aurora-bright); cursor: pointer; font-size: 10px; padding: 1px 0; white-space: nowrap; }
 
   .ai-diff-banner {
     background: rgba(59, 130, 246, 0.07);
@@ -1181,6 +1254,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex-shrink: 0;
   }
 
   .critique-header {
@@ -1204,8 +1278,8 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   }
 
   .prompt-chips {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 5px;
   }
 
@@ -1214,8 +1288,8 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     background: var(--pill-bg);
     border: 1px solid var(--pill-border);
     border-radius: var(--radius-xs);
-    padding: 5px 9px;
-    font-size: 11px;
+    padding: 7px 9px;
+    font-size: 10.5px;
     color: var(--color-slate-bright);
     cursor: pointer;
     transition: all 0.12s;
@@ -1229,9 +1303,25 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 220px;
+    flex: 1;
+    min-height: 170px;
     overflow-y: auto;
+    padding: 2px 2px 2px 0;
   }
+
+  .chat-empty {
+    align-items: center;
+    color: var(--color-slate-muted);
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    font-size: 11.5px;
+    justify-content: center;
+    line-height: 1.5;
+    padding: 20px;
+    text-align: center;
+  }
+  .chat-empty strong { color: var(--color-heading); font-size: 12.5px; }
 
   .chat-msg {
     padding: 7px 10px;
@@ -1270,14 +1360,17 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     flex-direction: column;
     gap: 6px;
     margin-top: auto;
+    border-top: 1px solid var(--color-graphite-border);
+    padding-top: 12px;
+    flex-shrink: 0;
   }
 
   .chat-input {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-xs);
-    padding: 8px;
-    font-size: 11.5px;
+    padding: 10px;
+    font-size: 12px;
     color: var(--color-slate-bright);
     outline: none;
     resize: none;
@@ -1291,7 +1384,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     color: var(--color-obsidian);
     border: none;
     border-radius: var(--radius-xs);
-    padding: 7px;
+    padding: 8px 12px;
     font-size: 11.5px;
     font-weight: 600;
     cursor: pointer;
@@ -1300,6 +1393,9 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  .composer-footer { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
+  .composer-footer span { color: var(--color-slate-muted); font-size: 9.5px; }
 
   /* Right Canvas */
   .canvas-main {
@@ -1573,6 +1669,22 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     flex-shrink: 0;
   }
 
+  .btn-focus-copilot {
+    background: transparent;
+    border: 1px solid var(--pill-border);
+    border-radius: 999px;
+    color: var(--color-slate-light);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 8px;
+  }
+  .btn-focus-copilot:hover, .btn-focus-copilot.active {
+    background: rgba(59, 130, 246, 0.14);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: var(--color-horizon-bright);
+  }
+
   .unit-meta-preview {
     font-size: 11px;
     color: var(--color-slate-muted);
@@ -1829,6 +1941,9 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     .workspace-layout {
       grid-template-columns: 1fr;
     }
+    .workspace-layout.copilot-collapsed {
+      grid-template-columns: 1fr;
+    }
     .unit-two-col-grid {
       grid-template-columns: 1fr;
     }
@@ -1847,7 +1962,10 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     .copilot-sidebar {
       position: static;
       max-height: none;
+      min-height: 460px;
     }
+    .copilot-collapsed .copilot-sidebar { min-height: 0; }
+    .prompt-chips { grid-template-columns: 1fr; }
     .form-grid-top {
       grid-template-columns: 1fr;
     }

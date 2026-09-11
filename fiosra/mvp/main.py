@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from fiosra.mvp.assignment_designer.router import router as assignment_router
 from fiosra.mvp.authoring.router import router as authoring_router
+from fiosra.mvp.concepts.router import router as concept_graph_router
 from fiosra.mvp.config import settings
 from fiosra.mvp.courses.router import router as courses_router
 from fiosra.mvp.dialogue_router import router as dialogue_router
@@ -58,6 +59,7 @@ app.include_router(dialogue_router)
 app.include_router(evidence_router)
 app.include_router(assignment_router)
 app.include_router(courses_router)
+app.include_router(concept_graph_router)
 app.include_router(authoring_router)
 
 # Mount Static UI Frontend (Svelte production build or legacy fallback)

@@ -16,6 +16,8 @@ class CompletionRequest:
     max_tokens: int
     temperature: float = 0.2
     metadata: dict[str, str] = field(default_factory=dict)
+    response_format: dict[str, object] | None = None
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)

@@ -43,20 +43,23 @@ def _extract_json_block(text_response: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         pass
 
-    # Try fenced json
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text_response, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
+    # Prefer the entire fenced payload. The previous non-greedy brace capture
+    # stopped at the first nested object and rejected otherwise valid drafts.
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text_response, re.DOTALL | re.IGNORECASE)
+    candidate = match.group(1) if match else text_response
+    try:
+        parsed = json.loads(candidate.strip())
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
 
-    # Try outermost braces
-    start = text_response.find("{")
-    end = text_response.rfind("}")
-    if start != -1 and end != -1 and end > start:
+    # Decode the first complete object so a provider's explanatory suffix does
+    # not invalidate a valid structured payload.
+    start = candidate.find("{")
+    if start != -1:
         try:
-            return json.loads(text_response[start : end + 1])
+            parsed, _ = json.JSONDecoder().raw_decode(candidate[start:])
+            return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
             pass
     return None
@@ -118,6 +121,13 @@ class CourseAuthoringService:
                 purpose="course_draft_synthesis",
                 max_tokens=2500,
                 temperature=0.3,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "course_draft",
+                        "schema": CourseDraftSpec.model_json_schema(),
+                    },
+                },
             )
             result = await provider.complete(comp_req)
             parsed = _extract_json_block(result.content)
@@ -233,6 +243,13 @@ class CourseAuthoringService:
                 purpose="course_draft_revision",
                 temperature=0.3,
                 max_tokens=2500,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "course_draft_revision",
+                        "schema": CourseDraftRevisionResponse.model_json_schema(),
+                    },
+                },
             )
             result = await provider.complete(comp_req)
             parsed = _extract_json_block(result.content)
@@ -452,6 +469,13 @@ class AssignmentAuthoringService:
                 purpose="assignment_draft_synthesis",
                 temperature=0.3,
                 max_tokens=2000,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "assignment_draft",
+                        "schema": AssignmentDraftSpec.model_json_schema(),
+                    },
+                },
             )
             result = await provider.complete(comp_req)
             parsed = _extract_json_block(result.content)
@@ -544,6 +568,13 @@ class AssignmentAuthoringService:
                 purpose="assignment_draft_revision",
                 temperature=0.3,
                 max_tokens=2000,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "assignment_draft_revision",
+                        "schema": AssignmentDraftRevisionResponse.model_json_schema(),
+                    },
+                },
             )
             result = await provider.complete(comp_req)
             parsed = _extract_json_block(result.content)

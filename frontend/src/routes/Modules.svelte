@@ -2,6 +2,7 @@
   // Modules page is the existing App.svelte — re-export its full logic here
   import { onMount } from 'svelte';
   import CourseBanner from '../lib/CourseBanner.svelte';
+  import CourseConceptMap from '../lib/CourseConceptMap.svelte';
   import ModuleCard from '../lib/ModuleCard.svelte';
   import AddResourceModal from '../lib/AddResourceModal.svelte';
   import AddModuleModal from '../lib/AddModuleModal.svelte';
@@ -125,6 +126,9 @@
       <button type="button" class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}" onclick={() => (activeTab = 'roster')}>
         <span>👥</span> Cohort Roster &amp; Autonomy Diagnostics ({rosterData.total_enrolled || rosterData.students?.length || 0} Students)
       </button>
+      <button type="button" class="view-tab-btn {activeTab === 'concepts' ? 'active' : ''}" onclick={() => (activeTab = 'concepts')}>
+        <span>◌</span> Curriculum Concept Graph
+      </button>
     </div>
 
     {#if activeTab === 'modules'}
@@ -149,12 +153,14 @@
           {/each}
         {/if}
       </div>
-    {:else}
+    {:else if activeTab === 'roster'}
       <CohortRoster
         students={rosterData.students || []}
         courseId={currentCourseId}
         onDispatchScaffold={() => alert('Targeted Socratic micro-scaffold dispatched to flagged students.')}
       />
+    {:else}
+      <CourseConceptMap course={currentCourse} courseId={currentCourseId} />
     {/if}
   {/if}
 </main>

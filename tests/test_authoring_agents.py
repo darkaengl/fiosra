@@ -16,10 +16,21 @@ from fiosra.mvp.authoring.schemas import (
     PublishCourseDraftRequest,
 )
 from fiosra.mvp.authoring.service import (
+    _extract_json_block,
     assignment_authoring_service,
     course_authoring_service,
 )
 from fiosra.mvp.main import app
+
+
+def test_extract_json_block_parses_nested_fenced_payload():
+    response = '''```json
+    {"draft": {"title": "Nested Draft", "modules": [{"title": "Unit 1"}]}}
+    ```'''
+
+    assert _extract_json_block(response) == {
+        "draft": {"title": "Nested Draft", "modules": [{"title": "Unit 1"}]}
+    }
 
 
 @pytest.mark.asyncio
