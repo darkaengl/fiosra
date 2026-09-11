@@ -6,8 +6,10 @@
     courseId = '',
     onAddResource,
     onDeleteResource,
+    onDeleteAssignment,
   } = $props();
 
+  let activeTab = $state('materials');
   let unitNum = $derived(String(index + 1).padStart(2, '0'));
   let designerUrl = $derived(
     `#/designer?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}`
@@ -49,6 +51,31 @@
     <span class:complete={hasPublishedAssignment}>Student task {hasPublishedAssignment ? 'published' : 'not published'}</span>
   </div>
 
+  <!-- Materials / Assignments tab switch -->
+  <div class="unit-tabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      aria-selected={activeTab === 'materials'}
+      class:active={activeTab === 'materials'}
+      onclick={() => (activeTab = 'materials')}
+    >
+      📚 Materials
+      <span class="badge badge-info">{resources.length}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={activeTab === 'assignments'}
+      class:active={activeTab === 'assignments'}
+      onclick={() => (activeTab = 'assignments')}
+    >
+      ⚡ Assignments
+      <span class="badge badge-info">{module.assignments?.length || 0}</span>
+    </button>
+  </div>
+
+  {#if activeTab === 'materials'}
   <!-- Grounded Readings & Primary Sources Section -->
   <div class="resources-section">
     <div class="resources-header">
@@ -111,7 +138,7 @@
       </div>
     {/if}
   </div>
-
+  {:else}
   <!-- Assignments List -->
   <div class="assignments-section">
     {#if module.assignments && module.assignments.length > 0}
@@ -139,6 +166,14 @@
                   Student canvas →
                 </a>
               {/if}
+              <button
+                type="button"
+                class="btn-delete"
+                title="Delete this assignment"
+                onclick={() => onDeleteAssignment?.(a.assignment_id, a.title)}
+              >
+                ✕
+              </button>
             </div>
           </div>
         {/each}
@@ -152,6 +187,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 </div>
 
 <style>
@@ -263,6 +299,39 @@
 
   .readiness-bar span.complete { color: var(--color-signal-green); }
   .readiness-bar span.complete::before { content: '●'; }
+
+  /* Materials / Assignments tab switch */
+  .unit-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 22px;
+    background: var(--color-graphite-card);
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .unit-tabs button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--color-slate-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .unit-tabs button:hover {
+    color: var(--color-slate-bright);
+  }
+
+  .unit-tabs button.active {
+    color: var(--color-heading);
+    border-bottom-color: var(--color-horizon-blue);
+  }
 
   /* Resources Section */
   .resources-section {
