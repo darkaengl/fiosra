@@ -472,29 +472,30 @@ class AssignmentAuthoringService:
         )
 
         if settings.FIOSRA_LLM_PROVIDER.strip().lower() != "deterministic":
-            provider = LiteLLMProvider.from_settings()
-            comp_req = CompletionRequest(
-                system_prompt=system_prompt,
-                user_prompt=context_text,
-                purpose="assignment_draft_synthesis",
-                temperature=0.3,
-                max_tokens=1200,
-                timeout_seconds=35.0,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "assignment_draft",
-                        "schema": AssignmentDraftSpec.model_json_schema(),
+            try:
+                provider = LiteLLMProvider.from_settings()
+                comp_req = CompletionRequest(
+                    system_prompt=system_prompt,
+                    user_prompt=context_text,
+                    purpose="assignment_draft_synthesis",
+                    temperature=0.3,
+                    max_tokens=1200,
+                    timeout_seconds=35.0,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "assignment_draft",
+                            "schema": AssignmentDraftSpec.model_json_schema(),
+                        },
                     },
-                },
-            )
-            result = await provider.complete(comp_req)
-            parsed = _extract_json_block(result.content)
-            if not parsed or "title" not in parsed or "hint_ladder" not in parsed:
-                raise RuntimeError(
-                    f"LLM did not return a valid assignment draft JSON. Provider output: {result.content[:300]}"
                 )
-            return AssignmentDraftSpec.model_validate(parsed)
+                result = await provider.complete(comp_req)
+                parsed = _extract_json_block(result.content)
+                if not parsed or "title" not in parsed or "hint_ladder" not in parsed:
+                    raise RuntimeError("The provider did not return a valid assignment draft JSON.")
+                return AssignmentDraftSpec.model_validate(parsed)
+            except Exception as error:  # noqa: BLE001 - an assistant proposal must remain available offline.
+                logger.warning("Assignment draft generation fell back to deterministic proposal: %s", error)
 
         # Deterministic fallback
         return AssignmentDraftSpec(
