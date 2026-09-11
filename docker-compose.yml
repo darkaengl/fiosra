@@ -15,6 +15,14 @@ services:
       - NEO4J_PASSWORD=fiosra_neo4j_password
       - HOST=0.0.0.0
       - PORT=8000
+      - FIOSRA_LLM_PROVIDER=${FIOSRA_LLM_PROVIDER:-ollama}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_API_BASE=${OPENROUTER_API_BASE:-https://openrouter.ai/api/v1}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free}
+      - OPENROUTER_TIMEOUT_SECONDS=${OPENROUTER_TIMEOUT_SECONDS:-90}
+      - OLLAMA_API_BASE=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-ollama/llama3.2}
+      - OLLAMA_TIMEOUT_SECONDS=${OLLAMA_TIMEOUT_SECONDS:-150}
     depends_on:
       postgres:
         condition: service_healthy

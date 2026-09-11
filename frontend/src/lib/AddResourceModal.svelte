@@ -86,8 +86,8 @@
           body: formData,
         });
       } else if (mode === 'link') {
-        if (!linkUrl.trim() || !linkTitle.trim() || !linkContent.trim()) {
-          throw new Error('Please fill in external URL, title, and summary notes.');
+        if (!linkUrl.trim() || !linkTitle.trim()) {
+          throw new Error('Please fill in the external URL and a source title.');
         }
 
         res = await fetch(`/courses/${courseId}/modules/${targetModule.module_id}/resources`, {
@@ -95,7 +95,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: linkTitle.trim(),
-            content: linkContent.trim(),
+            content: linkContent.trim() || `Reference link: ${linkUrl.trim()}`,
             resource_type: 'external_link',
             source_url: linkUrl.trim(),
             module_id: targetModule.module_id,
@@ -121,7 +121,7 @@
 
 <Modal {isOpen} title="📚 Attach a source to this module" width="640px" {onClose}>
   <div class="modal-description">
-    Attach the reading, excerpt, or source students should use. Fiosra records its title, excerpt, source link, and knowledge-component mapping when available so you can review assignment provenance before publishing.
+    Attach the reading, excerpt, or source students should use. For public links, Fiosra retrieves readable page text automatically, then records the source link and knowledge-component mapping for review before publishing.
   </div>
 
   <div class="target-module-pill">
@@ -235,13 +235,12 @@
       </div>
 
       <div class="field-group">
-        <label for="link-summary">Excerpt or teaching notes <span style="color: var(--color-rose);">*</span></label>
+        <label for="link-summary">Teaching notes or preferred excerpt <span style="color: var(--color-slate-muted);">(optional)</span></label>
         <textarea
           id="link-summary"
           rows="4"
           bind:value={linkContent}
           placeholder="Add the material students should examine or the source details you want the assignment to cite..."
-          required
         ></textarea>
       </div>
     {/if}
@@ -334,7 +333,7 @@
   textarea {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    color: #fff;
+    color: var(--color-slate-bright);
     padding: 10px 14px;
     border-radius: var(--radius-sm);
     font-size: 13px;

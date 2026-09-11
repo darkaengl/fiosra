@@ -5,6 +5,7 @@ import pypdf
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.main import app
 
 
@@ -93,6 +94,42 @@ Secondary drains carried wastewater through baked brick culverts into municipal 
         assert after_del.status_code == 200
         after_ids = [r["chunk_id"] for r in after_del.json()]
         assert chunk_id_to_delete not in after_ids
+
+
+@pytest.mark.asyncio
+async def test_module_resource_link_retrieves_readable_page_text(monkeypatch):
+    """A valid public URL becomes grounded source text instead of a stored URL slug."""
+    retrieved_text = (
+        "Henry VIII declared himself King of Ireland in 1541 and used surrender and regrant "
+        "to reshape relationships with Irish chieftains. The defeat at Kinsale in 1602 marked "
+        "a decisive stage in the Tudor conquest and created conditions for later plantations."
+    )
+
+    async def fetch_source(source_url: str) -> str:
+        assert source_url == "https://example.org/tudor-conquest"
+        return retrieved_text
+
+    monkeypatch.setattr(syllabus_parser, "fetch_external_source", fetch_source)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        course = await ac.post("/courses", json={"title": "Tudor Ireland", "domain": "History"})
+        course_id = course.json()["course_id"]
+        module = await ac.post(
+            f"/courses/{course_id}/modules",
+            json={"title": "Tudor conquest", "position": 1},
+        )
+        module_id = module.json()["module_id"]
+        response = await ac.post(
+            f"/courses/{course_id}/modules/{module_id}/resources",
+            json={
+                "title": "Tudor conquest reference",
+                "content": "Reference link: https://example.org/tudor-conquest",
+                "resource_type": "external_link",
+                "source_url": "https://example.org/tudor-conquest",
+            },
+        )
+
+    assert response.status_code == 201
+    assert "surrender and regrant" in response.json()[0]["content"]
 
 
 @pytest.mark.asyncio

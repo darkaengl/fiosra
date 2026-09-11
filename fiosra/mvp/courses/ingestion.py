@@ -1,9 +1,16 @@
+import asyncio
 import io
+import ipaddress
 import logging
 import re
+import socket
 import uuid
+from html.parser import HTMLParser
+from typing import ClassVar
+from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
+import httpx
 from neo4j.exceptions import Neo4jError
 from sqlalchemy import text
 
@@ -13,6 +20,32 @@ from fiosra.mvp.graph_service import graph_service
 from fiosra.mvp.seed_pipeline import generate_deterministic_embedding
 
 logger = logging.getLogger(__name__)
+
+
+class _ReadableTextExtractor(HTMLParser):
+    """Small dependency-free extractor for readable text from public HTML documents."""
+
+    _IGNORED_TAGS: ClassVar[set[str]] = {"script", "style", "noscript", "svg", "template"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._ignored_depth = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in self._IGNORED_TAGS:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._IGNORED_TAGS and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth and data.strip():
+            self.parts.append(data.strip())
+
+    def text(self) -> str:
+        return re.sub(r"\s+", " ", " ".join(self.parts)).strip()
 
 
 class SyllabusParser:
@@ -41,6 +74,80 @@ class SyllabusParser:
                     return content.decode("utf-8", errors="ignore").strip()
             return content.decode("utf-8", errors="ignore").strip()
         return str(content).strip()
+
+    @staticmethod
+    def has_substantive_content(content: str) -> bool:
+        """Reject link labels and URL slugs as insufficient instructional material."""
+        return len(re.findall(r"\w+", content)) >= 35
+
+    @classmethod
+    async def fetch_external_source(cls, source_url: str) -> str:
+        """Retrieve public linked reading text, with a reader fallback for sites that block direct clients."""
+        async def validate_public_url(candidate_url: str) -> None:
+            parsed = urlparse(candidate_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+                raise ValueError("External resources must use a public http or https URL.")
+            try:
+                addresses = await asyncio.get_running_loop().getaddrinfo(
+                    parsed.hostname,
+                    parsed.port or (443 if parsed.scheme == "https" else 80),
+                    type=socket.SOCK_STREAM,
+                )
+            except socket.gaierror as error:
+                raise ValueError("The external source host could not be resolved.") from error
+            for address in addresses:
+                if not ipaddress.ip_address(address[4][0]).is_global:
+                    raise ValueError("Local network URLs cannot be ingested as course materials.")
+
+        await validate_public_url(source_url)
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; FiosraCourseIngestion/1.0)",
+            "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1",
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(20.0),
+                follow_redirects=False,
+                headers=headers,
+            ) as client:
+                active_url = source_url
+                for _ in range(5):
+                    response = await client.get(active_url)
+                    if response.is_redirect:
+                        redirect_to = response.headers.get("location")
+                        if not redirect_to:
+                            break
+                        active_url = urljoin(active_url, redirect_to)
+                        await validate_public_url(active_url)
+                        continue
+                    break
+                response.raise_for_status()
+                extracted = _ReadableTextExtractor()
+                extracted.feed(response.text)
+                retrieved = extracted.text() if "html" in response.headers.get("content-type", "") else response.text.strip()
+                if cls.has_substantive_content(retrieved):
+                    return retrieved
+        except httpx.HTTPError as error:
+            logger.info("Direct retrieval blocked for %s: %s", source_url, error)
+
+        # Some public publishers deny ordinary server requests. The reader endpoint retrieves only
+        # the public page text and keeps the original URL as the learner-facing source provenance.
+        reader_url = f"https://r.jina.ai/http://{source_url}"
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(25.0)) as client:
+                response = await client.get(reader_url)
+                response.raise_for_status()
+                retrieved = response.text.strip()
+                if cls.has_substantive_content(retrieved):
+                    return retrieved
+        except httpx.HTTPError as error:
+            logger.info("Reader retrieval unavailable for %s: %s", source_url, error)
+
+        raise ValueError(
+            "The linked page could not provide enough readable teaching content. "
+            "Paste an excerpt or upload the reading so it can be grounded."
+        )
 
     @classmethod
     def chunk_document(cls, text_content: str, default_title: str = "Syllabus Section") -> list[dict[str, str]]:

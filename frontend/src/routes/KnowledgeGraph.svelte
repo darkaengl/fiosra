@@ -1,178 +1,100 @@
 <script>
   import { onMount } from 'svelte';
+  import CurriculumGraphCanvas from '../lib/CurriculumGraphCanvas.svelte';
+  import { responseError } from '../lib/session.js';
 
-  let svgEl;
-  let activeFilter = $state('all');
+  let courses = $state([]);
+  let selectedCourseId = $state('');
+  let course = $state(null);
+  let graph = $state({ nodes: [], edges: [], module_links: [], source_links: [], stats: {} });
+  let selectedConceptId = $state('');
+  let loading = $state(true);
+  let error = $state('');
 
-  const nodes = [
-    { id: 'KC_HIST_FISCAL_CRISIS', label: 'Royal Fiscal Crisis 1786', x: 300, y: 200, type: 'root' },
-    { id: 'KC_HIST_ESTATE_SYSTEM', label: 'Three Estates System', x: 180, y: 350, type: 'prereq' },
-    { id: 'KC_HIST_SOCIAL_CONTRACT', label: 'Social Contract Theory', x: 450, y: 130, type: 'prereq' },
-    { id: 'KC_HIST_POPULAR_SOV', label: 'Popular Sovereignty', x: 580, y: 300, type: 'target' },
-    { id: 'KC_HIST_CONSTITUTIONAL', label: 'Constitutional Crisis', x: 400, y: 420, type: 'downstream' },
-    { id: 'KC_HIST_TERROR', label: 'Reign of Terror', x: 620, y: 450, type: 'downstream' },
-    { id: 'KC_HIST_NAPOLEON', label: 'Napoleonic Order', x: 740, y: 330, type: 'downstream' },
-  ];
+  let selectedConcept = $derived(graph.nodes.find((node) => node.concept_id === selectedConceptId) || null);
+  let parents = $derived(graph.edges.filter((edge) => edge.relation === 'CONTAINS' && edge.target === selectedConceptId).map((edge) => graph.nodes.find((node) => node.concept_id === edge.source)?.label).filter(Boolean));
+  let children = $derived(graph.edges.filter((edge) => edge.relation === 'CONTAINS' && edge.source === selectedConceptId).map((edge) => graph.nodes.find((node) => node.concept_id === edge.target)?.label).filter(Boolean));
+  let prerequisites = $derived(graph.edges.filter((edge) => edge.relation === 'PREREQUISITE_OF' && edge.target === selectedConceptId).map((edge) => graph.nodes.find((node) => node.concept_id === edge.source)?.label).filter(Boolean));
+  let moduleRoles = $derived(graph.module_links.filter((link) => link.concept_id === selectedConceptId).map((link) => ({ ...link, title: course?.modules?.find((module) => module.module_id === link.module_id)?.title || 'Course module' })));
 
-  const edges = [
-    { from: 'KC_HIST_FISCAL_CRISIS', to: 'KC_HIST_POPULAR_SOV' },
-    { from: 'KC_HIST_ESTATE_SYSTEM', to: 'KC_HIST_FISCAL_CRISIS' },
-    { from: 'KC_HIST_SOCIAL_CONTRACT', to: 'KC_HIST_POPULAR_SOV' },
-    { from: 'KC_HIST_POPULAR_SOV', to: 'KC_HIST_CONSTITUTIONAL' },
-    { from: 'KC_HIST_CONSTITUTIONAL', to: 'KC_HIST_TERROR' },
-    { from: 'KC_HIST_TERROR', to: 'KC_HIST_NAPOLEON' },
-  ];
-
-  function nodeColor(type) {
-    if (type === 'root') return '#3b82f6';
-    if (type === 'prereq') return '#8b5cf6';
-    if (type === 'target') return '#10b981';
-    return '#64748b';
+  function hashCourseId() {
+    const queryStart = window.location.hash.indexOf('?');
+    return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('course_id') || '';
   }
 
-  function getNode(id) { return nodes.find(n => n.id === id); }
+  async function loadCourseGraph(courseId = selectedCourseId) {
+    if (!courseId) return;
+    loading = true;
+    error = '';
+    try {
+      const [courseResponse, graphResponse] = await Promise.all([
+        fetch(`/courses/${courseId}`),
+        fetch(`/courses/${courseId}/concept-graph`),
+      ]);
+      if (!courseResponse.ok) throw new Error(await responseError(courseResponse, 'The selected course could not be loaded.'));
+      if (!graphResponse.ok) throw new Error(await responseError(graphResponse, 'The curriculum concept graph could not be loaded.'));
+      course = await courseResponse.json();
+      graph = await graphResponse.json();
+      selectedCourseId = courseId;
+      selectedConceptId = graph.nodes.some((node) => node.concept_id === selectedConceptId)
+        ? selectedConceptId
+        : graph.nodes[0]?.concept_id || '';
+    } catch (err) {
+      error = err.message || 'The curriculum concept graph could not be loaded.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function initialise() {
+    loading = true;
+    try {
+      const response = await fetch('/courses');
+      if (!response.ok) throw new Error(await responseError(response, 'Courses could not be loaded.'));
+      courses = await response.json();
+      selectedCourseId = hashCourseId() || courses[0]?.course_id || '';
+      if (selectedCourseId) await loadCourseGraph(selectedCourseId);
+    } catch (err) {
+      error = err.message || 'Courses could not be loaded.';
+      loading = false;
+    }
+  }
+
+  onMount(initialise);
 </script>
 
-<div class="kg-layout">
-  <!-- Graph Canvas -->
-  <div class="graph-viewport">
-    <div class="graph-toolbar">
-      <div class="toolbar-group">
-        <span style="font-size: 12px; color: var(--color-slate-muted); font-weight: 600;">FILTER:</span>
-        {#each ['all', 'prereq', 'target', 'downstream'] as f}
-          <button class="toggle-chip {activeFilter === f ? 'active' : ''}" onclick={() => activeFilter = f}>
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        {/each}
-      </div>
-      <div class="toolbar-group">
-        <span style="font-size: 11.5px; color: var(--color-slate-light);">📊 7 Nodes • 6 Edges • HIST-201</span>
-      </div>
+<main class="live-graph-page">
+  <header class="graph-header">
+    <div><span class="eyebrow">Live Neo4j-backed curriculum model</span><h1>Curriculum Concept Graph</h1><p>This is the active course concept graph: high-to-low semantic concepts, hierarchy, prerequisites, module roles, and source evidence.</p></div>
+    <div class="graph-actions">
+      <label>Course<select bind:value={selectedCourseId} onchange={() => loadCourseGraph(selectedCourseId)}>{#each courses as item}<option value={item.course_id}>{item.title}</option>{/each}</select></label>
+      {#if selectedCourseId}<a class="btn btn-primary" href={`/#/modules?course_id=${selectedCourseId}`}>Open graph studio</a>{/if}
     </div>
+  </header>
 
-    <svg class="graph-svg" viewBox="0 0 960 600" bind:this={svgEl}>
-      <!-- Grid background -->
-      <defs>
-        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-        </pattern>
-        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" opacity="0.7"/>
-        </marker>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid)" />
-
-      <!-- Edges -->
-      {#each edges as e}
-        {@const from = getNode(e.from)}
-        {@const to = getNode(e.to)}
-        {#if from && to}
-          <line
-            x1={from.x} y1={from.y}
-            x2={to.x} y2={to.y}
-            stroke="rgba(59,130,246,0.4)" stroke-width="2"
-            marker-end="url(#arrowhead)"
-          />
+  {#if error}<div class="error-notice">{error}</div>{/if}
+  {#if loading}
+    <div class="loading"><div class="spinner"></div><span>Loading live course graph…</span></div>
+  {:else if !course}
+    <div class="empty"><strong>No course is available.</strong><span>Create or publish a course before viewing its concept graph.</span></div>
+  {:else}
+    <section class="graph-overview"><span>{course.domain}</span><span>{graph.stats.concepts || 0} concepts</span><span>{graph.stats.edges || 0} relationships</span><span>{graph.stats.module_links || 0} module roles</span><span>{graph.stats.source_links || 0} evidence links</span></section>
+    <div class="graph-layout">
+      <section class="live-canvas"><CurriculumGraphCanvas {graph} {selectedConceptId} onSelect={(conceptId) => (selectedConceptId = conceptId)} /></section>
+      <aside class="inspector">
+        {#if selectedConcept}
+          <span class="eyebrow">Selected live concept</span><h2>{selectedConcept.label}</h2><span class="level-pill">{selectedConcept.level.replaceAll('_', ' ')}</span><p class="definition">{selectedConcept.definition}</p>
+          <div class="stat-grid"><div><span>Type</span><strong>{selectedConcept.concept_type}</strong></div><div><span>Source evidence</span><strong>{graph.source_links.filter((link) => link.concept_id === selectedConceptId).length} chunks</strong></div></div>
+          <section><h3>Hierarchy</h3><p><strong>Parent</strong>{parents.length ? parents.join(' · ') : 'Top-level concept'}</p><p><strong>Children</strong>{children.length ? children.join(' · ') : 'No lower-level concepts yet'}</p><p><strong>Prerequisites</strong>{prerequisites.length ? prerequisites.join(' · ') : 'No prerequisite relationship set'}</p></section>
+          <section><h3>Module roles</h3>{#if moduleRoles.length}{#each moduleRoles as role}<p><span class={`role ${role.role}`}>{role.role}</span>{role.title}</p>{/each}{:else}<p>No explicit course-module role set.</p>{/if}</section>
+        {:else}
+          <div class="empty-inspector"><strong>Choose a node</strong><span>Select a concept in the live graph to inspect its teaching context and evidence.</span></div>
         {/if}
-      {/each}
-
-      <!-- Nodes -->
-      {#each nodes as node}
-        <g class="graph-node" transform="translate({node.x},{node.y})">
-          <circle r="28" fill={nodeColor(node.type)} opacity="0.9" />
-          <circle r="28" fill="none" stroke={nodeColor(node.type)} stroke-width="2" opacity="0.4" />
-          <text y="46" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)" font-weight="600"
-            style="font-family: var(--font-mono);">
-            {node.id.replace('KC_HIST_', '').slice(0, 12)}
-          </text>
-        </g>
-      {/each}
-    </svg>
-
-    <!-- Legend -->
-    <div class="graph-legend">
-      <div class="legend-title">Node Types</div>
-      {#each [
-        { type: 'prereq', color: '#8b5cf6', label: 'Prerequisite KC' },
-        { type: 'root', color: '#3b82f6', label: 'Root Concept' },
-        { type: 'target', color: '#10b981', label: 'Target KC' },
-        { type: 'downstream', color: '#64748b', label: 'Downstream' },
-      ] as l}
-        <div class="legend-row">
-          <div class="legend-dot" style="background: {l.color}"></div>
-          <span>{l.label}</span>
-        </div>
-      {/each}
+      </aside>
     </div>
-  </div>
-
-  <!-- Right Panel: KC Inspector -->
-  <aside class="kg-inspector">
-    <div class="inspector-header">
-      <div class="inspector-title">KC Inspector</div>
-      <div class="inspector-sub">Click a node to inspect</div>
-    </div>
-
-    <div class="inspector-section">
-      <div class="section-label">Selected: HIST-201 • Fall 2026</div>
-      <div class="inspector-stat-grid">
-        <div class="inspector-stat"><div class="is-val">7</div><div class="is-label">Total KCs</div></div>
-        <div class="inspector-stat"><div class="is-val">6</div><div class="is-label">DAG Edges</div></div>
-        <div class="inspector-stat"><div class="is-val">14</div><div class="is-label">Misc. Traps</div></div>
-        <div class="inspector-stat"><div class="is-val">3</div><div class="is-label">Modules</div></div>
-      </div>
-    </div>
-
-    <div class="inspector-section">
-      <div class="section-label">Knowledge Components</div>
-      <div class="kc-list">
-        {#each nodes as node}
-          <div class="kc-list-item">
-            <div class="kc-dot" style="background: {nodeColor(node.type)}"></div>
-            <div>
-              <div class="kc-id">{node.id}</div>
-              <div class="kc-label-sm">{node.label}</div>
-            </div>
-          </div>
-        {/each}
-      </div>
-    </div>
-
-    <div class="inspector-section">
-      <button class="btn btn-primary" style="width: 100%;">Export Graph (JSON)</button>
-      <button class="btn btn-secondary" style="width: 100%; margin-top: 8px;">Sync to Neo4j</button>
-    </div>
-  </aside>
-</div>
+  {/if}
+</main>
 
 <style>
-  .kg-layout { display: grid; grid-template-columns: 1fr 360px; height: calc(100vh - 56px); }
-  .graph-viewport { position: relative; background: #0b0f17; border-right: 1px solid var(--color-graphite-border); overflow: hidden; }
-  .graph-toolbar { position: absolute; top: 20px; left: 24px; right: 24px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
-  .toolbar-group { display: flex; align-items: center; gap: 8px; background: rgba(22,27,34,.85); backdrop-filter: blur(12px); border: 1px solid var(--color-graphite-border); padding: 6px 12px; border-radius: var(--radius-sm); }
-  .toggle-chip { background: transparent; border: 1px solid transparent; color: var(--color-slate-light); font-size: 11.5px; font-weight: 500; padding: 4px 10px; border-radius: var(--radius-xs); cursor: pointer; transition: all .15s; }
-  .toggle-chip:hover { color: #fff; background: var(--color-graphite-card); }
-  .toggle-chip.active { background: rgba(59,130,246,.15); border-color: var(--color-horizon-blue); color: var(--color-horizon-bright); font-weight: 600; }
-  .graph-svg { width: 100%; height: 100%; }
-  .graph-node { cursor: pointer; }
-  .graph-node:hover circle:first-child { opacity: 1; }
-  .graph-legend { position: absolute; bottom: 24px; left: 24px; background: rgba(22,27,34,.85); backdrop-filter: blur(12px); border: 1px solid var(--color-graphite-border); padding: 12px 16px; border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 8px; }
-  .legend-title { font-size: 11px; font-weight: 700; color: var(--color-slate-muted); text-transform: uppercase; margin-bottom: 4px; }
-  .legend-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--color-slate-light); }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-  .kg-inspector { background: var(--color-graphite); display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
-  .inspector-header { padding: 24px 20px; border-bottom: 1px solid var(--color-graphite-border); }
-  .inspector-title { font-size: 14px; font-weight: 700; color: #fff; }
-  .inspector-sub { font-size: 11.5px; color: var(--color-slate-muted); margin-top: 2px; }
-  .inspector-section { padding: 20px; border-bottom: 1px solid var(--color-graphite-border); display: flex; flex-direction: column; gap: 12px; }
-  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-slate-muted); letter-spacing: .5px; }
-  .inspector-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .inspector-stat { background: var(--color-graphite-card); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-sm); padding: 12px 14px; }
-  .is-val { font-family: var(--font-brand); font-size: 22px; font-weight: 700; color: #fff; }
-  .is-label { font-size: 10.5px; color: var(--color-slate-muted); text-transform: uppercase; margin-top: 2px; }
-  .kc-list { display: flex; flex-direction: column; gap: 8px; }
-  .kc-list-item { display: flex; align-items: flex-start; gap: 8px; }
-  .kc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
-  .kc-id { font-family: var(--font-mono); font-size: 10px; color: var(--color-aurora-bright); }
-  .kc-label-sm { font-size: 11.5px; color: #e2e8f0; margin-top: 2px; }
+  .live-graph-page{box-sizing:border-box;display:flex;flex:1;flex-direction:column;gap:18px;margin:0 auto;max-width:1680px;padding:26px 34px 50px;width:100%}.graph-header{align-items:flex-end;display:flex;gap:24px;justify-content:space-between}.eyebrow{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}.graph-header h1{color:var(--color-heading);font-family:var(--font-brand);font-size:28px;margin:4px 0 6px}.graph-header p{color:var(--color-slate-light);font-size:13px;line-height:1.5;margin:0;max-width:780px}.graph-actions{align-items:flex-end;display:flex;gap:10px}.graph-actions label{color:var(--color-slate-muted);display:flex;flex-direction:column;font-size:9px;font-weight:700;gap:5px;letter-spacing:.4px;text-transform:uppercase}.graph-actions select{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-bright);font-size:12px;max-width:260px;padding:8px}.graph-overview{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);display:flex;gap:0;overflow:auto}.graph-overview span{border-right:1px solid var(--color-graphite-border);color:var(--color-slate-light);font-size:11px;padding:10px 14px;white-space:nowrap}.graph-overview span:first-child{color:var(--color-horizon-bright);font-weight:700}.graph-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;min-height:650px}.live-canvas{border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg) 0 0 var(--radius-lg);overflow:hidden}.inspector{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-left:0;border-radius:0 var(--radius-lg) var(--radius-lg) 0;overflow:auto;padding:20px}.inspector h2{color:var(--color-heading);font-size:18px;line-height:1.35;margin:6px 0}.level-pill,.role{border-radius:99px;display:inline-block;font-size:9px;font-weight:700;padding:4px 7px;text-transform:uppercase}.level-pill{background:rgba(59,130,246,.13);border:1px solid rgba(59,130,246,.3);color:#93c5fd}.definition{color:var(--color-slate-light);font-size:12px;line-height:1.55}.stat-grid{display:grid;gap:8px;grid-template-columns:1fr 1fr}.stat-grid>div,.inspector section{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);padding:10px}.stat-grid span{color:var(--color-slate-muted);display:block;font-size:9px;font-weight:700;text-transform:uppercase}.stat-grid strong{color:var(--color-heading);font-size:11px}.inspector section{margin-top:12px}.inspector h3{color:var(--color-heading);font-size:10px;letter-spacing:.4px;margin:0 0 8px;text-transform:uppercase}.inspector p{color:var(--color-slate-light);font-size:11px;line-height:1.45;margin:7px 0}.inspector p strong{color:var(--color-slate-muted);display:block;font-size:9px;letter-spacing:.3px;text-transform:uppercase}.role{background:rgba(16,185,129,.12);color:#6ee7b7;margin-right:6px}.role.develops{background:rgba(59,130,246,.14);color:#93c5fd}.role.assesses{background:rgba(168,85,247,.14);color:#d8b4fe}.loading,.empty,.empty-inspector{align-items:center;color:var(--color-slate-light);display:flex;flex:1;flex-direction:column;font-size:13px;gap:10px;justify-content:center;min-height:360px;text-align:center}.empty strong,.empty-inspector strong{color:var(--color-heading);font-size:14px}.spinner{animation:spin .8s linear infinite;border:3px solid rgba(59,130,246,.2);border-radius:50%;border-top-color:var(--color-horizon-bright);height:27px;width:27px}@keyframes spin{to{transform:rotate(360deg)}}.error-notice{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius-sm);color:#fca5a5;font-size:12px;padding:11px 14px}@media(max-width:950px){.graph-header{align-items:flex-start;flex-direction:column}.graph-layout{grid-template-columns:1fr}.live-canvas{border-radius:var(--radius-lg) var(--radius-lg) 0 0}.inspector{border:1px solid var(--color-graphite-border);border-radius:0 0 var(--radius-lg) var(--radius-lg);min-height:260px}.graph-actions{width:100%}.graph-actions select{flex:1;max-width:none}}@media(max-width:600px){.live-graph-page{padding:20px 16px}.graph-actions{align-items:stretch;flex-direction:column}.graph-actions .btn{text-align:center}.graph-overview span{font-size:10px;padding:9px 10px}}
 </style>

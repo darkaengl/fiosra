@@ -130,6 +130,9 @@ class EvidenceDossierSynthesizer:
 
                 is_met = best_res.label == NLILabel.ENTAILED if best_res else False
                 rubric_evaluations[c_id] = {
+                    "criterion_id": c_id,
+                    "label": crit.get("label", c_id),
+                    "description": crit.get("description", ""),
                     "met": is_met,
                     "evidence": (
                         f"Verbatim quote: \"{best_quote}\" [Event #{best_event_id} at {best_timestamp}]"
@@ -169,30 +172,15 @@ class EvidenceDossierSynthesizer:
         independent_rate = round(independent_count / total_questions, 2)
         hint_dependency = round(total_hints_all / max(total_questions * 3, 1), 2)
 
-        # Grade heuristic based on rubric and hint dependency
-        all_criteria_met = all(
-            all(crit_data["met"] for crit_data in q["rubric_evidence"].values())
-            for q in per_question_evidence
-        ) if per_question_evidence else False
-
-        if all_criteria_met and hint_dependency <= 0.25:
-            suggested_grade = "A"
-            justification = (
-                f"Student demonstrated exceptional mastery across all {len(rubric_criteria)} rubric dimensions "
-                f"with high cognitive autonomy (Independent Success Rate: {independent_rate:.0%})."
-            )
-        elif all_criteria_met:
-            suggested_grade = "B+"
-            justification = (
-                "Student satisfied all core rubric dimensions with the aid of Socratic conceptual nudges. "
-                f"Hint Dependency Ratio: {hint_dependency:.2f}."
-            )
-        elif independent_rate >= 0.5:
-            suggested_grade = "B"
-            justification = "Student solved core elements independently but partially met complex rubric criteria."
-        else:
-            suggested_grade = "C+"
-            justification = "Student required substantial scaffolding across questions; recommend targeted conceptual review."
+        unmet_criteria = [
+            crit["label"]
+            for crit in rubric_criteria
+            if any(not q["rubric_evidence"].get(crit["criterion_id"], {}).get("met") for q in per_question_evidence)
+        ]
+        justification = (
+            "AutoSCORE organized rubric-linked evidence for educator review. "
+            "It does not recommend or determine a final grade."
+        )
 
         return {
             "packet_id": f"pkt_{session_id[:8]}",
@@ -202,7 +190,8 @@ class EvidenceDossierSynthesizer:
             "submission_timestamp": last_activity,
             "executive_summary": {
                 "completion_status": session_info.get("status", "active"),
-                "suggested_grade": suggested_grade,
+                "suggested_grade": None,
+                "review_status": "Educator review required",
                 "autonomy_rating": f"Independent Success Rate: {independent_rate:.0%}",
                 "notable_behavior": (
                     f"Engaged in {total_attempts_all} reasoning turns. "
@@ -220,12 +209,9 @@ class EvidenceDossierSynthesizer:
                 "engagement_score": 0.88,
             },
             "pre_score": {
-                "suggested_grade": suggested_grade,
+                "suggested_grade": None,
                 "justification": justification,
-                "areas_for_follow_up": [
-                    crit["label"] for crit in rubric_criteria
-                    if any(not q["rubric_evidence"].get(crit["criterion_id"], {}).get("met") for q in per_question_evidence)
-                ],
+                "areas_for_follow_up": unmet_criteria,
             },
         }
 

@@ -29,6 +29,10 @@
     }
   }
 
+  function openDesignAssistant() {
+    window.dispatchEvent(new Event('fiosra:assistant-toggle'));
+  }
+
   onMount(async () => {
     window.addEventListener('hashchange', handleHashChange);
 
@@ -68,6 +72,8 @@
 
     if (path.startsWith('/courses')) {
       activeTab = 'courses';
+    } else if (path.startsWith('/studio')) {
+      activeTab = 'studio';
     } else if (path.startsWith('/designer')) {
       activeTab = 'designer';
     } else if (path.startsWith('/review')) {
@@ -165,6 +171,12 @@
           Portfolio
         </a>
         <a
+          href="#/studio/course"
+          class="nav-pill {parsed.activeTab === 'studio' ? 'active' : ''}"
+        >
+          ✨ Studio
+        </a>
+        <a
           href="#/modules{parsed.courseQuery}"
           class="nav-pill {parsed.activeTab === 'modules' ? 'active' : ''}"
         >
@@ -201,6 +213,11 @@
   {/if}
 
   <div class="header-right">
+    {#if !parsed.isStudentView}
+      <button type="button" class="assistant-launch" onclick={openDesignAssistant} title="Open AI Design Assistant">
+        <span class="assistant-spark">✦</span><span>AI Assistant</span>
+      </button>
+    {/if}
     <!-- Theme Toggle Button -->
     <button
       type="button"
@@ -389,6 +406,23 @@
     gap: 10px;
     flex-shrink: 0;
   }
+
+  .assistant-launch {
+    align-items: center;
+    background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(124,58,237,.15));
+    border: 1px solid rgba(96,165,250,.36);
+    border-radius: var(--radius-full);
+    color: var(--color-heading);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 700;
+    gap: 5px;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+  .assistant-launch:hover { border-color: var(--color-horizon-bright); color: var(--color-horizon-bright); }
+  .assistant-spark { color: var(--color-horizon-bright); font-size: 13px; }
 
   /* Theme Toggle */
   .theme-toggle-btn {

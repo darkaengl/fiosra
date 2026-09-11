@@ -2,6 +2,7 @@
   // Modules page is the existing App.svelte — re-export its full logic here
   import { onMount } from 'svelte';
   import CourseBanner from '../lib/CourseBanner.svelte';
+  import CourseConceptMap from '../lib/CourseConceptMap.svelte';
   import ModuleCard from '../lib/ModuleCard.svelte';
   import AddResourceModal from '../lib/AddResourceModal.svelte';
   import AddModuleModal from '../lib/AddModuleModal.svelte';
@@ -125,6 +126,9 @@
       <button type="button" class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}" onclick={() => (activeTab = 'roster')}>
         <span>👥</span> Cohort Roster &amp; Autonomy Diagnostics ({rosterData.total_enrolled || rosterData.students?.length || 0} Students)
       </button>
+      <button type="button" class="view-tab-btn {activeTab === 'concepts' ? 'active' : ''}" onclick={() => (activeTab = 'concepts')}>
+        <span>◌</span> Curriculum Concept Graph
+      </button>
     </div>
 
     {#if activeTab === 'modules'}
@@ -149,12 +153,14 @@
           {/each}
         {/if}
       </div>
-    {:else}
+    {:else if activeTab === 'roster'}
       <CohortRoster
         students={rosterData.students || []}
         courseId={currentCourseId}
         onDispatchScaffold={() => alert('Targeted Socratic micro-scaffold dispatched to flagged students.')}
       />
+    {:else}
+      <CourseConceptMap course={currentCourse} courseId={currentCourseId} />
     {/if}
   {/if}
 </main>
@@ -180,11 +186,11 @@
   .loading-spinner { width: 32px; height: 32px; border: 3px solid rgba(59,130,246,.2); border-top-color: var(--color-horizon-bright); border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty-workspace, .empty-modules { background: var(--color-graphite); border: 2px dashed var(--color-graphite-border); border-radius: var(--radius-lg); padding: 50px 32px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
-  .empty-workspace h2, .empty-modules h3 { font-family: var(--font-brand); color: #fff; margin: 0; }
+  .empty-workspace h2, .empty-modules h3 { font-family: var(--font-brand); color: var(--color-heading); margin: 0; }
   .empty-workspace p, .empty-modules p { color: var(--color-slate-light); max-width: 520px; font-size: 14px; line-height: 1.6; margin: 0; }
   .view-switcher { display: flex; gap: 8px; border-bottom: 1px solid var(--color-graphite-border); padding-bottom: 12px; }
   .view-tab-btn { background: none; border: none; color: var(--color-slate-light); font-size: 13.5px; font-weight: 600; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all .15s; }
-  .view-tab-btn:hover { color: #fff; background: var(--color-graphite-hover); }
+  .view-tab-btn:hover { color: var(--color-heading); background: var(--color-graphite-hover); }
   .view-tab-btn.active { background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); color: var(--color-horizon-bright); }
   .modules-container { display: flex; flex-direction: column; gap: 18px; }
 </style>

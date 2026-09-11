@@ -150,3 +150,72 @@ async def test_assignment_designer_http_endpoints():
         pub_res = await client.post(f"/assignments/{assignment_id}/publish")
         assert pub_res.status_code == 200
         assert pub_res.json()["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_public_assignment_contract_excludes_private_autoscore_plan():
+    """Students receive a complete public rubric but never private evidence or vault configuration."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        draft_res = await client.post(
+            "/assignments/draft",
+            json={
+                "topic": "Public contract test",
+                "domain": "history",
+                "clarified_prompt": "Explain how the assigned source supports a bounded historical interpretation.",
+                "target_kcs": ["KC_HIST_ARGUMENT"],
+                "hint_ladder": [{"level": 0, "hint_type": "metacognitive", "content": "Review the task."}],
+                "rubric_rules": [
+                    {
+                        "criterion_id": "historical_explanation",
+                        "label": "Historical explanation",
+                        "description": "Explains a historical interpretation using relevant evidence.",
+                        "target_kc": "KC_HIST_ARGUMENT",
+                        "weight": 1,
+                        "nli_threshold": 0.8,
+                    },
+                    {
+                        "criterion_id": "source_use",
+                        "label": "Use of material",
+                        "description": "Uses assigned material purposefully.",
+                        "target_kc": "KC_HIST_ARGUMENT",
+                        "weight": 1,
+                        "nli_threshold": 0.8,
+                    },
+                    {
+                        "criterion_id": "revision",
+                        "label": "Revision",
+                        "description": "Reviews and improves the response before submission.",
+                        "target_kc": "KC_HIST_ARGUMENT",
+                        "weight": 1,
+                        "nli_threshold": 0.8,
+                    },
+                ],
+            },
+        )
+        assert draft_res.status_code == 200
+        assignment_id = draft_res.json()["assignment_id"]
+
+        authoring_res = await client.get(f"/assignments/{assignment_id}/authoring")
+        assert authoring_res.status_code == 200
+        assert authoring_res.json()["evaluation_plan"]["public_rubric_map"]
+
+        public_res = await client.get(f"/assignments/{assignment_id}")
+        assert public_res.status_code == 200
+        public = public_res.json()
+        assert len(public["published"]["public_rubric"]) == 3
+        assert "evaluation_plan" not in public
+        assert "vault_token" not in public
+        assert "target_kcs" not in public
+        assert "grounding_sources" not in public
+
+        publish_res = await client.post(f"/assignments/{assignment_id}/publish")
+        assert publish_res.status_code == 200, publish_res.text
+        support_res = await client.post(
+            f"/assignments/{assignment_id}/support",
+            json={"action_id": "plan_or_revise", "document_excerpt": "A draft sentence about source evidence."},
+        )
+        assert support_res.status_code == 200
+        support = support_res.json()
+        assert support["title"] == "Plan or revise your response"
+        assert len(support["next_steps"]) == 3

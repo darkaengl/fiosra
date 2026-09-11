@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 
+from fiosra.mvp.concepts.service import concept_graph_service
 from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.courses.schemas import (
     CohortRosterResponse,
@@ -113,13 +114,23 @@ async def ingest_syllabus(course_id: UUID, payload: SyllabusIngestRequest) -> li
         )
 
     try:
-        return await syllabus_parser.ingest_syllabus(
+        await concept_graph_service.sync_course_structure(course)
+        chunks = await syllabus_parser.ingest_syllabus(
             course_id=course_id,
             content=payload.content,
             title=payload.title or "Syllabus",
             module_id=payload.module_id,
             domain=course.domain,
         )
+        await concept_graph_service.ingest_resource(
+            course_id=str(course_id),
+            module_id=str(payload.module_id) if payload.module_id else None,
+            title=payload.title or "Syllabus",
+            resource_type="document",
+            source_url=None,
+            chunks=[chunk.model_dump(mode="json") for chunk in chunks],
+        )
+        return chunks
     except Exception as e:
         logger.exception("Error ingesting syllabus")
         raise HTTPException(
@@ -174,15 +185,33 @@ async def add_module_resource(
         )
 
     try:
-        return await syllabus_parser.ingest_syllabus(
+        resource_content = payload.content
+        if payload.resource_type == "external_link" and payload.source_url:
+            try:
+                resource_content = await syllabus_parser.fetch_external_source(payload.source_url)
+            except ValueError as error:
+                if not syllabus_parser.has_substantive_content(payload.content):
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+                logger.info("Using educator-provided notes for link %s: %s", payload.source_url, error)
+        await concept_graph_service.sync_course_structure(course)
+        chunks = await syllabus_parser.ingest_syllabus(
             course_id=course_id,
-            content=payload.content,
+            content=resource_content,
             title=payload.title,
             module_id=module_id,
             domain=course.domain,
             resource_type=payload.resource_type,
             source_url=payload.source_url,
         )
+        await concept_graph_service.ingest_resource(
+            course_id=str(course_id),
+            module_id=str(module_id),
+            title=payload.title,
+            resource_type=payload.resource_type,
+            source_url=payload.source_url,
+            chunks=[chunk.model_dump(mode="json") for chunk in chunks],
+        )
+        return chunks
     except Exception as e:
         logger.exception("Error ingesting module resource")
         raise HTTPException(
@@ -234,7 +263,8 @@ async def upload_module_resource_file(
         doc_title = title or file.filename or "Uploaded Resource"
         resource_type = "pdf" if is_pdf else "document"
 
-        return await syllabus_parser.ingest_syllabus(
+        await concept_graph_service.sync_course_structure(course)
+        chunks = await syllabus_parser.ingest_syllabus(
             course_id=course_id,
             content=extracted_text,
             title=doc_title,
@@ -243,6 +273,15 @@ async def upload_module_resource_file(
             resource_type=resource_type,
             source_url=None,
         )
+        await concept_graph_service.ingest_resource(
+            course_id=str(course_id),
+            module_id=str(module_id),
+            title=doc_title,
+            resource_type=resource_type,
+            source_url=None,
+            chunks=[chunk.model_dump(mode="json") for chunk in chunks],
+        )
+        return chunks
     except HTTPException:
         raise
     except Exception as e:
