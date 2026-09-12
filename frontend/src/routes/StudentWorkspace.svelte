@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
   import {
     getStudentId,
@@ -122,8 +122,6 @@
   let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
   let publicSources = $derived(published?.source_pack || []);
-
-  const QUIET_PERIOD_MS = 5000;
 
   function sessionHeaders() {
     return {
@@ -285,7 +283,6 @@
   }
 
   async function syncDocument(patch) {
-    clearTimeout(probeTimer);
     const response = await fetch(`/learning-documents/sessions/${sessionId}`, {
       method: 'PUT',
       headers: sessionHeaders(),
@@ -296,35 +293,23 @@
     return learningDocument;
   }
 
-  function scheduleProbeEvaluation(syncedDocument) {
-    clearTimeout(probeTimer);
-    if (sessionStatus !== 'active' || !syncedDocument?.changed_block_ids?.length) return;
-    probeTimer = setTimeout(() => evaluateProbes(syncedDocument), QUIET_PERIOD_MS);
-  }
-
-  async function evaluateProbes(syncedDocument) {
+  async function offerConceptProbes(request) {
+    if (!sessionId || sessionStatus !== 'active') return;
     try {
       const response = await fetch(`/learning-documents/sessions/${sessionId}/probes/evaluate`, {
         method: 'POST',
         headers: sessionHeaders(),
-        body: JSON.stringify({
-          document_revision: syncedDocument.document_revision,
-          changed_block_ids: syncedDocument.changed_block_ids,
-        }),
+        body: JSON.stringify(request),
       });
-      if (response.status === 409) return;
-      if (!response.ok) throw new Error(await responseError(response, 'Your writing was saved, but its evidence question could not be checked.'));
+      if (!response.ok) throw new Error(await responseError(response, 'Writing help is unavailable right now.'));
       const result = await response.json();
       probes = result.pending || [];
       evidenceSummary = result.evidence_summary || evidenceSummary;
-      if (result.created?.length) {
-        activeProbeId = result.created[0].probe_id;
-        probeNotice = 'An optional writing prompt is available if you would like support with your next step.';
-        isTutorPanelOpen = false;
-      }
-      await loadSessionEvents();
+      if (!activeProbeId && probes[0]) activeProbeId = probes[0].probe_id;
+      if (result.availability_notice) probeNotice = result.availability_notice;
     } catch (err) {
-      probeNotice = err.message || 'Your writing is saved. A question could not be checked right now.';
+      // Saving has already completed; an optional background offer must never interrupt writing.
+      console.warn('Offering concept-aware Socratic question:', err);
     }
   }
 
@@ -501,7 +486,6 @@
     }
   });
 
-  onDestroy(() => clearTimeout(probeTimer));
 </script>
 
 <svelte:window onkeydown={(e) => {
@@ -599,23 +583,22 @@
       </nav>
 
       <div class="topbar-right">
-        <!-- Socratic Enquirer Tactile Button (Not a dropdown) -->
+        <!-- Single entry point for learner-controlled writing help. -->
         <button 
           type="button" 
           class="socratic-enquirer-btn" 
           class:active={isDrawerOpen}
           onclick={toggleSocraticDrawer}
-          title="Open Socratic Enquirer (Press ⌘K or click) — Switch modes in chat with /mode"
-          aria-label="Open Socratic Enquirer"
+          title="Open writing help"
+          aria-label="Open writing help"
         >
           <span class="enquirer-icon-wrap">
             <span class="enquirer-symbol">◌</span>
-            {#if isDrawerOpen}
+            {#if probes.length > 0 && !isDrawerOpen}
               <span class="enquirer-pulse-dot"></span>
             {/if}
           </span>
-          <span class="enquirer-label">Socratic Enquirer</span>
-          <span class="enquirer-mode-pill">{oraclePressure}</span>
+          <span class="enquirer-label">{probes.length > 0 && !isDrawerOpen ? 'Fiosra · question ready' : 'Ask Fiosra'}</span>
         </button>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
@@ -782,17 +765,14 @@
               {sessionAccessToken}
               disabled={sessionStatus !== 'active'}
               onSync={syncDocument}
-              onSynced={scheduleProbeEvaluation}
-              onOpenQuestions={() => { activeWorkspaceTab = 'trace'; }}
+              onSynced={loadSessionEvents}
+              onStableDocument={offerConceptProbes}
+              proactiveProbes={probes}
+              onProbeAction={(probeId, action) => changeProbe(probeId, action)}
               onOpenSources={() => { activeWorkspaceTab = 'materials'; }}
               onHeadingsChange={(h) => documentHeadings = h}
               onBlocksChange={(b) => liveBlocks = b}
-              probes={probes}
-              probeCount={probes.length}
               oraclePressure={oraclePressure}
-              onProbeResponse={handleInlineProbeResponse}
-              onProbeDefer={(id) => changeProbe(id, 'defer')}
-              onProbeDismiss={(id) => changeProbe(id, 'dismiss')}
               onChallengeIdea={handleChallengeIdea}
               onDrawerStateChange={(open) => isDrawerOpen = open}
               onPressureChange={(p) => oraclePressure = p}
@@ -824,10 +804,6 @@
               <div class="trace-stat-tile">
                 <span class="stat-num assumptions">{graphMetrics.assumptions}</span>
                 <span class="stat-lbl">Implicit Assumptions</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num probes">{probes.length}</span>
-                <span class="stat-lbl">Active Probes</span>
               </div>
             </div>
 
@@ -1173,6 +1149,22 @@
   .tutor-toggle-btn:hover, .tutor-toggle-btn.active {
     background: rgba(139, 92, 246, 0.2);
     border-color: #8b5cf6;
+  }
+
+  .concept-inquiry-notice {
+    align-self: center;
+    background: transparent;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    cursor: pointer;
+    font-size: 11px;
+    margin: 8px 0 0;
+    padding: 7px 10px;
+  }
+
+  .concept-inquiry-notice:hover {
+    color: var(--color-heading);
   }
 
   .probe-dot {

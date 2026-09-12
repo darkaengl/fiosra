@@ -13,6 +13,9 @@
     sessionAccessToken = '',
     onSync = async () => null,
     onSynced = () => null,
+    onStableDocument = async () => null,
+    proactiveProbes = [],
+    onProbeAction = async () => null,
     onOpenSources = () => null,
     onHeadingsChange = () => null,
     onBlocksChange = () => null,
@@ -40,15 +43,6 @@
     premature_closure: { label: 'Premature Closure', icon: '🔴', desc: 'Conclusion leap asserted without sufficient backing' },
   };
 
-  export const PROBE_CATEGORIES = {
-    challenge: { label: 'Challenge', icon: '⚡' },
-    why_ladder: { label: 'Why Ladder', icon: '🪜' },
-    assumptions: { label: 'Assumption', icon: '🛡️' },
-    source: { label: 'Source Evidence', icon: '📜' },
-    counterfactual: { label: 'Counterfactual', icon: '🔄' },
-    creative: { label: 'Creative Spin', icon: '💡' },
-  };
-
   // State
   let editorElement;
   let editor = null;
@@ -62,14 +56,18 @@
   let readingTimeMin = $derived(Math.max(1, Math.ceil(wordCount / 200)));
   let saveTimer;
   let classifyTimer;
+  let probeTimer;
   let loadedDocumentId = '';
 
   let documentHeadings = $state([]);
   let isEpistemicLens = $state(true); // Default ON for subtle continuous truth guidance
-  // Socratic Oracle Chat Drawer State (Side Panel pushed from right)
+  // Learner-controlled assistant drawer state.
   let activeSentence = $state(null);
   let chatMessages = $state([]);
   let chatInputText = $state('');
+  let showSlashTools = $state(false);
+  let selectedSlashToolIndex = $state(-1);
+  let activeSlashTool = $state('');
   let isOracleThinking = $state(false);
   let isOracleSatisfied = $state(false);
   let oracleSatisfactionReason = $state('');
@@ -77,41 +75,21 @@
   let epistemicProgress = $state(0.4);
   let activeMoveType = $state('challenge');
   let chatMessagesContainer = $state(null);
-  let showSlashMenu = $state(false);
-  let slashMenuIndex = $state(0);
-  let chatTextareaRef = $state(null);
-
-  const SLASH_COMMANDS = [
-    { cmd: '/hint', label: 'Evidentiary Hint', paramHint: '<topic or "references for the assignment">', icon: '💡', desc: 'Answer-blind statutory citations & historical hints' },
-    { cmd: '/brainstorm', label: 'Brainstorm Angles', paramHint: '<topic>', icon: '⚡', desc: 'Explore 3 competing historical hypotheses' },
-    { cmd: '/structure', label: 'Structure Assignment', paramHint: '<prompt>', icon: '✦', desc: 'Scaffold sections onto canvas via Helper Agent' },
-    { cmd: '/assumptions', label: 'Expose Assumptions', paramHint: '<claim>', icon: '🔍', desc: 'Uncover hidden premises in your reasoning' },
-    { cmd: '/counter', label: 'Steelman Counter-Argument', paramHint: '<claim>', icon: '🛡️', desc: 'Stress-test claim with historical opposition' },
-    { cmd: '/why', label: 'Why-Ladder Probe', paramHint: '<observation>', icon: '🪜', desc: 'Drill into root causal mechanisms' },
-    { cmd: '/falsify', label: 'Falsification Test', paramHint: '<thesis>', icon: '🎯', desc: 'Test what evidence would prove you wrong' },
-    { cmd: '/mode', label: 'Switch Mode', paramHint: '<socratic | adversarial | brainstorm | structural | dialetheism>', icon: '⚙', desc: 'Switch epistemic pressure and inquiry mode' },
-  ];
-
-  let filteredSlashCommands = $derived.by(() => {
-    if (!chatInputText.startsWith('/')) return [];
-    const q = chatInputText.toLowerCase().trim();
-    if (q === '/') return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter(c => c.cmd.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q.replace('/', '')));
-  });
-
   export function toggleSocraticDrawer() {
     if (activeSentence) {
       closeSentenceChat();
+    } else if (proactiveProbes.length) {
+      openProactiveProbe(proactiveProbes[0]);
     } else {
       openGeneralInquiry();
     }
   }
 
   function openGeneralInquiry() {
-    const promptText = assignment?.task?.prompt || 'Tudor Ireland (1536–1603) Inquiry';
+    const promptText = assignment?.published?.task?.prompt || assignment?.task?.prompt || 'This assignment';
     activeSentence = {
       text: promptText,
-      epistemic_type: 'claim',
+      epistemic_type: 'reasoning',
       surrounding_context: assignment?.purpose || '',
       is_general_inquiry: true,
     };
@@ -127,16 +105,23 @@
     triggerDecorationsUpdate();
   }
 
-  function applySlashCommand(command) {
-    showSlashMenu = false;
-    chatInputText = command.cmd + ' ';
-    setTimeout(() => {
-      if (chatTextareaRef) {
-        chatTextareaRef.focus();
-        const len = chatInputText.length;
-        chatTextareaRef.setSelectionRange(len, len);
-      }
-    }, 20);
+  function updateChatInput(event) {
+    chatInputText = event.currentTarget.value;
+    showSlashTools = !activeSlashTool && chatInputText.startsWith('/');
+    if (!showSlashTools) selectedSlashToolIndex = -1;
+  }
+
+  function selectSlashTool(tool) {
+    activeSlashTool = tool;
+    chatInputText = '';
+    showSlashTools = false;
+    selectedSlashToolIndex = -1;
+  }
+
+  function clearSlashTool() {
+    activeSlashTool = '';
+    showSlashTools = false;
+    selectedSlashToolIndex = -1;
   }
 
   // Sentence-level epistemic registry: key = sentence text or fingerprint -> classification
@@ -441,16 +426,24 @@
   function scheduleLLMClassification() {
     clearTimeout(classifyTimer);
     classifyTimer = setTimeout(() => {
-      if (!editor) return;
-      editor.state.doc.descendants((node) => {
-        if (supportedTopLevelTypes.has(node.type.name)) {
-          const text = node.textContent.trim();
-          if (text.length > 25) {
-            requestLLMEpistemicClassification(text);
-          }
-        }
-      });
+      // Drafting remains local and uninterrupted. The deterministic labels can
+      // suggest an inquiry opportunity, but no model call or visible probe is
+      // created until a learner opens the Enquirer and asks for assistance.
+      triggerDecorationsUpdate();
     }, 1200);
+  }
+
+  function scheduleConceptProbeOffer(synced) {
+    clearTimeout(probeTimer);
+    const changedBlockIds = synced?.changed_block_ids || [];
+    if (!synced?.document_revision || changedBlockIds.length === 0) return;
+    // This quiet period means a question is offered after the learner pauses, not while they type.
+    probeTimer = setTimeout(() => {
+      onStableDocument({
+        document_revision: synced.document_revision,
+        changed_block_ids: changedBlockIds,
+      });
+    }, 5500);
   }
 
   function triggerDecorationsUpdate() {
@@ -472,10 +465,6 @@
     // Student initiates the conversation cleanly
     chatMessages = [];
 
-    if (!item.targeted_vulnerability) {
-      requestSentenceInquiry(item.text, initialCategory, item.epistemic_type || 'claim');
-    }
-
     if (onDrawerStateChange) onDrawerStateChange(true);
     triggerDecorationsUpdate();
 
@@ -493,9 +482,36 @@
     chatInputText = '';
     isOracleSatisfied = false;
     suggestedRevision = null;
-    showSlashMenu = false;
     if (onDrawerStateChange) onDrawerStateChange(false);
     triggerDecorationsUpdate();
+  }
+
+  function openProactiveProbe(probe) {
+    if (!probe?.question) return;
+    activeSentence = {
+      text: probe.claim_text || 'Your saved claim',
+      epistemic_type: 'claim',
+      surrounding_context: '',
+      proactive_probe_id: probe.probe_id,
+      concept_label: probe.concept_label,
+    };
+    chatMessages = [{ role: 'oracle', content: probe.question, category: probe.focus_type }];
+    isOracleSatisfied = false;
+    suggestedRevision = null;
+    epistemicProgress = 0.0;
+    activeMoveType = probe.focus_type || 'challenge';
+    if (onDrawerStateChange) onDrawerStateChange(true);
+  }
+
+  async function deferActiveProbe() {
+    if (!activeSentence?.proactive_probe_id) return;
+    await onProbeAction(activeSentence.proactive_probe_id, 'defer');
+    closeSentenceChat();
+  }
+
+  export function openConceptProbe(probeId) {
+    const probe = proactiveProbes.find((item) => item.probe_id === probeId);
+    if (probe) openProactiveProbe(probe);
   }
 
 
@@ -864,6 +880,7 @@
 
   function updateEditorMetrics() {
     saveCurrentPageEdits();
+    pruneStaleSentenceClassifications();
     let totalWords = 0;
     const pageNumbers = Object.keys(pagesMap).map(Number);
     for (const p of pageNumbers) {
@@ -877,6 +894,26 @@
     wordCount = totalWords;
     extractHeadings();
     broadcastBlocks();
+  }
+
+  function pruneStaleSentenceClassifications() {
+    const liveSentences = new Set();
+    const sentencePattern = /[^.!?]+(?:[.!?]+["'”’]?|\s*$)/g;
+
+    for (const blocks of Object.values(pagesMap)) {
+      for (const block of blocks || []) {
+        const content = (block.plaintext || '').trim();
+        if (!content) continue;
+        for (const match of content.matchAll(sentencePattern)) {
+          const sentence = match[0].trim();
+          if (sentence.length >= 10) liveSentences.add(sentence);
+        }
+      }
+    }
+
+    for (const sentence of Object.keys(sentenceMap)) {
+      if (!liveSentences.has(sentence)) delete sentenceMap[sentence];
+    }
   }
 
   function scheduleSync() {
@@ -928,6 +965,7 @@
       syncBaseline(synced);
       isDirty = false;
       onSynced(synced);
+      scheduleConceptProbeOffer(synced);
     } catch (error) {
       saveError = error?.message || 'This document could not be saved.';
     } finally {
@@ -945,14 +983,13 @@
     if (mark === 'italic') editor.chain().focus().toggleItalic().run();
   }
 
-  // --- Socratic Oracle Chat Actions ---
+  // --- Learner-controlled assistant actions ---
   async function sendStudentMessage(explicitText = null) {
     const raw = typeof explicitText === 'string' ? explicitText : chatInputText;
-    const text = raw.trim();
+    const text = [activeSlashTool, raw.trim()].filter(Boolean).join(' ');
     if (!text || isOracleThinking || !activeSentence) return;
 
     chatInputText = '';
-    showSlashMenu = false;
     chatMessages = [...chatMessages, { role: 'student', content: text }];
     isOracleThinking = true;
 
@@ -1000,7 +1037,25 @@
         const data = await response.json();
         const nextCategory = data.current_probe_category || activeMoveType;
         activeMoveType = nextCategory;
-        chatMessages = [...chatMessages, { role: 'oracle', content: data.oracle_reply, category: nextCategory }];
+        const interactiveActions = [...(data.interactive_actions || [])];
+        if (data.helper_action?.blocks?.length) {
+          interactiveActions.push({
+            action_type: 'apply_canvas_action',
+            label: data.helper_action.summary || 'Add this to the canvas',
+            icon: '＋',
+            payload: { helper_action: data.helper_action },
+          });
+        }
+        chatMessages = [
+          ...chatMessages,
+          {
+            role: 'oracle',
+            content: data.oracle_reply,
+            category: nextCategory,
+            interactive_actions: interactiveActions,
+            outline_options: data.outline_options || [],
+          }
+        ];
         isOracleSatisfied = Boolean(data.is_satisfied);
         oracleSatisfactionReason = data.satisfaction_reason || '';
         suggestedRevision = data.suggested_revision || null;
@@ -1009,18 +1064,32 @@
           activeSentence.socratic_moves = data.socratic_moves;
         }
 
-        // Proactively execute delegated Canvas Scribe Helper action
-        if (data.helper_action) {
-          applyHelperCanvasAction(data.helper_action);
-        }
-
         // Notify parent workspace trace
         if (onProbeResponse) {
           onProbeResponse(activeSentence.text, text);
         }
+      } else {
+        chatMessages = [
+          ...chatMessages,
+          {
+            role: 'oracle',
+            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
+            category: 'socratic',
+            interactive_actions: []
+          }
+        ];
       }
     } catch (err) {
       console.error('Error in dialectical turn:', err);
+      chatMessages = [
+        ...chatMessages,
+          {
+            role: 'oracle',
+            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
+          category: 'socratic',
+          interactive_actions: []
+        }
+      ];
     } finally {
       isOracleThinking = false;
       setTimeout(() => {
@@ -1031,7 +1100,127 @@
     }
   }
 
-  // --- Proactive Canvas Scribe Helper Execution (No Manual Student Clicks) ---
+  function handleInteractiveAction(action) {
+    if (!action || action.applied) return;
+    const actionType = action.action_type || action.action;
+    if (actionType === 'apply_canvas_action' && action.payload?.helper_action) {
+      applyHelperCanvasAction(action.payload.helper_action);
+    } else if (actionType === 'open_sources' || actionType === 'cite_source') {
+      onOpenSources();
+    } else if (actionType === 'scaffold_sections' || actionType === 'scaffold_section') {
+      const payload = action.payload || {};
+      const targetPage = currentPageIndex || 1;
+      const pageSecId = `page_${targetPage}`;
+      const title = payload.title || payload.section_title || 'New section';
+      const headingId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'b_' + Date.now();
+      const paraId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'p_' + Date.now();
+
+      const blocks = [
+        {
+          block_id: headingId,
+          block_type: 'heading',
+          section_id: pageSecId,
+          author_type: 'student',
+          content: {
+            type: 'heading',
+            attrs: {
+              level: 2,
+              blockId: headingId,
+              authorType: 'student',
+              sectionId: pageSecId,
+              pageNumber: targetPage,
+            },
+            content: [{ type: 'text', text: title }]
+          }
+        },
+        {
+          block_id: paraId,
+          block_type: 'paragraph',
+          section_id: pageSecId,
+          author_type: 'student',
+          content: {
+            type: 'paragraph',
+            attrs: {
+              blockId: paraId,
+              authorType: 'student',
+              sectionId: pageSecId,
+              pageNumber: targetPage,
+            },
+            ...(payload.writing_prompt
+              ? { content: [{ type: 'text', text: payload.writing_prompt }] }
+              : {}),
+          }
+        }
+      ];
+
+      applyHelperCanvasAction({
+        action: 'scaffold_sections',
+        target_page: targetPage,
+        blocks: blocks
+      });
+    } else if (actionType === 'explore_prompt') {
+      const prompt = action.payload?.prompt;
+      if (prompt) {
+        sendStudentMessage(prompt);
+      }
+    }
+    action.applied = true;
+    chatMessages = [...chatMessages];
+  }
+
+  function proposedSectionTitles(action) {
+    const blocks = action?.payload?.helper_action?.blocks;
+    if (!Array.isArray(blocks)) return [];
+    return blocks
+      .filter((block) => block?.block_type === 'heading')
+      .map((block) => block?.content?.content?.[0]?.text?.trim())
+      .filter(Boolean);
+  }
+
+  function applyOutlineOption(option) {
+    if (option?.applied) return;
+    const sectionTitles = Array.isArray(option?.section_titles) ? option.section_titles : [];
+    if (sectionTitles.length !== 3) return;
+    const targetPage = currentPageIndex || 1;
+    const sectionId = `page_${targetPage}`;
+    const blocks = sectionTitles.flatMap((title, index) => {
+      const timestamp = Date.now() + index;
+      const headingId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `heading_${timestamp}`;
+      const paragraphId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `paragraph_${timestamp}`;
+      return [
+        {
+          block_id: headingId,
+          block_type: 'heading',
+          section_id: sectionId,
+          author_type: 'student',
+          content: {
+            type: 'heading',
+            attrs: { level: 2, blockId: headingId, authorType: 'student', sectionId, pageNumber: targetPage },
+            content: [{ type: 'text', text: title }],
+          },
+        },
+        {
+          block_id: paragraphId,
+          block_type: 'paragraph',
+          section_id: sectionId,
+          author_type: 'student',
+          content: {
+            type: 'paragraph',
+            attrs: { blockId: paragraphId, authorType: 'student', sectionId, pageNumber: targetPage },
+          },
+        },
+      ];
+    });
+    applyHelperCanvasAction({
+      action: 'scaffold_sections',
+      target_page: targetPage,
+      blocks,
+    });
+    option.applied = true;
+    chatMessages = [...chatMessages];
+  }
+
+  // Canvas changes run only after the learner accepts an attached action.
   function applyHelperCanvasAction(helperAction) {
     if (!helperAction || !Array.isArray(helperAction.blocks) || helperAction.blocks.length === 0) return;
     saveCurrentPageEdits();
@@ -1055,7 +1244,7 @@
         ...b,
         position: startPos + i,
         section_id: `page_${targetPage}`,
-        author_type: 'student',
+        author_type: 'student_edited_assistance',
         content: {
           ...b.content,
           attrs: {
@@ -1076,7 +1265,7 @@
 
       extractHeadings();
       broadcastBlocks();
-      scheduleLLMClassification();
+      isDirty = true;
       syncNow();
 
       // Highlight the first new section heading briefly
@@ -1119,7 +1308,7 @@
         ...b,
         position: insertIdx + i + 1,
         section_id: `page_${targetPage}`,
-        author_type: 'student',
+        author_type: 'student_edited_assistance',
         content: {
           ...b.content,
           attrs: {
@@ -1142,7 +1331,7 @@
 
       extractHeadings();
       broadcastBlocks();
-      scheduleLLMClassification();
+      isDirty = true;
       syncNow();
 
       // Highlight the new claim block
@@ -1288,6 +1477,7 @@
   onDestroy(() => {
     clearTimeout(saveTimer);
     clearTimeout(classifyTimer);
+    clearTimeout(probeTimer);
     editor?.destroy();
   });
 </script>
@@ -1604,30 +1794,12 @@
     </section>
   </main>
 
-  <!-- Socratic Oracle Dialectic Chat Drawer (Pushes Editor to Left) -->
+  <!-- Assistant drawer pushes the editor left. -->
   {#if activeSentence}
-    <aside class="socratic-chat-drawer" aria-label="Socratic Oracle Dialectic Panel">
-      <!-- Drawer Header -->
+    <aside class="socratic-chat-drawer" aria-label="Writing help">
       <div class="drawer-header">
-        <div class="drawer-header-left">
-          <div class="oracle-status-indicator" class:is-satisfied={isOracleSatisfied}>
-            <span class="oracle-symbol">◌</span>
-            <span class="oracle-name">Socratic Oracle</span>
-          </div>
-          <button 
-            type="button" 
-            class="mode-badge-btn" 
-            onclick={() => { chatInputText = '/mode '; showSlashMenu = true; }}
-            title="Click to switch reasoning mode (or type /mode in chat)"
-          >
-            <span class="mode-dot">●</span>
-            <span class="mode-name">{oraclePressure || 'socratic'}</span>
-          </button>
-          {#if isOracleSatisfied}
-            <span class="status-pill satisfied">✓ Verified</span>
-          {:else}
-            <span class="status-pill probing">● Probing</span>
-          {/if}
+        <div class="drawer-header-title">
+          <span class="oracle-name">Ask Fiosra</span>
         </div>
         <button type="button" class="drawer-close-btn" onclick={closeSentenceChat} title="Close drawer (Esc)">
           ✕
@@ -1636,20 +1808,14 @@
 
       <!-- Active Sentence Quote Card -->
       {#if activeSentence.is_general_inquiry}
-        <div class="drawer-quote-card general-inquiry">
-          <div class="quote-meta-row">
-            <span class="epistemic-badge general">
-              <span>✦</span>
-              <strong>Assignment Scope</strong>
-            </span>
-            <span class="vulnerability-tag info">
-              {oraclePressure} mode active
-            </span>
+          <div class="drawer-quote-card general-inquiry">
+          <details class="assignment-context">
+            <summary>Assignment brief</summary>
+            <blockquote class="sentence-text-quote general">
+              "{activeSentence.text}"
+            </blockquote>
+          </details>
           </div>
-          <blockquote class="sentence-text-quote general">
-            "{activeSentence.text}"
-          </blockquote>
-        </div>
       {:else}
         <div class="drawer-quote-card {activeSentence.epistemic_type || 'claim'}">
           <div class="quote-meta-row">
@@ -1663,6 +1829,9 @@
               </span>
             {/if}
           </div>
+          {#if activeSentence.concept_label}
+            <p class="concept-context">Exploring: {activeSentence.concept_label}</p>
+          {/if}
           <blockquote class="sentence-text-quote">
             "{activeSentence.text}"
           </blockquote>
@@ -1687,82 +1856,9 @@
       <div class="chat-messages-stream" bind:this={chatMessagesContainer}>
         {#if chatMessages.length === 0}
           <div class="empty-inquiry-starter">
-            <div class="starter-hero">
-              <div class="starter-symbol">◌</div>
-              <h4 class="starter-title">Socratic Enquirer Ready</h4>
-              <p class="starter-subtitle">
-                {#if activeSentence?.is_general_inquiry}
-                  Student initiates the inquiry. Formulate your thesis, request statutory references, or use slash tools to begin.
-                {:else if activeSentence}
-                  Targeting: <em>"{activeSentence.text.slice(0, 80)}{activeSentence.text.length > 80 ? '…' : ''}"</em>
-                {/if}
-              </p>
-            </div>
-
-            <div class="starter-suggestions-box">
-              <div class="starter-suggestions-label">Antigravity Slash Prompts (Click to run):</div>
-              <div class="starter-suggestions-list">
-                <button 
-                  type="button" 
-                  class="starter-card" 
-                  onclick={() => { 
-                    chatInputText = '/hint references for the assignment'; 
-                    sendStudentMessage('/hint references for the assignment'); 
-                  }}
-                >
-                  <div class="starter-card-top">
-                    <span class="starter-cmd-pill">/hint references for the assignment</span>
-                    <span class="starter-card-tag">Primary Sources</span>
-                  </div>
-                  <div class="starter-card-desc">Obtain statutory citations for 1541 Crown of Ireland Act, St. Leger, and 1599 Grievances.</div>
-                </button>
-
-                <button 
-                  type="button" 
-                  class="starter-card" 
-                  onclick={() => { 
-                    chatInputText = '/brainstorm historical angles'; 
-                    sendStudentMessage('/brainstorm historical angles'); 
-                  }}
-                >
-                  <div class="starter-card-top">
-                    <span class="starter-cmd-pill">/brainstorm historical angles</span>
-                    <span class="starter-card-tag">Angles</span>
-                  </div>
-                  <div class="starter-card-desc">Examine Crown assimilation vs Gaelic clan tenure destabilization.</div>
-                </button>
-
-                <button 
-                  type="button" 
-                  class="starter-card" 
-                  onclick={() => { 
-                    chatInputText = '/structure 3 sections on tanistry'; 
-                    sendStudentMessage('/structure 3 sections on tanistry'); 
-                  }}
-                >
-                  <div class="starter-card-top">
-                    <span class="starter-cmd-pill">/structure 3 sections on tanistry</span>
-                    <span class="starter-card-tag">Helper Agent</span>
-                  </div>
-                  <div class="starter-card-desc">Scaffold outline section headings directly onto your canvas.</div>
-                </button>
-
-                <button 
-                  type="button" 
-                  class="starter-card" 
-                  onclick={() => { 
-                    chatInputText = '/mode dialetheism'; 
-                    sendStudentMessage('/mode dialetheism'); 
-                  }}
-                >
-                  <div class="starter-card-top">
-                    <span class="starter-cmd-pill">/mode dialetheism</span>
-                    <span class="starter-card-tag">Epistemic Mode</span>
-                  </div>
-                  <div class="starter-card-desc">Pressure test the contradictions of Brehon election vs English feudalism.</div>
-                </button>
-              </div>
-            </div>
+            <p class="starter-subtitle">
+              Ask about a source, an idea, or how to organise your next step. Fiosra will not change your draft unless you choose an offered action.
+            </p>
           </div>
         {/if}
 
@@ -1770,15 +1866,58 @@
           <div class="chat-bubble-row {msg.role}">
             <div class="chat-bubble {msg.role}">
               <div class="bubble-meta-header">
-                <span class="bubble-author">{msg.role === 'oracle' ? 'Socratic Oracle' : 'Your Defense'}</span>
-                {#if msg.role === 'oracle' && msg.category && PROBE_CATEGORIES[msg.category]}
-                  <span class="probe-category-indicator">
-                    <span class="probe-category-icon">{PROBE_CATEGORIES[msg.category].icon}</span>
-                    <span class="probe-category-name">{PROBE_CATEGORIES[msg.category].label}</span>
-                  </span>
-                {/if}
+                <span class="bubble-author">{msg.role === 'oracle' ? 'Fiosra' : 'You'}</span>
               </div>
               <p class="bubble-text">{msg.content}</p>
+
+              {#if msg.role === 'oracle' && msg === chatMessages[0] && activeSentence.proactive_probe_id}
+                <button type="button" class="defer-probe-link" onclick={deferActiveProbe}>Continue drafting for now</button>
+              {/if}
+
+              {#if msg.role === 'oracle' && msg.outline_options && msg.outline_options.length > 0}
+                <div class="outline-options" aria-label="Suggested assignment structures">
+                  {#each msg.outline_options as option}
+                    <article class="outline-option">
+                      <strong>{option.title}</strong>
+                      <p>{option.reasoning_focus}</p>
+                      <ol>
+                        {#each option.section_titles as sectionTitle}
+                          <li>{sectionTitle}</li>
+                        {/each}
+                      </ol>
+                      <button type="button" onclick={() => applyOutlineOption(option)} disabled={option.applied}>
+                        {option.applied ? 'Added to canvas' : 'Use this structure'}
+                      </button>
+                    </article>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if msg.role === 'oracle' && msg.interactive_actions && msg.interactive_actions.length > 0}
+                <div class="interactive-actions-bar">
+                  {#each msg.interactive_actions as action}
+                    {#if action.action_type === 'apply_canvas_action' && proposedSectionTitles(action).length > 0}
+                      <div class="canvas-proposal-preview">
+                        <span>Proposed sections</span>
+                        <ol>
+                          {#each proposedSectionTitles(action) as sectionTitle}
+                            <li>{sectionTitle}</li>
+                          {/each}
+                        </ol>
+                      </div>
+                    {/if}
+                    <button
+                      type="button"
+                      class="bubble-action-btn"
+                      onclick={() => handleInteractiveAction(action)}
+                      disabled={action.applied}
+                    >
+                      <span class="action-btn-icon">{action.icon || '✦'}</span>
+                      <span class="action-btn-label">{action.applied ? 'Added to canvas' : action.label}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </div>
           </div>
         {/each}
@@ -1787,7 +1926,7 @@
           <div class="chat-bubble-row oracle">
             <div class="chat-bubble oracle thinking">
               <span class="thinking-spinner">◌</span>
-              <em>Oracle analyzing your reasoning…</em>
+              <em>Thinking…</em>
             </div>
           </div>
         {/if}
@@ -1813,107 +1952,83 @@
 
       <!-- Chat Input Footer -->
       <footer class="drawer-input-footer">
-        <!-- Floating Slash Command Palette -->
-        {#if showSlashMenu && filteredSlashCommands.length > 0}
-          <div class="slash-command-menu" role="menu">
-            <div class="slash-menu-header">Epistemic Tools & Modes (Press Enter or Click)</div>
-            {#each filteredSlashCommands as item, idx}
-              <button 
-                type="button" 
-                class="slash-menu-item" 
-                class:selected={idx === slashMenuIndex}
-                onclick={() => applySlashCommand(item)}
-              >
-                <span class="item-icon">{item.icon}</span>
-                <div class="item-details">
-                  <div class="item-top">
-                    <strong class="item-cmd">{item.cmd}</strong>
-                    {#if item.paramHint}
-                      <span class="item-param-hint">{item.paramHint}</span>
-                    {/if}
-                    <span class="item-label">{item.label}</span>
-                  </div>
-                  <small class="item-desc">{item.desc}</small>
-                </div>
-              </button>
-            {/each}
+        {#if showSlashTools}
+          <div class="slash-command-menu" role="listbox" aria-label="Writing help tools">
+            <button
+              type="button"
+              class="slash-menu-item"
+              class:selected={selectedSlashToolIndex === 0}
+              role="option"
+              aria-selected={selectedSlashToolIndex === 0}
+              onclick={() => selectSlashTool('/brainstorm')}
+            >
+              <span class="slash-menu-command">/brainstorm</span>
+              <span class="slash-menu-description">Explore analytical directions</span>
+            </button>
           </div>
         {/if}
-
-        <!-- Quick Epistemic Action Pills -->
-        <div class="quick-epistemic-pills" aria-label="Epistemic Quick Actions">
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/structure '; chatTextareaRef?.focus(); }} title="Scaffold assignment structure onto canvas">
-            <span class="pill-icon">✦</span> /structure
-          </button>
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/hint references for the assignment'; chatTextareaRef?.focus(); }} title="Get primary source hint without solution leakage">
-            <span class="pill-icon">💡</span> /hint references
-          </button>
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/brainstorm '; chatTextareaRef?.focus(); }} title="Brainstorm 3 competing historical angles">
-            <span class="pill-icon">⚡</span> /brainstorm
-          </button>
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/assumptions '; chatTextareaRef?.focus(); }} title="Expose implicit premises in your reasoning">
-            <span class="pill-icon">🔍</span> /assumptions
-          </button>
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/counter '; chatTextareaRef?.focus(); }} title="Challenge your claim with a steelmanned counter-argument">
-            <span class="pill-icon">🛡️</span> /counter
-          </button>
-          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/why '; chatTextareaRef?.focus(); }} title="Drill into root causal mechanisms">
-            <span class="pill-icon">🪜</span> /why
-          </button>
-        </div>
-
         <div class="input-controls-row">
-          <textarea
-            bind:this={chatTextareaRef}
-            bind:value={chatInputText}
-            oninput={(e) => {
-              showSlashMenu = chatInputText.startsWith('/');
-              slashMenuIndex = 0;
-            }}
-            onkeydown={(e) => {
-              if (showSlashMenu && filteredSlashCommands.length > 0) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  slashMenuIndex = (slashMenuIndex + 1) % filteredSlashCommands.length;
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  slashMenuIndex = (slashMenuIndex - 1 + filteredSlashCommands.length) % filteredSlashCommands.length;
-                  return;
-                }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  applySlashCommand(filteredSlashCommands[slashMenuIndex]);
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  showSlashMenu = false;
-                  return;
-                }
+          <div class="composer-input-shell" class:has-active-tool={Boolean(activeSlashTool)}>
+            {#if activeSlashTool}
+              <span class="active-tool-capsule">
+                <span>{activeSlashTool}</span>
+                <button
+                  type="button"
+                  class="active-tool-close"
+                  onclick={clearSlashTool}
+                  aria-label="Remove {activeSlashTool} tool"
+                  title="Remove tool"
+                >
+                  ×
+                </button>
+              </span>
+            {/if}
+            <textarea
+              bind:value={chatInputText}
+              oninput={updateChatInput}
+              onkeydown={(e) => {
+              if (showSlashTools && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                e.preventDefault();
+                selectedSlashToolIndex = 0;
+                return;
+              }
+              if (showSlashTools && e.key === 'Enter' && selectedSlashToolIndex === 0) {
+                e.preventDefault();
+                selectSlashTool('/brainstorm');
+                return;
+              }
+              if (activeSlashTool && e.key === 'Backspace' && !chatInputText) {
+                e.preventDefault();
+                clearSlashTool();
+                return;
+              }
+              if (e.key === 'Escape') {
+                showSlashTools = false;
+                selectedSlashToolIndex = -1;
+                return;
               }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                showSlashTools = false;
                 sendStudentMessage();
               }
             }}
-            placeholder="Type your defense, cite evidence, or type / for tools..."
-            rows="2"
-            class="drawer-textarea"
-            disabled={isOracleThinking}
-          ></textarea>
-          <button 
-            type="button" 
-            class="drawer-send-btn" 
-            onclick={() => sendStudentMessage()}
-            disabled={isOracleThinking || chatInputText.trim().length === 0}
-            title="Send response (Enter)"
-          >
-            <span>Send ↵</span>
-          </button>
-        </div>
-        <div class="input-hints-row">
-          <small>Type <strong>/</strong> for tools & modes • <strong>Enter ↵</strong> to send</small>
+              placeholder="Ask about a source, structure, or next step…"
+              rows="2"
+              class="drawer-textarea"
+              disabled={isOracleThinking}
+            ></textarea>
+            <button
+              type="button"
+              class="drawer-send-btn"
+              onclick={() => sendStudentMessage()}
+              disabled={isOracleThinking || (!activeSlashTool && chatInputText.trim().length === 0)}
+              aria-label="Send message"
+              title="Send message (Enter)"
+            >
+              <span aria-hidden="true">↑</span>
+            </button>
+          </div>
         </div>
       </footer>
     </aside>
@@ -2384,7 +2499,7 @@
 
   .notion-editor-container :global(.notion-minimal-prosemirror p.is-editor-empty:first-child::before) {
     color: var(--color-slate-subtle);
-    content: 'Start writing your response or thesis here...';
+    content: 'Start writing, or open the Enquirer to plan your next step.';
     float: left;
     height: 0;
     pointer-events: none;
@@ -2995,6 +3110,28 @@
     color: var(--color-heading, #1e293b);
   }
 
+  .concept-context {
+    color: var(--color-slate-muted, #94a3b8);
+    font-size: 11px;
+    margin: 0;
+  }
+
+  .defer-probe-link {
+    background: transparent;
+    border: 0;
+    color: var(--color-slate-muted, #94a3b8);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    margin-top: 8px;
+    padding: 0;
+  }
+
+  .defer-probe-link:hover {
+    color: var(--color-heading, #1e293b);
+    text-decoration: underline;
+  }
+
   .chat-bubble.student {
     background: rgba(37, 99, 235, 0.08);
     border: 1px solid rgba(37, 99, 235, 0.2);
@@ -3067,6 +3204,72 @@
   .bubble-text {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .interactive-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(124, 58, 237, 0.12);
+  }
+
+  .canvas-proposal-preview {
+    width: 100%;
+    color: var(--color-slate-light);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .canvas-proposal-preview > span {
+    color: var(--color-slate-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .canvas-proposal-preview ol {
+    margin: 5px 0 1px;
+    padding-left: 18px;
+  }
+
+  .bubble-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    background: #ffffff;
+    border: 1px solid rgba(124, 58, 237, 0.28);
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #6d28d9;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: all 0.15s ease;
+  }
+
+  .bubble-action-btn:hover {
+    background: #f5f3ff;
+    border-color: #7c3aed;
+    color: #5b21b6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(109, 40, 217, 0.12);
+  }
+
+  .bubble-action-btn:active {
+    transform: translateY(0);
+  }
+
+  .action-btn-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .action-btn-label {
+    letter-spacing: -0.01em;
   }
 
   .chat-bubble.thinking {
@@ -3146,9 +3349,62 @@
   }
 
   .input-controls-row {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
+    display: block;
+  }
+
+  .composer-input-shell {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+
+  .composer-input-shell .drawer-textarea {
+    width: 100%;
+    padding-right: 48px;
+  }
+
+  .composer-input-shell.has-active-tool .drawer-textarea {
+    padding-left: 104px;
+  }
+
+  .active-tool-capsule {
+    align-items: center;
+    background: rgba(124, 58, 237, 0.10);
+    border: 1px solid rgba(124, 58, 237, 0.24);
+    border-radius: 5px;
+    color: #6d28d9;
+    display: inline-flex;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    gap: 5px;
+    line-height: 1;
+    left: 7px;
+    padding: 7px 5px 7px 8px;
+    position: absolute;
+    top: 7px;
+    white-space: nowrap;
+    z-index: 1;
+  }
+
+  .active-tool-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 16px;
+    height: 16px;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 16px;
+  }
+
+  .active-tool-close:hover {
+    background: rgba(124, 58, 237, 0.15);
   }
 
   .drawer-textarea {
@@ -3173,20 +3429,29 @@
   }
 
   .drawer-send-btn {
-    background: #7c3aed;
-    border: 1px solid #6d28d9;
-    border-radius: 6px;
-    color: #fff;
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 8px 12px;
+    align-items: center;
+    background: var(--color-bone-surface, #f8fafc);
+    border: 0;
+    border-radius: 4px;
+    bottom: 7px;
+    color: var(--color-heading, #1e293b);
+    display: inline-flex;
+    font-size: 17px;
+    font-weight: 500;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: 7px;
+    width: 34px;
     cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    z-index: 2;
   }
 
   .drawer-send-btn:hover:not(:disabled) {
-    background: #6d28d9;
+    background: rgba(124, 58, 237, 0.10);
+    color: #6d28d9;
   }
 
   .drawer-send-btn:disabled {
@@ -3244,11 +3509,10 @@
     position: relative;
     background: var(--color-surface, #ffffff);
     border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.12));
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
     margin-bottom: 6px;
-    max-height: 220px;
-    overflow-y: auto;
+    overflow: hidden;
     z-index: 50;
     display: flex;
     flex-direction: column;
@@ -3266,8 +3530,9 @@
   .slash-menu-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 7px 10px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px;
     border: none;
     background: transparent;
     text-align: left;
@@ -3277,7 +3542,17 @@
   }
   .slash-menu-item:hover,
   .slash-menu-item.selected {
-    background: rgba(2, 132, 199, 0.08);
+    background: rgba(124, 58, 237, 0.07);
+  }
+  .slash-menu-command {
+    color: var(--color-heading, #1e293b);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .slash-menu-description {
+    color: var(--color-slate-muted, #64748b);
+    font-size: 11px;
   }
   .slash-menu-item .item-icon {
     font-size: 14px;
@@ -3418,8 +3693,35 @@
   }
 
   .drawer-quote-card.general-inquiry {
-    border-left: 3px solid #0284c7;
-    background: rgba(2, 132, 199, 0.04);
+    background: var(--color-bone-surface, #f8fafc);
+    padding: 8px 16px;
+  }
+
+  .assignment-context summary {
+    color: var(--color-slate-muted, #64748b);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    list-style: none;
+  }
+
+  .assignment-context summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .assignment-context summary::before {
+    content: '›';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+
+  .assignment-context[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .assignment-context .sentence-text-quote {
+    margin-top: 9px;
   }
   .sentence-text-quote.general {
     font-size: 12px;

@@ -1,5 +1,6 @@
 """Server-authoritative proactive Socratic probe lifecycle for learner documents."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -11,6 +12,8 @@ from uuid import UUID
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
+from fiosra.mvp.canvas_scribe_helper import canvas_scribe_helper
+from fiosra.mvp.concepts.service import concept_graph_service
 from fiosra.mvp.config import settings
 from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.event_store import event_store
@@ -21,14 +24,13 @@ from fiosra.mvp.learning_document_service import (
     learning_document_service,
 )
 from fiosra.mvp.llm.orchestrator import GuardedGeneration, llm_orchestrator
-from fiosra.mvp.canvas_scribe_helper import canvas_scribe_helper
 from fiosra.mvp.socratic_probe_schemas import (
-    DialecticalMessage,
     DialecticalTurnRequest,
     DialecticalTurnResponse,
     EpistemicClassifyRequest,
     EpistemicClassifyResponse,
-    HelperCanvasAction,
+    EpistemicToolAction,
+    OutlineOption,
     ProbeDispositionResponse,
     ProbeEvaluationRequest,
     ProbeEvaluationResponse,
@@ -56,8 +58,35 @@ class SocraticProbeValidationError(ValueError):
     """Raised when a probe action violates a learning workflow invariant."""
 
 
+class SocraticModelUnavailableError(RuntimeError):
+    """Raised when requested Enquirer assistance has no valid live model result."""
+
+
 class SocraticProbeService:
     """Offer one bounded question per stable learner-authored paragraph revision."""
+
+    _concept_probe_schema_ready = False
+    _concept_probe_schema_lock = asyncio.Lock()
+
+    @classmethod
+    async def _ensure_concept_probe_schema(cls) -> None:
+        """Apply additive probe columns for existing development databases."""
+        if cls._concept_probe_schema_ready:
+            return
+        async with cls._concept_probe_schema_lock:
+            if cls._concept_probe_schema_ready:
+                return
+            from fiosra.mvp.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as session:
+                await session.execute(
+                    text("ALTER TABLE socratic_probes ADD COLUMN IF NOT EXISTS concept_id VARCHAR(96);")
+                )
+                await session.execute(
+                    text("ALTER TABLE socratic_probes ADD COLUMN IF NOT EXISTS concept_label VARCHAR(160);")
+                )
+                await session.commit()
+            cls._concept_probe_schema_ready = True
 
     _CLAIM_RE = re.compile(
         r"\b(?:is|are|was|were|shows?|suggests?|indicates?|supports?|demonstrates?|"
@@ -155,6 +184,37 @@ class SocraticProbeService:
             return json.loads(raw)
         return raw if isinstance(raw, dict) else {}
 
+    @staticmethod
+    async def _assignment_course_id(assignment_id: UUID | str) -> str | None:
+        """Resolve the assigned module's course without exposing it to the client."""
+        query = text("""
+            SELECT module.course_id
+            FROM assignments assignment
+            JOIN modules module ON module.module_id = assignment.module_id
+            WHERE assignment.assignment_id = CAST(:assignment_id AS UUID);
+        """)
+        from fiosra.mvp.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(query, {"assignment_id": str(assignment_id)})
+            course_id = result.scalar()
+        return str(course_id) if course_id else None
+
+    async def _concepts_for_claim(
+        self,
+        assignment_id: UUID | str,
+        claim_text: str,
+    ) -> list[dict[str, str]]:
+        """Retrieve teacher-approved concepts relevant to one saved learner claim."""
+        course_id = await self._assignment_course_id(assignment_id)
+        if not course_id:
+            return []
+        try:
+            return await concept_graph_service.match_claim_concepts(course_id, claim_text)
+        except Exception as error:  # Graph availability must never interrupt drafting.
+            logger.info("Concept lookup unavailable for a Socratic probe: %s", error)
+            return []
+
     @classmethod
     def _card(cls, row: Any, section_label: str) -> SocraticProbeCard:
         metadata = cls._parse_metadata(row["generation_metadata"])
@@ -166,6 +226,9 @@ class SocraticProbeService:
             section_label=section_label,
             focus_type=row["focus_type"],
             question=row["question"],
+            concept_id=row.get("concept_id"),
+            concept_label=row.get("concept_label"),
+            claim_text=row.get("claim_text") or row.get("plaintext"),
             status=row["status"],
             evidence_state="evidence_submitted" if row.get("response_text") else "unverified",
             offered_at=row["offered_at"],
@@ -174,6 +237,34 @@ class SocraticProbeService:
             responded_at=row.get("responded_at"),
             generation_metadata=metadata,
         )
+
+    @staticmethod
+    def _single_live_question(content: str) -> str | None:
+        """Accept one compact question from a live response without inventing a fallback."""
+        normalized = content.strip()
+        if normalized.startswith("{"):
+            try:
+                payload = json.loads(normalized)
+            except json.JSONDecodeError:
+                return None
+            question_value = payload.get("question") if isinstance(payload, dict) else None
+            if not isinstance(question_value, str):
+                return None
+            normalized = question_value
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        match = re.search(r"[^.?!]*\?", normalized)
+        if not match:
+            return None
+        question = match.group(0).strip(" -–—:;\"'")
+        if (
+            len(question) < 18
+            or len(question) > 260
+            or question.count("?") != 1
+            or not question.endswith("?")
+            or re.search(r"\b(?:the answer is|you should conclude|the source proves)\b", question, re.IGNORECASE)
+        ):
+            return None
+        return question
 
     async def _summary(self, session_id: UUID | str) -> dict[str, int]:
         summary_sql = text("""
@@ -202,7 +293,7 @@ class SocraticProbeService:
         session_info, assignment, document = await self._authorized_context(session_id, access_token)
         where_status = "status IN ('offered', 'deferred')" if not include_resolved else "status <> 'superseded'"
         query_sql = text(f"""
-            SELECT p.*, b.section_id, r.response_text, r.updated_at AS response_updated_at
+            SELECT p.*, b.section_id, b.plaintext AS claim_text, r.response_text, r.updated_at AS response_updated_at
             FROM socratic_probes p
             JOIN learning_document_blocks b ON b.block_id = p.block_id
             LEFT JOIN socratic_probe_responses r ON r.probe_id = p.probe_id
@@ -228,6 +319,7 @@ class SocraticProbeService:
         request: ProbeEvaluationRequest,
     ) -> ProbeEvaluationResponse:
         """Evaluate already-saved blocks and create bounded questions only when eligible."""
+        await self._ensure_concept_probe_schema()
         session_info, assignment, document = await self._authorized_context(session_id, access_token)
         if request.document_revision != document.document_revision:
             raise SocraticProbeConflictError("This document changed before questions could be evaluated. Continue writing and try again.")
@@ -272,10 +364,11 @@ class SocraticProbeService:
         insert_sql = text("""
             INSERT INTO socratic_probes (
                 session_id, document_id, block_id, source_block_revision, claim_fingerprint,
-                focus_type, question, status, generation_metadata
+                focus_type, question, concept_id, concept_label, status, generation_metadata
             ) VALUES (
                 CAST(:session_id AS UUID), CAST(:document_id AS UUID), CAST(:block_id AS UUID),
-                :source_block_revision, :claim_fingerprint, :focus_type, :question, 'offered',
+                :source_block_revision, :claim_fingerprint, :focus_type, :question,
+                :concept_id, :concept_label, 'offered',
                 CAST(:generation_metadata AS JSONB)
             ) RETURNING *;
         """)
@@ -325,29 +418,53 @@ class SocraticProbeService:
             await session.commit()
 
         created: list[SocraticProbeCard] = []
+        availability_notice: str | None = None
         if not cooldown_active and remaining_budget:
             for block in candidates[:remaining_budget]:
-                fallback = self._FOCUS_QUESTIONS[block["focus_type"]]
+                concepts = await self._concepts_for_claim(
+                    session_info["assignment_id"], block["plaintext"]
+                )
+                if not concepts:
+                    continue
+                concept = concepts[0]
                 section_label = self._section_label(assignment, block["section_id"])
                 generation = await llm_orchestrator.enhance(
-                    purpose="socratic_probe_rephrase",
+                    purpose="socratic_concept_probe",
                     system_prompt=(
-                        "You are a concise Socratic tutor. Output exactly one supportive question ending in a single "
-                        "question mark. Rephrase only the supplied server-selected question. Do not answer, explain, "
-                        "write, solve, evaluate, quote a source, assign a grade, or introduce any people, events, facts, "
-                        "or concepts beyond the supplied public assignment title, heading label, and question."
+                        'Return JSON only in the form {"question":"one concise question?"}. '
+                        "Write exactly one concise, answer-blind Socratic question ending in one question mark. "
+                        "Ask how or why the causal relationship in the learner's own claim works. Test conceptual "
+                        "understanding, never factual recall. Do not name an historical actor not in the learner claim, "
+                        "ask for an event's impact, answer, evaluate, grade, give a conclusion, introduce unprovided "
+                        "facts, or quote a source. Begin with 'How did' or 'Why did'. Directly name one specific "
+                        "mechanism and one outcome from the learner's claim; do not use meta-phrases such as 'the "
+                        "stated relationship' or 'relate to the concept'."
                     ),
                     user_prompt=(
-                        f"Public assignment prompt: {assignment.prompt[:360]}\n"
-                        f"Active heading: {section_label}\n"
-                        f"Server-selected Socratic question: {fallback}"
+                        f"Teacher-approved concept: {concept['label']}\n"
+                        f"Learner claim: {block['plaintext'][:900]}\n"
+                        f"Conceptual focus: {block['focus_type']}\n"
+                        "Ask one how-or-why question about the stated relationship, not about recalling history."
                     ),
-                    deterministic_fallback=fallback,
+                    deterministic_fallback="",
                     pseudonymous_seed=f"probe:{document.document_id}:{block['block_id']}:{block['revision']}",
                     max_characters=260,
-                    max_tokens=90,
-                    allow_live=assignment.grounding_mode == "course_grounded",
+                    max_tokens=48,
+                    allow_live=True,
+                    request_timeout_seconds=12.0,
+                    response_format={"type": "json_object"},
                 )
+                if not generation.metadata.used_live_provider:
+                    availability_notice = (
+                        "Writing help is temporarily unavailable. Your work was saved; keep drafting and try again later."
+                    )
+                    continue
+                question = self._single_live_question(generation.content)
+                if not question:
+                    availability_notice = (
+                        "Writing help returned an unusable question. Your work was saved; keep drafting and try again later."
+                    )
+                    continue
                 async with AsyncSessionLocal() as session:
                     try:
                         inserted = await session.execute(
@@ -359,7 +476,9 @@ class SocraticProbeService:
                                 "source_block_revision": block["revision"],
                                 "claim_fingerprint": self._claim_fingerprint(block["plaintext"]),
                                 "focus_type": block["focus_type"],
-                                "question": generation.content,
+                                "question": question,
+                                "concept_id": concept["concept_id"],
+                                "concept_label": concept["label"],
                                 "generation_metadata": json.dumps(self._metadata(generation)),
                             },
                         )
@@ -370,7 +489,7 @@ class SocraticProbeService:
                         if "unique" in str(error).lower():
                             continue
                         raise
-                card = self._card(row, section_label)
+                card = self._card(dict(row) | {"claim_text": block["plaintext"]}, section_label)
                 created.append(card)
                 await event_store.log_event(
                     session_id=session_info["session_id"],
@@ -384,6 +503,7 @@ class SocraticProbeService:
                         "block_id": str(card.block_id),
                         "source_block_revision": card.source_block_revision,
                         "focus_type": card.focus_type,
+                        "concept_id": card.concept_id,
                         "generation_metadata": card.generation_metadata.model_dump(),
                     },
                 )
@@ -394,6 +514,7 @@ class SocraticProbeService:
             created=created,
             pending=pending.probes,
             evidence_summary=pending.evidence_summary,
+            availability_notice=availability_notice,
         )
 
     async def _get_owned_probe(
@@ -404,7 +525,7 @@ class SocraticProbeService:
     ) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
         session_info, assignment, document = await self._authorized_context(session_id, access_token)
         probe_sql = text("""
-            SELECT p.*, b.section_id, r.response_text
+            SELECT p.*, b.section_id, b.plaintext AS claim_text, r.response_text
             FROM socratic_probes p
             JOIN learning_document_blocks b ON b.block_id = p.block_id
             LEFT JOIN socratic_probe_responses r ON r.probe_id = p.probe_id
@@ -560,7 +681,7 @@ class SocraticProbeService:
     async def trace_records(self, session_id: UUID | str) -> list[ProbeTraceRecord]:
         """Return an internal evaluator projection with question/response content and no model prompts."""
         trace_sql = text("""
-            SELECT p.*, b.section_id, r.response_text
+            SELECT p.*, b.section_id, b.plaintext AS claim_text, r.response_text
             FROM socratic_probes p
             JOIN learning_document_blocks b ON b.block_id = p.block_id
             LEFT JOIN socratic_probe_responses r ON r.probe_id = p.probe_id
@@ -579,6 +700,8 @@ class SocraticProbeService:
                 section_label=row["section_id"] or "Student writing",
                 focus_type=row["focus_type"],
                 question=row["question"],
+                concept_id=row.get("concept_id"),
+                concept_label=row.get("concept_label"),
                 status=row["status"],
                 evidence_state="evidence_submitted" if row["response_text"] else "unverified",
                 offered_at=row["offered_at"],
@@ -664,7 +787,7 @@ class SocraticProbeService:
                     sentence=s,
                     epistemic_type="reasoning",
                     confidence=0.90,
-                    oracle_probe=f"What specific mechanism or evidence demonstrates that this cause produces the described outcome?",
+                    oracle_probe="What specific mechanism or evidence demonstrates that this cause produces the described outcome?",
                 ))
             else:
                 fallback_results.append(SentenceClassification(
@@ -758,32 +881,6 @@ class SocraticProbeService:
         elif assignment and getattr(assignment, "prompt", None):
             task_prompt = assignment.prompt
 
-        # Contextual deterministic fallback
-        fallback_probe = f"What specific evidence grounds your claim that {target_sentence[:70]}?"
-        fallback_moves = ["Cite source observation", "State causal mechanism", "Define boundary conditions"]
-        fallback_vuln = "Unverified proposition"
-
-        if move_type == "why_ladder":
-            fallback_probe = "By what exact causal mechanism does the condition you describe produce that specific outcome?"
-            fallback_moves = ["Trace intermediate causal step", "Identify confounding variables", "Differentiate correlation from causation"]
-            fallback_vuln = "Causal warrant gap"
-        elif move_type == "assumptions":
-            fallback_probe = "What unspoken premise must hold true for this assertion to remain valid, and what if that premise is flawed?"
-            fallback_moves = ["State the implicit precondition", "Test vulnerability if premise fails", "Add scope qualifier"]
-            fallback_vuln = "Implicit presupposition"
-        elif move_type == "source":
-            fallback_probe = "How does this specific claim align with or diverge from the empirical details in the course source pack?"
-            fallback_moves = ["Direct quotation from primary source", "Corroborate with secondary observation", "Reconcile discrepancies"]
-            fallback_vuln = "Source grounding gap"
-        elif move_type == "counterfactual":
-            fallback_probe = "Under what realistic counter-scenario or edge condition would this assertion completely break down?"
-            fallback_moves = ["Propose extreme edge case", "Acknowledge rival interpretation", "Formulate defensive nuance"]
-            fallback_vuln = "Absolute unnuanced claim"
-        elif move_type == "creative":
-            fallback_probe = "If we view this concept through an unexpected historical metaphor or inverted analogy, what hidden dynamic emerges?"
-            fallback_moves = ["Propose lateral analogy", "Invert core presupposition", "Explore counter-intuitive dynamic"]
-            fallback_vuln = "Conventional framing limitation"
-
         try:
             system_prompt = (
                 "You are the Socratic Oracle, an elite dialectical tutor examining a student's drafted sentence. "
@@ -818,16 +915,15 @@ class SocraticProbeService:
                 purpose="socratic_agent_sentence_inquiry",
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                deterministic_fallback=json.dumps({
-                    "oracle_probe": fallback_probe,
-                    "targeted_vulnerability": fallback_vuln,
-                    "socratic_moves": fallback_moves,
-                }),
+                deterministic_fallback="",
                 pseudonymous_seed=f"inquire:{session_id}:{hashlib.sha256(target_sentence.encode()).hexdigest()[:16]}:{move_type}",
                 max_characters=2500,
                 max_tokens=600,
                 allow_live=True,
+                response_format={"type": "json_object"},
             )
+            if not generation.metadata.used_live_provider:
+                raise SocraticModelUnavailableError("The Socratic Enquirer is unavailable. Your draft has not changed; please try again shortly.")
             raw_content = generation.content.strip()
             if raw_content.startswith("```"):
                 raw_content = re.sub(r"^```(?:json)?\n?", "", raw_content)
@@ -839,20 +935,15 @@ class SocraticProbeService:
                     epistemic_type=request.epistemic_type,
                     oracle_probe=str(parsed["oracle_probe"]).strip(),
                     move_type=move_type,
-                    socratic_moves=[str(m) for m in parsed.get("socratic_moves", fallback_moves)],
-                    targeted_vulnerability=parsed.get("targeted_vulnerability", fallback_vuln),
+                    socratic_moves=[str(m) for m in parsed.get("socratic_moves", [])],
+                    targeted_vulnerability=parsed.get("targeted_vulnerability"),
                 )
-        except Exception:
-            pass
-
-        return SentenceInquireResponse(
-            sentence=target_sentence,
-            epistemic_type=request.epistemic_type,
-            oracle_probe=fallback_probe,
-            move_type=move_type,
-            socratic_moves=fallback_moves,
-            targeted_vulnerability=fallback_vuln,
-        )
+            raise SocraticModelUnavailableError("The Socratic Enquirer returned an invalid response. Your draft has not changed; please try again shortly.")
+        except SocraticModelUnavailableError:
+            raise
+        except Exception as exc:
+            logger.warning("Sentence inquiry model request failed: %s", exc)
+            raise SocraticModelUnavailableError("The Socratic Enquirer is unavailable. Your draft has not changed; please try again shortly.") from exc
 
     async def dialectical_turn(
         self,
@@ -933,454 +1024,534 @@ class SocraticProbeService:
             except Exception as e:
                 logger.debug("Neo4j KC fetch notice: %s", e)
 
-        # 4. Check for non-answers, evasions, or dismissals
+        # 4. Recognize explicit dialogue continuations without substituting a
+        # deterministic reply. The learner should receive either a live,
+        # context-aware response or the explicit model-unavailable state.
         cleaned_reply = student_reply.strip().lower().rstrip(".!?,")
-        is_slash_cmd = cleaned_reply.startswith("/")
-        is_evasion = not is_slash_cmd and (cleaned_reply in {
-            "shoo", "go away", "bye", "bye bye", "goodbye", "no", "nah", "idk",
-            "i dont know", "i don't know", "leave me alone", "stop", "whatever",
-            "skip", "pass", "shut up", "asdf", "none", "nothing", "exit", "quit"
-        } or (len(cleaned_reply.split()) < 3 and not any(k in cleaned_reply for k in ("because", "evidence", "source", "due", "mechanism", "data", "proves"))))
+        requests_continuation = cleaned_reply in {
+            "tell me",
+            "go on",
+            "say more",
+            "keep going",
+            "explain more",
+            "what do you mean",
+            "how so",
+        }
 
-        # 5. Check for Temporal / Out-of-Domain Drift (e.g. corporate remote work, 19th-century post-union acts)
-        is_drift = any(
-            w in (student_reply.lower() + " " + target_sentence.lower())
-            for w in ("remote work", "work from home", "efficiency", "corporate", "covid", "1816", "exchequers act", "nineteenth century", "19th century")
-        ) and not any(h in student_reply.lower() for h in ("tudor", "1541", "st. leger", "brehon", "tanistry", "primogeniture", "regrant", "tyrone"))
-
-        # Determine autonomous probe category for fallback
-        prior_categories = [m.probe_category for m in request.history if m.probe_category]
-        candidates = ["source", "why_ladder", "assumptions", "creative", "counterfactual", "challenge"]
-
-        has_substantive_defense = len(student_reply.split()) >= 15 or any(
-            marker in student_reply.lower()
-            for marker in ("because", "specifically", "evidence", "source", "data", "demonstrates", "furthermore", "qualifies")
-        )
-
-        fallback_reply = (
-            f"You assert that '{student_reply[:60]}...', but what verifiable primary source excerpt or institutional mechanism proves this holds true?"
-        )
-        fallback_reason = "Premise requires empirical corroboration or causal qualification."
-        fallback_category = "challenge"
-        fallback_satisfied = False
-        fallback_revision = None
-        fallback_moves = ["Cite primary source excerpt", "Identify intermediate causal link", "Introduce counter-nuance"]
-        fallback_progress = 0.40
-        fallback_helper_action = None
+        # Scope is handled through grounded assistance, not a fixed vocabulary
+        # blacklist that only works for one seeded history course.
+        is_drift = False
 
         cmd_text = student_reply.strip().lower()
+        brainstorms_structure = bool(
+            re.search(
+                r"\b(?:brainstorm\w*|high[- ]?level|big[- ]?picture|concept\w*|ponder\w*)\b",
+                cmd_text,
+            )
+            and re.search(r"\b(?:structur\w*|outline\w*|organis\w*|section\w*|plan\w*)\b", cmd_text)
+        )
+        requests_assignment_structure = bool(
+            re.search(
+                r"\b(?:start|begin|help|draft\w*|write|build|plan|organis\w*|structure|outline)\b.{0,48}"
+                r"\b(?:assignment|essay|paper|response|canvas|draft)\b"
+                r"|\b(?:assignment|essay|paper|response|canvas|draft)\b.{0,48}"
+                r"\b(?:start|begin|help|draft\w*|write|build|plan|organis\w*|structure|outline)\b",
+                cmd_text,
+            )
+        )
+        requests_canvas_update = bool(
+            re.search(
+                r"\b(?:update|add|put|insert|apply|populate)\b.{0,48}"
+                r"\b(?:canvas|assignment|essay|paper|response|draft|outline|section)\b",
+                cmd_text,
+            )
+        )
+        asks_for_source_reference = bool(
+            re.search(
+                r"\b(?:give|show|find|need|want|which|what)\b.{0,36}\b(?:source|sources|reference|references|citation|citations)\b"
+                r"|\b(?:source|sources|reference|references|citation|citations)\b.{0,36}\b(?:for|to)\b",
+                cmd_text,
+            )
+            or re.search(
+                r"\b(?:any|some)\s+(?:source|sources|reference|references|citation|citations)\b",
+                cmd_text,
+            )
+        )
+        is_brainstorm_tool = cmd_text.startswith("/brainstorm")
+        permits_canvas_structure = (
+            requests_assignment_structure
+            or requests_canvas_update
+            or cmd_text.startswith("/structure")
+        )
 
-        if is_evasion:
-            fallback_category = "challenge"
-            fallback_reply = (
-                f"Dismissing the inquiry does not defend your claim. You asserted that \"{target_sentence[:70]}...\". "
-                "The dialectic will not conclude until you substantiate this premise. What verifiable evidence or causal mechanism supports it?"
-            )
-            fallback_reason = "Evasion detected. Claim remains unsubstantiated."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Cite empirical source", "Identify causal mechanism", "Qualify premise scope"]
-            fallback_progress = 0.15
-        elif is_drift:
-            fallback_category = "challenge"
-            fallback_reply = (
-                "Your statement introduces concepts outside the historical and statutory bounds of this inquiry (Tudor Ireland, 1536–1603). "
-                "How does your argument connect to Henry VIII's Crown of Ireland Act (1541), St. Leger's surrender-and-regrant despatches, or the clash between Brehon tanistry and English feudal tenure?"
-            )
-            fallback_reason = "Anachronistic or out-of-domain drift detected. Refocusing on 16th-century Tudor inquiry."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Anchor in 1541 Crown of Ireland Act", "Contrast tanistry with feudal primogeniture"]
-            fallback_progress = 0.20
-        elif cmd_text.startswith("/hint"):
-            hint_arg = re.sub(r"^/hint\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "source"
-            if any(k in hint_arg.lower() for k in ("ref", "source", "doc", "assign", "cite", "material", "statute")):
-                fallback_reply = (
-                    "**Primary Source References for this Assignment**:\n\n"
-                    "1. **Crown of Ireland Act (1541)** (*33 Hen. 8 c. 1*):\n"
-                    "   - *Section 3*: Formally unites Ireland to the Imperial Crown of England and provides the statutory mechanism for converting Brehon customary tenure into royal letters patent.\n"
-                    "2. **Lord Deputy Anthony St. Leger — State Papers (1541–1543)**:\n"
-                    "   - Details the conditions granted to Conn O'Neill (created Earl of Tyrone): holding lands in *capite* knight's service, renouncing tanistry, but warning that younger sons and clan kinsmen would be disinherited by feudal primogeniture.\n"
-                    "3. **Hugh O'Neill — Articles of Grievance (1599)** (*Salisbury MSS*):\n"
-                    "   - Articulates why surrender-and-regrant broke down: English provincial sheriffs, martial law, and disputes over fraudulent patents.\n\n"
-                    "Which of these three documents directly addresses your current argument?"
-                )
-                fallback_reason = "Answer-blind primary source statutory references provided for assignment."
-                fallback_moves = ["Examine Section 3 of 1541 Act", "Analyze St. Leger 1541 despatches", "Contrast with 1599 grievances"]
-            elif hint_arg:
-                fallback_reply = (
-                    f"**Evidentiary Hint regarding '{hint_arg}'**:\n\n"
-                    f"To examine '{hint_arg}' without premature assumptions, look into Lord Deputy St. Leger's 1541 despatches and Section 3 of the 1541 Crown of Ireland Act. "
-                    "Notice how the conversion to English knight's service altered the legal status of secondary chieftains (*urritha*) and younger sons who were previously eligible for tanist election. "
-                    "How does this specific tenurial friction relate to what you are investigating?"
-                )
-                fallback_reason = f"Answer-blind hint provided on query '{hint_arg}'."
-                fallback_moves = ["Examine 1541 statutory mechanism", "Trace urritha inheritance status"]
-            else:
-                fallback_reply = (
-                    "**Evidentiary Hint**: Examine Section 3 of the *Crown of Ireland Act (1541)* regarding how Brehon customary tenure "
-                    "was converted into English letters patent, and compare this with Lord Deputy St. Leger's despatches on how tanistry "
-                    "was abolished in favor of knight's service in capite. Notice how younger sons and secondary chieftains (*urritha*) "
-                    "were disinherited by feudal primogeniture. How might this tenurial mechanism explain the eventual armed resistance in 1599?"
-                )
-                fallback_reason = "Answer-blind evidentiary hint provided from primary source statutory records."
-                fallback_moves = ["Examine St. Leger despatches (1541)", "Analyze Section 3 of 1541 Act"]
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_progress = 0.35
-        elif cmd_text.startswith("/brainstorm"):
-            brainstorm_arg = re.sub(r"^/brainstorm\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "creative"
-            focus_str = f" regarding '{brainstorm_arg}'" if brainstorm_arg else ""
-            fallback_reply = (
-                f"**Brainstorming Angles & Competing Hypotheses{focus_str}**:\n\n"
-                "1. **Pragmatic Assimilation**: St. Leger's policy was a genuine attempt at peaceful, consensual constitutional integration "
-                "that was only derailed when militarist Dublin administrators imposed provincial sheriffs and martial law.\n"
-                "2. **Tenurial Destabilization**: The structural clash between clan ownership (tanistry) and individual feudal primogeniture "
-                "made civil war inevitable by disinheriting clan kinsmen.\n"
-                "3. **Fiscal Subjugation**: The Crown's true motive was extending wardships, liveries, and knight-service revenues rather than genuine legal integration.\n\n"
-                "Which of these hypotheses do your assigned primary sources support or complicate most strongly?"
-            )
-            fallback_reason = f"Exploratory hypotheses brainstormed{focus_str}."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Select preferred working hypothesis", "Cite primary source for selected angle"]
-            fallback_progress = 0.40
-        elif cmd_text.startswith("/assumptions"):
-            assump_arg = re.sub(r"^/assumptions\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "assumptions"
-            prefix = f" examining '{assump_arg}'" if assump_arg else ""
-            fallback_reply = (
-                f"**Implicit Assumption Analysis{prefix}**:\n\n"
-                "1. **Tenure Assumption**: You are assuming that Gaelic lords possessed exclusive private ownership over land, rather than acting as elective trustees under customary Brehon law.\n"
-                "2. **Institutional Alignment**: You assume royal letters patent were interpreted identically by Westminster lawyers and Irish clan septs.\n"
-                "3. **Causality Assumption**: You assume the 1599 confederation was triggered predominantly by tenurial grievances rather than religious and continental geopolitical alliances.\n\n"
-                "Which of these premises has the least empirical backing in your primary source texts?"
-            )
-            fallback_reason = "Implicit premises and tenurial assumptions extracted for examination."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Examine Brehon trustee model", "Analyze Hugh O'Neill 1599 grievances"]
-            fallback_progress = 0.45
-        elif cmd_text.startswith("/counter"):
-            counter_arg = re.sub(r"^/counter\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "counterfactual"
-            target = f"'{counter_arg}'" if counter_arg else "your working thesis"
-            fallback_reply = (
-                f"**Steelman Counter-Argument against {target}**:\n\n"
-                "A contemporary Tudor administrator (or modern constitutional historian like Brendan Bradshaw) would argue that "
-                "the 1541 Act was an unprecedented triumph of conciliation: Gaelic magnates willingly attended the Dublin Parliament, "
-                "celebrated Henry VIII's coronation as King of Ireland, and welcomed English peerage titles (Earl of Tyrone, Earl of Thomond). "
-                "Therefore, the Nine Years' War was caused not by the policy itself, but by rogue opportunistic lords.\n\n"
-                "What primary source evidence from Hugh O'Neill's 1599 grievances directly refutes this counter-interpretation?"
-            )
-            fallback_reason = "Steelmanned historical counter-argument presented for thesis testing."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Address Bradshaw's conciliation thesis", "Cite disinheritance evidence from St. Leger"]
-            fallback_progress = 0.50
-        elif cmd_text.startswith("/why"):
-            why_arg = re.sub(r"^/why\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "why_ladder"
-            question = f"Why did '{why_arg}' occur?" if why_arg else "Why did substituting tanistry with English feudal primogeniture trigger violent resistance?"
-            fallback_reply = (
-                f"**Why-Ladder Causal Probe**:\n\n"
-                f"{question} Step down the causal ladder: What happened to the *urritha* (sub-chieftains)? "
-                "What happened to younger brothers? Why could Brehon law not peacefully coexist with knight-service letters patent?"
-            )
-            fallback_reason = "Why-ladder inquiry into tenurial causality."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Trace urritha subordination", "Explain primogeniture disinheritance"]
-            fallback_progress = 0.50
-        elif cmd_text.startswith("/falsify"):
-            falsify_arg = re.sub(r"^/falsify\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            fallback_category = "challenge"
-            subject = f"'{falsify_arg}'" if falsify_arg else "your thesis"
-            fallback_reply = (
-                f"**Falsification Test for {subject}**:\n\n"
-                "What observation or documentary evidence would prove that your argument is wrong? "
-                "If historical records showed that junior Gaelic kinsmen and secondary chieftains overwhelmingly endorsed primogeniture "
-                "and paid English quit-rents willingly throughout the 1580s, would your central argument still stand?"
-            )
-            fallback_reason = "Falsification test posed to evaluate epistemic boundaries."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Define falsifying evidence condition", "Re-evaluate thesis boundary"]
-            fallback_progress = 0.55
-        elif cmd_text.startswith("/mode"):
-            mode_arg = cmd_text.replace("/mode", "").strip()
-            mode_names = {
-                "socratic": ("Socratic Inquirer", "Balanced inquiries into warrants and causal mechanisms."),
-                "adversarial": ("Adversarial Challenger", "Aggressive pressure testing, steelmanning counter-arguments and weak links."),
-                "brainstorm": ("Brainstorm & Exploration", "Hypothesis generation and divergent historical angles without premature closure."),
-                "structural": ("Assignment Architect", "Scaffolding assignment format, section outlines, and rubric alignment."),
-                "hint": ("Evidence Scaffolding", "Answer-blind hints pointing to statutory primary sources."),
-                "assumptions": ("Assumption Extractor", "Uncovering unstated premises and cognitive leaps."),
-            }
-            target_mode = mode_arg if mode_arg in mode_names else "socratic"
-            m_title, m_desc = mode_names[target_mode]
-            fallback_category = "challenge"
-            fallback_reply = (
-                f"**Switched to {m_title} Mode** (Epistemic Lens: `{target_mode}`).\n\n"
-                f"{m_desc}\n\n"
-                f"How would you like to apply this lens to your current inquiry on the 1541 Crown of Ireland Act and Surrender-and-Regrant?"
-            )
-            fallback_reason = f"Switched reasoning mode to {target_mode}."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = [f"Engage in {target_mode} lens", "Cite primary source evidence"]
-            fallback_progress = 0.40
-        elif cmd_text.startswith("/structure") or cmd_text.startswith("/outline") or any(k in student_reply.lower() for k in ("structure", "sections", "outline", "parts", "part 1")):
-            # Autonomous structure scaffolding delegation
-            clean_cmd = re.sub(r"^/(structure|outline)\s*", "", student_reply, flags=re.IGNORECASE).strip()
-            extracted_titles = []
-            if ":" in clean_cmd:
-                after_colon = clean_cmd.split(":", 1)[1]
-                parts = re.split(r",|\band\b|;|\n|\d+\)", after_colon)
-                extracted_titles = [p.strip().strip("\"'.,") for p in parts if len(p.strip()) > 2]
-            elif any(num in clean_cmd for num in ("1)", "1.", "1 -")):
-                parts = re.split(r"\d+[\.\)\-]", clean_cmd)
-                extracted_titles = [p.strip().strip("\"'.,") for p in parts if len(p.strip()) > 2]
-            elif len(clean_cmd.split(",")) >= 2:
-                extracted_titles = [p.strip().strip("\"'.,") for p in clean_cmd.split(",") if len(p.strip()) > 2]
-            else:
-                extracted_titles = [
-                    "I. Constitutional Sovereignty & The 1541 Act",
-                    "II. Tanistry vs. Feudal Primogeniture",
-                    "III. Institutional Breakdown & The Nine Years' War"
-                ]
-
-            fallback_helper_action = canvas_scribe_helper.generate_section_blocks(
-                session_id, extracted_titles, target_page=1
-            )
-            sec_list = ", ".join(f"'{t}'" for t in extracted_titles)
-            fallback_reply = (
-                f"I've instructed the Canvas Scribe Helper Agent to scaffold your assignment structure directly onto Page 1: {sec_list}.\n\n"
-                f"The Left Document Outline has been updated. Looking at **'{extracted_titles[0]}'**, what primary source or statutory record anchors this first section?"
-            )
-            fallback_reason = "Structured assignment sections scaffolded on canvas."
-            fallback_satisfied = False
-            fallback_progress = 0.50
-            fallback_category = "source"
-            fallback_moves = ["Cite primary source excerpt", "Establish statutory grounding"]
-        elif any(marker in student_reply.lower() for marker in ("1541", "crown of ireland", "st. leger", "brehon", "tanistry", "primogeniture", "earl of tyrone", "conn o'neill", "feudal tenure", "disinherited", "letters patent")):
-            # Autonomous verified claim insertion delegation
-            validated_claim = (
-                "Under the Crown of Ireland Act (1541) and St. Leger's surrender-and-regrant policy, "
-                "Gaelic chiefs surrendered ancestral clan lands to receive English feudal patents, "
-                "which replaced collective Brehon tanistry with hereditary primogeniture."
-            )
-            fallback_helper_action = canvas_scribe_helper.generate_claim_block(
-                session_id,
-                validated_claim_text=validated_claim,
-                target_section="Historical Context",
-                target_page=1,
-            )
-            fallback_reply = (
-                "Well reasoned. The 1541 statute and St. Leger's despatches document how individual letters patent "
-                "replaced allodial sept landholding with knight's service. I've had the helper agent insert your substantiated "
-                "finding directly into your canvas under 'Historical Context'. "
-                "Now, what was the immediate consequence of primogeniture on the younger sons and secondary chieftains (the urritha) who were excluded from inheritance?"
-            )
-            fallback_reason = "Statutory grounding and tenurial mechanism substantiated from primary sources."
-            fallback_satisfied = True
-            fallback_revision = "The policy of Surrender and Regrant established formal royal sovereignty in 1541, but destabilized Gaelic authority by replacing communal tanistry with English feudal primogeniture."
-            fallback_moves = ["Trace urritha disinheritance", "Examine Hugh O'Neill's 1599 grievances"]
-            fallback_progress = 1.0
-            fallback_category = "why_ladder"
-        elif not any(k in student_reply.lower() for k in ("source", "evidence", "document", "quote", "data", "act", "statute")) and "source" not in prior_categories:
-            fallback_category = "source"
-            fallback_reply = (
-                f"You assert that '{student_reply[:60]}...', but what specific source evidence or textual excerpt from the assigned reading (e.g. Crown of Ireland Act 1541 or St. Leger despatches) directly corroborates this?"
-            )
-            fallback_reason = "Premise requires empirical corroboration from assigned course sources."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Cite primary source excerpt", "Cross-reference assigned document"]
-            fallback_progress = 0.40 if has_substantive_defense else 0.25
-        elif "why_ladder" not in prior_categories:
-            fallback_category = "why_ladder"
-            fallback_reply = (
-                f"How specifically does that mechanism connect to your claim? Step through the intermediate causal ladder that explains why this outcome occurs."
-            )
-            fallback_reason = "Causal mechanism requires step-by-step articulation."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Trace intermediate causal step", "Identify confounding variables"]
-            fallback_progress = 0.60 if has_substantive_defense else 0.30
-        elif "assumptions" not in prior_categories:
-            fallback_category = "assumptions"
-            fallback_reply = (
-                f"What implicit premise are you taking for granted in that defense, and how does your argument hold if that assumption is contested?"
-            )
-            fallback_reason = "Underlying assumptions remain unexamined."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["State implicit precondition", "Add scope qualification"]
-            fallback_progress = 0.65 if has_substantive_defense else 0.35
-        else:
-            idx = len(request.history) % len(candidates)
-            fallback_category = candidates[idx]
-            fallback_reply = (
-                f"You assert that '{student_reply[:60]}...', but what verifiable primary source excerpt or causal link proves this holds true?"
-            )
-            fallback_reason = "Premise requires deeper empirical corroboration or causal qualification."
-            fallback_satisfied = False
-            fallback_revision = None
-            fallback_moves = ["Cite primary source excerpt", "Identify intermediate causal link", "Introduce counter-nuance"]
-            fallback_progress = 0.50
-
-        # Only mark satisfied if substantive defense across multiple turns AND not evasive AND not drift
-        if has_substantive_defense and len(request.history) >= 2 and not is_evasion and not is_drift and not fallback_satisfied:
-            fallback_satisfied = True
-            fallback_reply = (
-                "Your defense effectively grounds the assertion in concrete institutional mechanisms. "
-                "The premature leap is resolved by acknowledging the specific tenurial conditions."
-            )
-            fallback_reason = "Empirical grounding and tenurial mechanism successfully articulated."
-            fallback_revision = f"{target_sentence.rstrip('.')} when evaluated under 16th-century feudal tenurial conditions."
-            fallback_moves = ["Synthesize into main thesis", "Cross-reference alternative source"]
-            fallback_progress = 1.0
-
-        # Short-circuit slash commands, evasions, and drift for deterministic epistemic response
-        if is_slash_cmd or is_evasion or is_drift:
+        if is_drift:
             return DialecticalTurnResponse(
-                oracle_reply=fallback_reply,
-                is_satisfied=fallback_satisfied,
-                satisfaction_reason=fallback_reason,
-                current_probe_category=fallback_category,
-                suggested_revision=fallback_revision,
-                epistemic_progress=fallback_progress,
-                socratic_moves=fallback_moves,
-                helper_action=fallback_helper_action,
+                oracle_reply=(
+                    "How does this idea connect to the assignment’s stated scope and the materials your educator provided?"
+                ),
+                is_satisfied=False,
+                satisfaction_reason="The inquiry needs to reconnect with the assignment scope.",
+                current_probe_category="challenge",
+                suggested_revision=None,
+                epistemic_progress=0.20,
+                socratic_moves=["Revisit the task", "Check a provided source"],
+                helper_action=None,
+                interactive_actions=[],
+            )
+
+        if asks_for_source_reference:
+            source_titles = []
+            if assignment and assignment.published and assignment.published.source_pack:
+                source_titles = [source.title for source in assignment.published.source_pack[:3]]
+            source_label = ", ".join(source_titles) if source_titles else "the assigned materials"
+            return DialecticalTurnResponse(
+                oracle_reply=(
+                    f"Open {source_label}. Choose a passage that bears on your developing idea, then note what it shows before deciding what it supports."
+                ),
+                is_satisfied=False,
+                satisfaction_reason="The learner asked to inspect course materials.",
+                current_probe_category="source",
+                suggested_revision=None,
+                epistemic_progress=0.1,
+                socratic_moves=["Open an assigned source", "Record one observation in your own words"],
+                helper_action=None,
+                interactive_actions=[
+                    EpistemicToolAction(
+                        label="Open assigned materials",
+                        action_type="cite_source",
+                        icon="↗",
+                        payload={},
+                    )
+                ],
+            )
+
+        # Build dynamic tool directive based on slash command
+        tool_directive = ""
+        current_category = "challenge"
+
+        if brainstorms_structure or requests_assignment_structure:
+            current_category = "creative"
+            tool_directive = (
+                "\n\n*** SPECIAL TOOL MODE: ASSIGNMENT STRUCTURE PROPOSAL ***\n"
+                f"The learner wants to begin or organize their assignment: '{student_reply.strip()}'.\n"
+                "Create exactly two distinct, assignment-specific ways to organize the analysis. Each option must have exactly three short analytical section headings and one brief explanation of the comparison or tension it helps the learner investigate.\n"
+                "Stay at the level of analytical concepts and relationships. Do not provide an introduction, conclusion, thesis, summary, historical verdict, or model answer. Do not quote or restate the assignment brief. Use only the supplied assignment context and material excerpts."
+            )
+        elif requests_canvas_update:
+            current_category = "creative"
+            tool_directive = (
+                "\n\n*** SPECIAL TOOL MODE: CANVAS STRUCTURE PROPOSAL ***\n"
+                "The learner wants a canvas update. Propose 2–4 concise, assignment-specific analytical section headings in "
+                "'helper_delegation' with action='scaffold_sections'. The canvas helper will create empty sections only after "
+                "the learner explicitly accepts the proposal. Do not write factual content, a thesis, or a model answer into the canvas."
+            )
+        elif requests_continuation:
+            current_category = "creative"
+            tool_directive = (
+                "\n\n*** SPECIAL TOOL MODE: CONTINUE THE CURRENT PLANNING THREAD ***\n"
+                "Continue directly from the immediately preceding Fiosra response in the conversation history. "
+                "Clarify its most useful analytical choice or tension in two or three concise sentences, then ask "
+                "which route the learner would like to develop. Do not reset the conversation, repeat a previous "
+                "question verbatim, provide a model answer, or introduce a new factual claim."
+            )
+        elif is_brainstorm_tool:
+            current_category = "creative"
+            brainstorm_arg = re.sub(r"^/brainstorm\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = brainstorm_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: BRAINSTORM ***\n"
+                f"The learner wants to explore: '{topic}'.\n"
+                "Offer two or three distinct course-grounded analytical routes or tensions to investigate, then end with one clear question asking which route the learner wants to pursue. Do not invent facts, sources, conclusions, or a model answer."
+            )
+        elif cmd_text.startswith("/hint"):
+            current_category = "source"
+            hint_arg = re.sub(r"^/hint\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = hint_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: EVIDENTIARY HINT ***\n"
+                f"The student requested an EVIDENTIARY HINT regarding: '{topic}'.\n"
+                "Under answer-blindness, identify the provided material that is most useful to inspect and ask what detail the learner should look for.\n"
+                "Do not name material that does not appear in the supplied source context."
+            )
+        elif cmd_text.startswith("/structure"):
+            current_category = "source"
+            struct_arg = re.sub(r"^/structure\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = struct_arg or task_prompt
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: ASSIGNMENT STRUCTURE ***\n"
+                f"The student requested to STRUCTURE the assignment: '{topic}'.\n"
+                "Propose a concise, assignment-specific outline with 2–4 section titles. In 'helper_delegation', set action='scaffold_sections' and include those titles. The learner will see the proposal and must explicitly choose whether to add it to the canvas."
+            )
+        elif cmd_text.startswith("/assumptions"):
+            current_category = "assumptions"
+            assump_arg = re.sub(r"^/assumptions\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = assump_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: EXPOSE ASSUMPTIONS ***\n"
+                f"The student requested an ASSUMPTION ANALYSIS of: '{topic}'.\n"
+                "Identify at most two assumptions or reasoning gaps using neutral language, then ask which one the learner wants to investigate."
+            )
+        elif cmd_text.startswith("/counter"):
+            current_category = "counterfactual"
+            counter_arg = re.sub(r"^/counter\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = counter_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: STEELMANNED COUNTER-ARGUMENT ***\n"
+                f"The student requested a COUNTER-ARGUMENT against: '{topic}'.\n"
+                "Offer one plausible alternative interpretation grounded only in the assignment context, then ask what material could help the learner compare the two interpretations."
+            )
+        elif cmd_text.startswith("/why"):
+            current_category = "why_ladder"
+            why_arg = re.sub(r"^/why\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = why_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: WHY-LADDER CAUSAL PROBE ***\n"
+                f"The student requested a WHY-LADDER probe on: '{topic}'.\n"
+                "Ask one progressive causal question at a time. Start with the immediate connection before moving to deeper mechanisms."
+            )
+        elif cmd_text.startswith("/falsify"):
+            current_category = "challenge"
+            falsify_arg = re.sub(r"^/falsify\s*", "", student_reply, flags=re.IGNORECASE).strip()
+            topic = falsify_arg or target_sentence
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: FALSIFICATION TEST ***\n"
+                f"The student requested a FALSIFICATION TEST for: '{topic}'.\n"
+                "Ask what observation or material from the provided sources would make the learner revise their current interpretation."
+            )
+        elif cmd_text.startswith("/mode"):
+            mode_arg = re.sub(r"^/mode\s*", "", student_reply, flags=re.IGNORECASE).strip().lower()
+            tool_directive = (
+                f"\n\n*** SPECIAL TOOL MODE: SWITCH MODE ***\n"
+                f"The student switched the reasoning lens to '{mode_arg}'. Acknowledge the switch and explain how this lens evaluates the current inquiry."
             )
 
         try:
             formatted_history = "\n".join(
                 f"{m.role.capitalize()}: {m.content}" for m in request.history
             )
-            system_prompt = (
-                "You are the Socratic Oracle, an elite dialectical tutor and epistemic evaluator engaging in a "
-                "focused multi-turn inquiry on a student's drafted learning document.\n\n"
-                "CORE PRINCIPLES (MANDATORY):\n"
-                "1. STRICT ANSWER-BLINDNESS & ZERO SOLUTION LEAKAGE:\n"
-                "   - You do NOT possess a model solution or answer key, and you MUST NEVER provide the thesis, solution, or conclusions for the student.\n"
-                "   - Never tell the student what to write. Never ghostwrite or solve their argument.\n"
-                "   - Demand that the STUDENT locate, quote, and interpret the primary source evidence.\n"
-                "2. TEMPORAL & DOMAIN BOUNDARY ENFORCEMENT:\n"
-                f"   - The inquiry boundary is strictly: {task_scope or 'Tudor Ireland, 1536–1603'}.\n"
-                "   - If the student mentions modern corporate topics (e.g. 'remote work', 'offices', 'efficiency') or out-of-era dates (e.g. 19th-century post-Union acts), "
-                "immediately call out the anachronism/domain drift and firmly redirect them back to the 16th-century Tudor inquiry.\n"
-                "3. CURRICULUM GRAPH PREREQUISITE STEPPING:\n"
-                "   - If the student's argument is confused or leaping to premature conclusions, use the prerequisite concepts from the Neo4j graph to ask backward-stepping foundational questions.\n"
-                "4. AUTONOMOUS HELPER AGENT (DOCUMENT SCRIBE) DELEGATION:\n"
-                "   - Section Scaffolding: When the student proposes assignment sections, formulate 'helper_delegation': {'action': 'scaffold_sections', 'section_titles': [...], 'target_page': 1}.\n"
-                "   - Validated Evidence Insertion: When the student substantiates a point with verified primary source citations or historical mechanisms from the 16th-century texts, "
-                "formulate 'helper_delegation': {'action': 'insert_claim', 'target_section': '<Section>', 'claim_text': '<Clean synthesized sentence of the student verified point>', 'target_page': 1}.\n"
-                "5. CRITERIA FOR SATISFACTION (is_satisfied = true):\n"
-                "   - When and ONLY WHEN the student provides genuine verified evidence satisfying the rubric, mark is_satisfied = true, epistemic_progress = 1.0, and provide suggested_revision.\n\n"
-                "OUTPUT FORMAT (STRICT JSON ONLY):\n"
-                "{\n"
-                '  "oracle_reply": "Your next Socratic response",\n'
-                '  "is_satisfied": boolean,\n'
-                '  "satisfaction_reason": "Brief diagnostic phrase explaining what was achieved or what is still missing",\n'
-                '  "current_probe_category": "challenge" | "why_ladder" | "assumptions" | "source" | "counterfactual" | "creative",\n'
-                '  "suggested_revision": "Refined sentence if satisfied, or null if not satisfied",\n'
-                '  "epistemic_progress": number between 0.1 and 1.0,\n'
-                '  "socratic_moves": ["next suggested move 1", "next suggested move 2"],\n'
-                '  "helper_delegation": {\n'
-                '    "action": "scaffold_sections" | "insert_claim" | null,\n'
-                '    "section_titles": ["Section 1", "Section 2"],\n'
-                '    "target_section": "Target Section Title",\n'
-                '    "claim_text": "Synthesized student claim",\n'
-                '    "target_page": 1\n'
-                '  }\n'
-                "}"
-            )
-            user_prompt = (
-                f"Assignment Prompt: {task_prompt}\n"
-                f"Historical Scope: {task_scope}\n"
-                f"Rubric Expectations:\n{rubric_context}\n"
-                f"Target Curriculum Concepts (Neo4j):\n{chr(10).join(target_kcs_info) if target_kcs_info else 'Standard domain concepts'}\n"
-                f"Course Primary Sources Available (pgvector RAG):\n{source_context}\n"
-                f"Paragraph Context: {surrounding}\n"
-                f"Targeted Sentence: \"{target_sentence}\"\n"
-                f"Epistemic Role: {request.epistemic_type}\n"
-                f"Prior Dialectic History:\n{formatted_history}\n"
-                f"Student's Latest Defense: \"{student_reply}\"\n"
-                f"Default Socratic Lens: {move_type}\n"
-            )
+            if (
+                brainstorms_structure
+                or requests_assignment_structure
+                or requests_canvas_update
+                or is_brainstorm_tool
+            ):
+                if requests_assignment_structure or requests_canvas_update:
+                    response_contract = (
+                        "a JSON object with section_titles (an array of exactly three distinct, course-specific "
+                        "analytical headings) and reasoning_focus (one sentence describing the conceptual tension "
+                        "these headings let the learner investigate)"
+                    )
+                elif brainstorms_structure:
+                    response_contract = (
+                        "a JSON object with one key, outline_options. Its value must be an array of exactly two "
+                        "objects. Each object must contain title (a short course-specific route name), section_titles "
+                        "(an array of exactly three course-specific analytical headings), and reasoning_focus (one "
+                        "sentence explaining the analytical tension)."
+                    )
+                else:
+                    response_contract = (
+                        '{"oracle_reply":"One concise, answer-blind response",'
+                        '"helper_delegation":null,"interactive_actions":[]}'
+                    )
+                system_prompt = (
+                    "Help a learner make a concrete next decision about the structure of their own assignment.\n"
+                    "Be direct and brief: 120 words maximum. Never give a finished answer, thesis, conclusion, or invented source.\n"
+                    "Obey the special tool mode precisely. Never repeat the assignment prompt or explain your role.\n"
+                    "Every option and heading must be substantively different. Placeholder labels, generic process "
+                    "labels, and copied output-instruction words are invalid.\n\n"
+                    f"Return strict JSON only as {response_contract}"
+                )
+                user_prompt = (
+                    f"{tool_directive}\n\n"
+                    f"Assignment task: {task_prompt or 'Not yet specified'}\n"
+                    f"Scope: {task_scope or 'Not yet specified'}\n"
+                    f"Provided materials:\n{source_context}\n"
+                    f"Student's Inquiry: \"{student_reply}\"\n"
+                )
+            else:
+                system_prompt = (
+                    "You are the Socratic Enquirer: a concise, supportive learning partner helping a learner complete their assignment.\n\n"
+                    "OPERATING RULES:\n"
+                    "1. Help the learner decide their own argument, evidence, and wording. Never provide a finished answer or write their work for them.\n"
+                    "2. Ground every factual suggestion in the supplied assignment and material excerpts. If the material does not support an answer, say what the learner could inspect.\n"
+                    f"3. Keep the inquiry within the stated scope: {task_scope or 'the assignment scope'}.\n"
+                    "4. Ask one useful next question or offer one small next step. Do not interrogate, score, or require a response.\n"
+                    "5. When the learner explicitly asks for an outline, return a helper_delegation with action='scaffold_sections'. It is only a proposal: the learner must explicitly accept it before the canvas changes.\n"
+                    "6. Never generate an insert_claim helper_delegation. The learner remains author of their prose.\n"
+                    "7. Return at most one optional interactive action, and only when it materially helps the learner.\n\n"
+                    "Return strict JSON only in this compact form:\n"
+                    "{\n"
+                    '  "oracle_reply": "One concise, answer-blind response",\n'
+                    '  "helper_delegation": {"action": "scaffold_sections", "section_titles": ["Section one", "Section two"], "target_page": 1} or null,\n'
+                    '  "interactive_actions": []\n'
+                    "}"
+                )
+                if requests_continuation:
+                    system_prompt += (
+                        "\n\nFor the current continuation request, return exactly one concise planning question. "
+                        "It must help the learner choose an analytical direction from the immediately preceding "
+                        "assistant message. Do not answer that message. Do not state historical facts, explain a "
+                        "policy, name an event, or provide a causal conclusion."
+                    )
+                user_prompt = (
+                    f"{tool_directive}\n\n"
+                    f"Assignment Prompt: {task_prompt}\n"
+                    f"Assignment scope: {task_scope}\n"
+                    f"Visible rubric expectations:\n{rubric_context}\n"
+                    f"Relevant curriculum concepts:\n{chr(10).join(target_kcs_info) if target_kcs_info else 'No concept map is available.'}\n"
+                    f"Provided material excerpts:\n{source_context}\n"
+                    f"Draft context: {surrounding}\n"
+                    f"Selected text or task: \"{target_sentence}\"\n"
+                    f"Conversation so far:\n{formatted_history}\n"
+                    f"Learner message: \"{student_reply}\"\n"
+                    f"Requested lens: {move_type}\n"
+                )
 
             seed = f"turn:{session_id}:{hashlib.sha256(student_reply.encode()).hexdigest()[:16]}:{len(request.history)}"
-            generation = await llm_orchestrator.enhance(
-                purpose="socratic_agent_dialectical_turn",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                deterministic_fallback=json.dumps({
-                    "oracle_reply": fallback_reply,
-                    "is_satisfied": fallback_satisfied,
-                    "satisfaction_reason": fallback_reason,
-                    "current_probe_category": fallback_category,
-                    "suggested_revision": fallback_revision,
-                    "epistemic_progress": fallback_progress,
-                    "socratic_moves": fallback_moves,
-                }),
-                pseudonymous_seed=seed,
-                max_characters=2500,
-                max_tokens=600,
-                allow_live=True,
+            output_token_budget = (
+                260
+                if (
+                    brainstorms_structure
+                    or requests_assignment_structure
+                    or requests_canvas_update
+                    or is_brainstorm_tool
+                )
+                else 140
+                if requests_continuation
+                else 180
             )
-            raw_content = generation.content.strip()
-            if raw_content.startswith("```"):
-                raw_content = re.sub(r"^```(?:json)?\n?", "", raw_content)
-                raw_content = re.sub(r"\n?```$", "", raw_content)
-            parsed = json.loads(raw_content)
+            parsed: dict[str, Any] | None = None
+            requires_response_repair = requests_continuation or is_brainstorm_tool
+            for attempt in range(2 if requires_response_repair else 1):
+                generation = await llm_orchestrator.enhance(
+                    purpose="socratic_agent_dialectical_turn",
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    deterministic_fallback="",
+                    pseudonymous_seed=f"{seed}:attempt:{attempt + 1}",
+                    # JSON framing means a 120-word response can safely exceed the
+                    # visible-reply length. Keep the generation short, while allowing
+                    # enough room for its required structured envelope.
+                    max_characters=1600,
+                    max_tokens=output_token_budget,
+                    allow_live=True,
+                    request_timeout_seconds=25.0,
+                    response_format={"type": "json_object"},
+                )
+                if not generation.metadata.used_live_provider:
+                    raise SocraticModelUnavailableError(
+                        "The Socratic Enquirer is unavailable. Your draft has not changed; please try again shortly."
+                    )
+                raw_content = generation.content.strip()
+                if raw_content.startswith("```"):
+                    raw_content = re.sub(r"^```(?:json)?\n?", "", raw_content)
+                    raw_content = re.sub(r"\n?```$", "", raw_content)
+                try:
+                    candidate = json.loads(raw_content)
+                except json.JSONDecodeError:
+                    candidate = None
+
+                if not requires_response_repair:
+                    parsed = candidate
+                    break
+
+                candidate_reply = (
+                    str(candidate.get("oracle_reply", "")).strip()
+                    if isinstance(candidate, dict)
+                    else ""
+                )
+                is_valid_continuation = (
+                    requests_continuation
+                    and candidate_reply.count("?") == 1
+                    and len(candidate_reply) <= 420
+                )
+                is_valid_brainstorm = (
+                    is_brainstorm_tool
+                    and 1 <= candidate_reply.count("?") <= 4
+                    and candidate_reply.rstrip().endswith("?")
+                    and len(candidate_reply) <= 900
+                )
+                if is_valid_continuation or is_valid_brainstorm:
+                    parsed = candidate
+                    break
+                if attempt == 0:
+                    if requests_continuation:
+                        logger.info("Repairing an invalid Socratic continuation response before returning it to the learner.")
+                        system_prompt += (
+                            "\n\nYour prior output did not meet the continuation contract. Correct it now: return valid JSON, "
+                            "with exactly one concise planning question in oracle_reply and no explanation or factual answer."
+                        )
+                    else:
+                        logger.info("Repairing an invalid brainstorming response before returning it to the learner.")
+                        system_prompt += (
+                            "\n\nYour prior output did not meet the brainstorming contract. Correct it now: return valid JSON, "
+                            "provide two or three concise analytical routes or tensions, and end oracle_reply with one question asking which route the learner wants to pursue."
+                        )
+                    continue
+                if requests_continuation:
+                    raise SocraticModelUnavailableError(
+                        "Writing help could not produce a valid follow-up after retrying. Your draft has not changed; please try again shortly."
+                    )
+                raise SocraticModelUnavailableError(
+                    "Writing help could not produce a valid brainstorm after retrying. Your draft has not changed; please try again shortly."
+                )
+
+            if not isinstance(parsed, dict):
+                raise SocraticModelUnavailableError(
+                    "The Socratic Enquirer returned an invalid response. Your draft has not changed; please try again shortly."
+                )
+            if (requests_assignment_structure or requests_canvas_update) and isinstance(parsed, dict):
+                raw_titles = parsed.get("section_titles")
+                if not isinstance(raw_titles, list):
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable section proposal. Your draft has not changed; please try again shortly."
+                    )
+                section_titles = [str(title).strip() for title in raw_titles if str(title).strip()]
+                invalid_titles = {
+                    "first analytical section",
+                    "second analytical section",
+                    "third analytical section",
+                }
+                if (
+                    len(section_titles) != 3
+                    or len({title.casefold() for title in section_titles}) != 3
+                    or any(title.casefold() in invalid_titles for title in section_titles)
+                ):
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable section proposal. Your draft has not changed; please try again shortly."
+                    )
+                helper_action = canvas_scribe_helper.generate_section_blocks(
+                    session_id,
+                    section_titles=section_titles,
+                    target_page=1,
+                )
+                return DialecticalTurnResponse(
+                    oracle_reply=(
+                        "I have prepared three empty sections for you to review. "
+                        "Nothing changes until you choose Add proposed sections."
+                    ),
+                    is_satisfied=False,
+                    satisfaction_reason="A learner-approved canvas structure is ready for review.",
+                    current_probe_category="creative",
+                    suggested_revision=None,
+                    epistemic_progress=0.2,
+                    socratic_moves=["Review the section proposal", "Choose whether to add it"],
+                    helper_action=helper_action,
+                    interactive_actions=[],
+                )
             if isinstance(parsed, dict) and parsed.get("oracle_reply"):
-                helper_action = fallback_helper_action
+                oracle_reply = str(parsed["oracle_reply"]).strip()
+                if requests_continuation and (oracle_reply.count("?") != 1 or len(oracle_reply) > 420):
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable follow-up. Your draft has not changed; please try again shortly."
+                    )
+                if brainstorms_structure or requests_assignment_structure:
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable outline proposal. Your draft has not changed; please try again shortly."
+                    )
+                helper_action = None
                 delegation = parsed.get("helper_delegation")
-                if isinstance(delegation, dict) and delegation.get("action"):
+                if (
+                    permits_canvas_structure
+                    and isinstance(delegation, dict)
+                    and delegation.get("action")
+                ):
                     action_type = delegation["action"]
                     if action_type == "scaffold_sections" and delegation.get("section_titles"):
+                        section_titles = [str(title).strip() for title in delegation["section_titles"]]
+                        section_titles = [title for title in section_titles if title][:4]
+                        if not section_titles:
+                            raise SocraticModelUnavailableError("The assistant returned an unusable outline proposal. Your draft has not changed; please try again shortly.")
                         helper_action = canvas_scribe_helper.generate_section_blocks(
                             session_id,
-                            section_titles=[str(t) for t in delegation["section_titles"]],
+                            section_titles=section_titles,
                             target_page=delegation.get("target_page", 1),
                         )
-                    elif action_type == "insert_claim" and delegation.get("claim_text"):
-                        helper_action = canvas_scribe_helper.generate_claim_block(
-                            session_id,
-                            validated_claim_text=str(delegation["claim_text"]),
-                            target_section=delegation.get("target_section"),
-                            target_page=delegation.get("target_page", 1),
-                        )
+
+                interactive_actions: list[EpistemicToolAction] = []
+                raw_actions = parsed.get("interactive_actions")
+                if not is_brainstorm_tool and isinstance(raw_actions, list):
+                    for act in raw_actions:
+                        if isinstance(act, dict) and act.get("label") and act.get("action_type"):
+                            icon_val = act.get("icon")
+                            if not icon_val:
+                                at = act.get("action_type")
+                                if at == "scaffold_section":
+                                    icon_val = "✦"
+                                elif at == "explore_prompt":
+                                    icon_val = "💡"
+                                elif at == "cite_source":
+                                    icon_val = "📜"
+                                else:
+                                    icon_val = "🔍"
+                            interactive_actions.append(
+                                EpistemicToolAction(
+                                    label=str(act["label"]),
+                                    action_type=act["action_type"],
+                                    icon=icon_val,
+                                    payload=act.get("payload") if isinstance(act.get("payload"), dict) else {},
+                                )
+                            )
 
                 return DialecticalTurnResponse(
-                    oracle_reply=str(parsed["oracle_reply"]).strip(),
+                    oracle_reply=oracle_reply,
                     is_satisfied=bool(parsed.get("is_satisfied", False)),
-                    satisfaction_reason=str(parsed.get("satisfaction_reason", fallback_reason)),
-                    current_probe_category=parsed.get("current_probe_category", fallback_category),
+                    satisfaction_reason=str(parsed.get("satisfaction_reason", "Dialectical evaluation complete.")),
+                    current_probe_category=parsed.get("current_probe_category", current_category),
                     suggested_revision=parsed.get("suggested_revision"),
-                    epistemic_progress=float(parsed.get("epistemic_progress", fallback_progress)),
-                    socratic_moves=[str(m) for m in parsed.get("socratic_moves", fallback_moves)],
+                    epistemic_progress=float(parsed.get("epistemic_progress", 0.35)),
+                socratic_moves=[str(m) for m in parsed.get("socratic_moves", ["Inspect a provided source", "Develop the reasoning connection"])],
                     helper_action=helper_action,
+                    interactive_actions=interactive_actions,
                 )
-        except Exception:
-            pass
-
-        return DialecticalTurnResponse(
-            oracle_reply=fallback_reply,
-            is_satisfied=fallback_satisfied,
-            satisfaction_reason=fallback_reason,
-            current_probe_category=fallback_category,
-            suggested_revision=fallback_revision,
-            epistemic_progress=fallback_progress,
-            socratic_moves=fallback_moves,
-            helper_action=fallback_helper_action,
-        )
+            if (brainstorms_structure or requests_assignment_structure) and isinstance(parsed, dict):
+                raw_options = parsed.get("outline_options")
+                if not isinstance(raw_options, list) or len(raw_options) != 2:
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable outline proposal. Your draft has not changed; please try again shortly."
+                    )
+                outline_options = [OutlineOption.model_validate(option) for option in raw_options]
+                normalized_titles = [option.title.strip().casefold() for option in outline_options]
+                if len(set(normalized_titles)) != 2:
+                    raise SocraticModelUnavailableError(
+                        "The assistant returned an unusable outline proposal. Your draft has not changed; please try again shortly."
+                    )
+                for option in outline_options:
+                    sections = [title.strip() for title in option.section_titles]
+                    placeholder_terms = {
+                        "short option name",
+                        "short alternative name",
+                        "first analytical section",
+                        "second analytical section",
+                        "third analytical section",
+                    }
+                    if len(set(title.casefold() for title in sections)) != 3 or any(
+                        re.search(r"\b(?:introduction|conclusion|summary)\b", title, re.IGNORECASE)
+                        for title in sections
+                    ) or option.title.strip().casefold() in placeholder_terms or any(
+                        title.casefold() in placeholder_terms for title in sections
+                    ) or "materially different comparison" in option.reasoning_focus.casefold():
+                        raise SocraticModelUnavailableError(
+                            "The assistant returned an unusable outline proposal. Your draft has not changed; please try again shortly."
+                        )
+                return DialecticalTurnResponse(
+                    oracle_reply="Here are two ways to organize the analysis. Which comparison gives you the clearest direction?",
+                    is_satisfied=False,
+                    satisfaction_reason="The learner has two answer-blind structures to consider.",
+                    current_probe_category="creative",
+                    suggested_revision=None,
+                    epistemic_progress=0.2,
+                    socratic_moves=["Choose one structure", "Inspect a provided source"],
+                    helper_action=None,
+                    interactive_actions=[],
+                    outline_options=outline_options,
+                )
+        except SocraticModelUnavailableError:
+            raise
+        except Exception as err:
+            logger.warning("Error in dialectical turn LLM generation: %s", err)
+            raise SocraticModelUnavailableError("The Socratic Enquirer returned an invalid response. Your draft has not changed; please try again shortly.") from err
 
 
 
 socratic_probe_service = SocraticProbeService()
-
