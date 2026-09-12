@@ -74,6 +74,21 @@ async def list_enrolled_courses(
         ) from e
 
 
+@router.get("/student-catalog")
+async def list_student_catalog(
+    student_id: Annotated[str, Query(min_length=1, description="Student identifier")],
+) -> list[dict]:
+    """Return the single availability projection used by the portal and course map."""
+    try:
+        return await course_service.list_student_catalog(student_id)
+    except Exception as e:
+        logger.exception("Error listing student course catalog")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list student course catalog: {e!s}",
+        ) from e
+
+
 @router.get("/{course_id}", response_model=CourseResponse)
 async def get_course(course_id: UUID) -> CourseResponse:
     """

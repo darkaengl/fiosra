@@ -116,6 +116,39 @@ class CourseService:
             return courses
 
     @classmethod
+    async def list_student_catalog(cls, student_id: str) -> list[dict[str, Any]]:
+        """Project a single student-safe course catalog with one canonical published milestone."""
+        # Imported lazily to avoid coupling the general course domain to authoring
+        # during application startup.
+        from fiosra.mvp.assignment_designer.generator import assignment_generator
+
+        courses = await cls.list_courses()
+        enrolled_course_ids = {
+            str(course.course_id) for course in await cls.list_enrolled_courses(student_id)
+        }
+        catalog: list[dict[str, Any]] = []
+        for course in courses:
+            public_assignments = await assignment_generator.list_public_assignments(
+                course_id=course.course_id,
+                status="published",
+            )
+            active_assignment = public_assignments[0].model_dump(mode="json") if public_assignments else None
+            if active_assignment:
+                public_contract = active_assignment.get("published") or {}
+                active_assignment["title"] = active_assignment.get("title") or public_contract.get("title", "Assignment")
+                active_assignment["prompt"] = active_assignment.get("prompt") or (
+                    public_contract.get("task") or {}
+                ).get("prompt", "")
+            course_data = course.model_dump(mode="json")
+            # Do not use the legacy nested assignment summary to determine
+            # availability. It can disagree with the student-safe projection.
+            course_data["active_assignment"] = active_assignment
+            course_data["is_enrolled"] = str(course.course_id) in enrolled_course_ids
+            course_data["is_available"] = active_assignment is not None
+            catalog.append(course_data)
+        return catalog
+
+    @classmethod
     async def get_course(cls, course_id: UUID | str) -> CourseResponse | None:
         """
         Fetches a course by ID with all sequential modules and active assignments.
