@@ -52,7 +52,7 @@
           highlight: { background: palette.border, border: '#ffffff' },
           hover: { background: palette.border, border: '#ffffff' },
         },
-        font: { color: '#f8fafc', face: 'Inter, sans-serif', size: 13, vadjust: -(size + 10), strokeWidth: 3, strokeColor: 'rgba(10,14,20,0.85)' },
+        font: { color: '#f8fafc', face: 'Inter, sans-serif', size: 10, vadjust: -(size + 8), strokeWidth: 2, strokeColor: 'rgba(10,14,20,0.85)' },
         borderWidth: 2,
         borderWidthSelected: 3,
         shadow: { enabled: true, color: `${palette.bg}99`, size: 14, x: 0, y: 0 },
