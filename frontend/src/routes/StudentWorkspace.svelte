@@ -236,11 +236,15 @@
       });
       if (existing.ok) {
         const session = (await existing.json()).session;
-        if (session.status === 'active') {
+        if (session.status === 'active' && session.assignment_id === assignmentId) {
           sessionId = persistedSessionId;
           sessionAccessToken = persistedAccessToken;
           sessionStatus = session.status;
+        } else {
+          localStorage.removeItem(key);
         }
+      } else {
+        localStorage.removeItem(key);
       }
     }
 
