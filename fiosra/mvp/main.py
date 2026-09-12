@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from fiosra.mvp.assignment_designer.router import router as assignment_router
 from fiosra.mvp.authoring.router import router as authoring_router
+from fiosra.mvp.concept_mastery.router import router as concept_mastery_router
 from fiosra.mvp.concepts.router import router as concept_graph_router
 from fiosra.mvp.config import settings
 from fiosra.mvp.courses.router import router as courses_router
@@ -50,6 +51,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(_text(
             "CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments (course_id);"
         ))
+        # Ensure the concept_mastery table exists (migration 009). Same idempotent
+        # startup pattern as enrollments above, for the same reason: docker
+        # docker-entrypoint-initdb.d only runs on first pgdata init.
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS concept_mastery (
+                student_id       VARCHAR(64)  NOT NULL,
+                course_id        UUID         NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
+                concept_id       VARCHAR(96)  NOT NULL,
+                state            VARCHAR(16)  NOT NULL DEFAULT 'unassessed',
+                score            NUMERIC(4,3) NOT NULL DEFAULT 0,
+                evidence_count   INT          NOT NULL DEFAULT 0,
+                last_evidence_at TIMESTAMPTZ,
+                updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (student_id, course_id, concept_id)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_concept_mastery_course ON concept_mastery (course_id);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_concept_mastery_student ON concept_mastery (student_id, course_id);"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()
@@ -84,6 +109,7 @@ app.include_router(evidence_router)
 app.include_router(assignment_router)
 app.include_router(courses_router)
 app.include_router(concept_graph_router)
+app.include_router(concept_mastery_router)
 app.include_router(authoring_router)
 
 # Mount Static UI Frontend (Svelte production build or legacy fallback)

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -6,11 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
+from fiosra.mvp.concept_mastery.service import concept_mastery_service
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
 from fiosra.mvp.evidence_dossier.synthesizer import evidence_dossier_synthesizer
 from fiosra.mvp.socratic_probe_service import socratic_probe_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/evidence", tags=["Evidence & AutoSCORE Dossier"])
 
 
@@ -32,11 +35,27 @@ async def _published_rubric(session_info: dict[str, Any]) -> list[dict[str, Any]
     ]
 
 
+class CriterionGradeInput(BaseModel):
+    """One rubric criterion's educator-assigned outcome, used to update concept mastery.
+
+    Optional: an educator can still finalise a grade with no per-criterion breakdown
+    (today's behavior) and mastery simply won't move for that session. See
+    docs/knowledge-graph-mastery-plan.md.
+    """
+
+    criterion_id: str = Field(min_length=1, max_length=96)
+    outcome: str = Field(pattern=r"^(met|partially_met|not_met)$")
+
+
 class FinaliseGradeRequest(BaseModel):
     approved_grade: str = Field(..., min_length=1, max_length=12, description="Educator-approved final grade")
     teacher_id: str = Field(default="teacher_sovereign_01", description="Educator ID finalizing the grade")
     teacher_override: bool = Field(default=False, description="Whether the educator overrode the suggested grade")
     feedback_comments: str = Field(default="", max_length=4000, description="Formative feedback notes")
+    criterion_grades: list[CriterionGradeInput] = Field(
+        default_factory=list,
+        description="Optional per-rubric-criterion outcomes; feeds the concept mastery overlay.",
+    )
 
 
 class FinaliseGradeResponse(BaseModel):
@@ -128,10 +147,16 @@ async def finalise_student_grade(session_id: UUID, request: FinaliseGradeRequest
             "teacher_id": request.teacher_id,
             "teacher_override": request.teacher_override,
             "feedback_comments": request.feedback_comments,
+            "criterion_grades": [grade.model_dump() for grade in request.criterion_grades],
         },
         assignment_id=session_info.get("assignment_id"),
     )
     await event_store.complete_session(session_id)
+    if request.criterion_grades:
+        try:
+            await concept_mastery_service.recompute_for_session(session_id)
+        except Exception:  # noqa: BLE001 - grading must still succeed if mastery scoring hiccups.
+            logger.exception("Concept mastery recompute failed for session %s", session_id)
     return {
         "session_id": str(session_id),
         "status": "completed",
