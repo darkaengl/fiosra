@@ -935,11 +935,12 @@ class SocraticProbeService:
 
         # 4. Check for non-answers, evasions, or dismissals
         cleaned_reply = student_reply.strip().lower().rstrip(".!?,")
-        is_evasion = cleaned_reply in {
+        is_slash_cmd = cleaned_reply.startswith("/")
+        is_evasion = not is_slash_cmd and (cleaned_reply in {
             "shoo", "go away", "bye", "bye bye", "goodbye", "no", "nah", "idk",
             "i dont know", "i don't know", "leave me alone", "stop", "whatever",
             "skip", "pass", "shut up", "asdf", "none", "nothing", "exit", "quit"
-        } or (len(cleaned_reply.split()) < 3 and not any(k in cleaned_reply for k in ("because", "evidence", "source", "due", "mechanism", "data", "proves")))
+        } or (len(cleaned_reply.split()) < 3 and not any(k in cleaned_reply for k in ("because", "evidence", "source", "due", "mechanism", "data", "proves"))))
 
         # 5. Check for Temporal / Out-of-Domain Drift (e.g. corporate remote work, 19th-century post-union acts)
         is_drift = any(
@@ -967,6 +968,8 @@ class SocraticProbeService:
         fallback_progress = 0.40
         fallback_helper_action = None
 
+        cmd_text = student_reply.strip().lower()
+
         if is_evasion:
             fallback_category = "challenge"
             fallback_reply = (
@@ -989,40 +992,144 @@ class SocraticProbeService:
             fallback_revision = None
             fallback_moves = ["Anchor in 1541 Crown of Ireland Act", "Contrast tanistry with feudal primogeniture"]
             fallback_progress = 0.20
-        elif any(k in student_reply.lower() for k in ("structure", "sections", "outline", "parts", "part 1")):
+        elif cmd_text.startswith("/hint"):
+            fallback_category = "source"
+            fallback_reply = (
+                "**Evidentiary Hint**: Examine Section 3 of the *Crown of Ireland Act (1541)* regarding how Brehon customary tenure "
+                "was converted into English letters patent, and compare this with Lord Deputy St. Leger's despatches on how tanistry "
+                "was abolished in favor of knight's service in capite. Notice how younger sons and secondary chieftains (*urritha*) "
+                "were disinherited by feudal primogeniture. How might this tenurial mechanism explain the eventual armed resistance in 1599?"
+            )
+            fallback_reason = "Answer-blind evidentiary hint provided from primary source statutory records."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Examine St. Leger despatches (1541)", "Analyze Section 3 of 1541 Act"]
+            fallback_progress = 0.35
+        elif cmd_text.startswith("/brainstorm"):
+            fallback_category = "creative"
+            fallback_reply = (
+                "**Brainstorming Angles & Competing Hypotheses**:\n\n"
+                "1. **Pragmatic Assimilation**: St. Leger's policy was a genuine attempt at peaceful, consensual constitutional integration "
+                "that was only derailed when militarist Dublin administrators imposed provincial sheriffs and martial law.\n"
+                "2. **Tenurial Destabilization**: The structural clash between clan ownership (tanistry) and individual feudal primogeniture "
+                "made civil war inevitable by disinheriting clan kinsmen.\n"
+                "3. **Fiscal Subjugation**: The Crown's true motive was extending wardships, liveries, and knight-service revenues rather than genuine legal integration.\n\n"
+                "Which of these hypotheses do your assigned primary sources support or complicate most strongly?"
+            )
+            fallback_reason = "Exploratory hypotheses brainstormed across institutional, cultural, and fiscal dimensions."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Select preferred working hypothesis", "Cite primary source for selected angle"]
+            fallback_progress = 0.40
+        elif cmd_text.startswith("/assumptions"):
+            fallback_category = "assumptions"
+            fallback_reply = (
+                "**Implicit Assumption Analysis**:\n\n"
+                "1. **Tenure Assumption**: You are assuming that Gaelic lords possessed exclusive private ownership over land, rather than acting as elective trustees under customary Brehon law.\n"
+                "2. **Institutional Alignment**: You assume royal letters patent were interpreted identically by Westminster lawyers and Irish clan septs.\n"
+                "3. **Causality Assumption**: You assume the 1599 confederation was triggered predominantly by tenurial grievances rather than religious and continental geopolitical alliances.\n\n"
+                "Which of these premises has the least empirical backing in your primary source texts?"
+            )
+            fallback_reason = "Implicit premises and tenurial assumptions extracted for examination."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Examine Brehon trustee model", "Analyze Hugh O'Neill 1599 grievances"]
+            fallback_progress = 0.45
+        elif cmd_text.startswith("/counter"):
+            fallback_category = "counterfactual"
+            fallback_reply = (
+                "**Steelman Counter-Argument**: A contemporary Tudor administrator (or modern constitutional historian) would argue that "
+                "the 1541 Act was an unprecedented triumph of conciliation: Gaelic magnates willingly attended the Dublin Parliament, "
+                "celebrated Henry VIII's coronation as King of Ireland, and welcomed English peerage titles (Earl of Tyrone, Earl of Thomond). "
+                "Therefore, the Nine Years' War was caused not by the policy itself, but by rogue opportunistic lords.\n\n"
+                "What primary source evidence from Hugh O'Neill's 1599 grievances directly refutes this counter-interpretation?"
+            )
+            fallback_reason = "Steelmanned historical counter-argument presented for thesis testing."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Address Bradshaw's conciliation thesis", "Cite disinheritance evidence from St. Leger"]
+            fallback_progress = 0.50
+        elif cmd_text.startswith("/why"):
+            fallback_category = "why_ladder"
+            fallback_reply = (
+                "**Why-Ladder Causal Probe**:\n\n"
+                "Why did substituting tanistry with English feudal primogeniture trigger violent resistance? "
+                "Step down the causal ladder: What happened to the *urritha* (sub-chieftains)? What happened to younger brothers? "
+                "Why could Brehon law not peacefully coexist with knight-service letters patent?"
+            )
+            fallback_reason = "Why-ladder inquiry into tenurial causality."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Trace urritha subordination", "Explain primogeniture disinheritance"]
+            fallback_progress = 0.50
+        elif cmd_text.startswith("/falsify"):
+            fallback_category = "challenge"
+            fallback_reply = (
+                "**Falsification Test**: What observation or documentary evidence would prove that your thesis is wrong? "
+                "If historical records showed that junior Gaelic kinsmen and secondary chieftains overwhelmingly endorsed primogeniture "
+                "and paid English quit-rents willingly throughout the 1580s, would your central argument still stand?"
+            )
+            fallback_reason = "Falsification test posed to evaluate epistemic boundaries."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = ["Define falsifying evidence condition", "Re-evaluate thesis boundary"]
+            fallback_progress = 0.55
+        elif cmd_text.startswith("/mode"):
+            mode_arg = cmd_text.replace("/mode", "").strip()
+            mode_names = {
+                "socratic": ("Socratic Inquirer", "Balanced inquiries into warrants and causal mechanisms."),
+                "adversarial": ("Adversarial Challenger", "Aggressive pressure testing, steelmanning counter-arguments and weak links."),
+                "brainstorm": ("Brainstorm & Exploration", "Hypothesis generation and divergent historical angles without premature closure."),
+                "structural": ("Assignment Architect", "Scaffolding assignment format, section outlines, and rubric alignment."),
+                "hint": ("Evidence Scaffolding", "Answer-blind hints pointing to statutory primary sources."),
+                "assumptions": ("Assumption Extractor", "Uncovering unstated premises and cognitive leaps."),
+            }
+            target_mode = mode_arg if mode_arg in mode_names else "socratic"
+            m_title, m_desc = mode_names[target_mode]
+            fallback_category = "challenge"
+            fallback_reply = (
+                f"**Switched to {m_title} Mode** (Epistemic Lens: `{target_mode}`).\n\n"
+                f"{m_desc}\n\n"
+                f"How would you like to apply this lens to your current inquiry on the 1541 Crown of Ireland Act and Surrender-and-Regrant?"
+            )
+            fallback_reason = f"Switched reasoning mode to {target_mode}."
+            fallback_satisfied = False
+            fallback_revision = None
+            fallback_moves = [f"Engage in {target_mode} lens", "Cite primary source evidence"]
+            fallback_progress = 0.40
+        elif cmd_text.startswith("/structure") or cmd_text.startswith("/outline") or any(k in student_reply.lower() for k in ("structure", "sections", "outline", "parts", "part 1")):
             # Autonomous structure scaffolding delegation
+            clean_cmd = re.sub(r"^/(structure|outline)\s*", "", student_reply, flags=re.IGNORECASE).strip()
             extracted_titles = []
-            if ":" in student_reply:
-                after_colon = student_reply.split(":", 1)[1]
+            if ":" in clean_cmd:
+                after_colon = clean_cmd.split(":", 1)[1]
                 parts = re.split(r",|\band\b|;|\n|\d+\)", after_colon)
                 extracted_titles = [p.strip().strip("\"'.,") for p in parts if len(p.strip()) > 2]
-            elif any(num in student_reply for num in ("1)", "1.", "1 -")):
-                parts = re.split(r"\d+[\.\)\-]", student_reply)
+            elif any(num in clean_cmd for num in ("1)", "1.", "1 -")):
+                parts = re.split(r"\d+[\.\)\-]", clean_cmd)
                 extracted_titles = [p.strip().strip("\"'.,") for p in parts if len(p.strip()) > 2]
+            elif len(clean_cmd.split(",")) >= 2:
+                extracted_titles = [p.strip().strip("\"'.,") for p in clean_cmd.split(",") if len(p.strip()) > 2]
             else:
-                extracted_titles = ["Historical Context", "Statutory Reform (1541)", "Tenurial Resistance"]
+                extracted_titles = [
+                    "I. Constitutional Sovereignty & The 1541 Act",
+                    "II. Tanistry vs. Feudal Primogeniture",
+                    "III. Institutional Breakdown & The Nine Years' War"
+                ]
 
-            if len(extracted_titles) >= 2:
-                fallback_helper_action = canvas_scribe_helper.generate_section_blocks(
-                    session_id, extracted_titles, target_page=1
-                )
-                sec_list = ", ".join(f"'{t}'" for t in extracted_titles)
-                fallback_reply = (
-                    f"I've instructed the helper agent to structure those {len(extracted_titles)} sections directly onto Page 1 of your canvas: {sec_list}. "
-                    f"Now, looking at '{extracted_titles[1] if len(extracted_titles) > 1 else extracted_titles[0]}', what primary source or statutory record anchors that point?"
-                )
-                fallback_reason = "Structured assignment sections scaffolded on canvas."
-                fallback_satisfied = False
-                fallback_progress = 0.50
-                fallback_category = "source"
-                fallback_moves = ["Cite primary source excerpt", "Establish statutory grounding"]
-            else:
-                fallback_category = "source"
-                fallback_reply = "What specific sections and thematic sequence do you envision for this analysis?"
-                fallback_reason = "Awaiting section breakdown."
-                fallback_satisfied = False
-                fallback_progress = 0.30
-                fallback_moves = ["Identify Section 1 topic", "Identify Section 2 topic"]
+            fallback_helper_action = canvas_scribe_helper.generate_section_blocks(
+                session_id, extracted_titles, target_page=1
+            )
+            sec_list = ", ".join(f"'{t}'" for t in extracted_titles)
+            fallback_reply = (
+                f"I've instructed the Canvas Scribe Helper Agent to scaffold your assignment structure directly onto Page 1: {sec_list}.\n\n"
+                f"The Left Document Outline has been updated. Looking at **'{extracted_titles[0]}'**, what primary source or statutory record anchors this first section?"
+            )
+            fallback_reason = "Structured assignment sections scaffolded on canvas."
+            fallback_satisfied = False
+            fallback_progress = 0.50
+            fallback_category = "source"
+            fallback_moves = ["Cite primary source excerpt", "Establish statutory grounding"]
         elif any(marker in student_reply.lower() for marker in ("1541", "crown of ireland", "st. leger", "brehon", "tanistry", "primogeniture", "earl of tyrone", "conn o'neill", "feudal tenure", "disinherited", "letters patent")):
             # Autonomous verified claim insertion delegation
             validated_claim = (

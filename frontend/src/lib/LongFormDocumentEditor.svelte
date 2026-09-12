@@ -19,6 +19,8 @@
     oraclePressure = 'socratic',
     onProbeResponse = async () => null,
     onChallengeIdea = async () => null,
+    onDrawerStateChange = () => null,
+    onPressureChange = () => null,
   } = $props();
 
   const blockTypes = {
@@ -75,6 +77,68 @@
   let epistemicProgress = $state(0.4);
   let activeMoveType = $state('challenge');
   let chatMessagesContainer = $state(null);
+  let showSlashMenu = $state(false);
+  let slashMenuIndex = $state(0);
+
+  const SLASH_COMMANDS = [
+    { cmd: '/structure', label: 'Structure Assignment', icon: '✦', desc: 'Scaffold sections onto canvas via Helper Agent' },
+    { cmd: '/hint', label: 'Evidentiary Hint', icon: '💡', desc: 'Answer-blind statutory hints from primary sources' },
+    { cmd: '/brainstorm', label: 'Brainstorm Angles', icon: '⚡', desc: 'Explore 3 competing historical hypotheses' },
+    { cmd: '/assumptions', label: 'Expose Assumptions', icon: '🔍', desc: 'Uncover hidden premises in your reasoning' },
+    { cmd: '/counter', label: 'Steelman Counter-Argument', icon: '🛡️', desc: 'Stress-test claim with historical opposition' },
+    { cmd: '/why', label: 'Why-Ladder Probe', icon: '🪜', desc: 'Drill into root causal mechanisms' },
+    { cmd: '/falsify', label: 'Falsification Test', icon: '🎯', desc: 'Test what evidence would prove you wrong' },
+    { cmd: '/mode socratic', label: 'Mode: Socratic Inquirer', icon: '●', desc: 'Balanced inquiries into warrants & causality' },
+    { cmd: '/mode adversarial', label: 'Mode: Adversarial', icon: '🔥', desc: 'Aggressive pressure testing & steelmanning' },
+    { cmd: '/mode brainstorm', label: 'Mode: Brainstorm', icon: '✦', desc: 'Hypothesis exploration without premature closure' },
+    { cmd: '/mode structural', label: 'Mode: Structural', icon: '⊞', desc: 'Section outlining & rubric scaffolding' },
+  ];
+
+  let filteredSlashCommands = $derived.by(() => {
+    if (!chatInputText.startsWith('/')) return [];
+    const q = chatInputText.toLowerCase().trim();
+    if (q === '/') return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter(c => c.cmd.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q.replace('/', '')));
+  });
+
+  export function toggleSocraticDrawer() {
+    if (activeSentence) {
+      closeSentenceChat();
+    } else {
+      openGeneralInquiry();
+    }
+  }
+
+  function openGeneralInquiry() {
+    const promptText = assignment?.task?.prompt || 'Tudor Ireland (1536–1603) Inquiry';
+    activeSentence = {
+      text: promptText,
+      epistemic_type: 'claim',
+      surrounding_context: assignment?.purpose || '',
+      is_general_inquiry: true,
+    };
+    isOracleSatisfied = false;
+    oracleSatisfactionReason = '';
+    suggestedRevision = null;
+    epistemicProgress = 0.35;
+    activeMoveType = 'socratic';
+    chatInputText = '';
+    chatMessages = [
+      {
+        role: 'oracle',
+        content: `I am your Socratic Oracle for this inquiry. We are examining:\n\n> *"${promptText}"*\n\nHow do you plan to establish your core thesis? You can use \`/structure\` to scaffold sections on the canvas, \`/brainstorm\` for historical angles, or \`/hint\` for statutory citations.`,
+        category: 'socratic',
+      }
+    ];
+    if (onDrawerStateChange) onDrawerStateChange(true);
+    triggerDecorationsUpdate();
+  }
+
+  function applySlashCommand(command) {
+    showSlashMenu = false;
+    chatInputText = '';
+    sendStudentMessage(command.cmd);
+  }
 
   // Sentence-level epistemic registry: key = sentence text or fingerprint -> classification
   let sentenceMap = $state({});
@@ -425,6 +489,7 @@
       requestSentenceInquiry(item.text, initialCategory, item.epistemic_type || 'claim');
     }
 
+    if (onDrawerStateChange) onDrawerStateChange(true);
     triggerDecorationsUpdate();
 
     // Smoothly scroll the sentence into view if needed
@@ -441,6 +506,8 @@
     chatInputText = '';
     isOracleSatisfied = false;
     suggestedRevision = null;
+    showSlashMenu = false;
+    if (onDrawerStateChange) onDrawerStateChange(false);
     triggerDecorationsUpdate();
   }
 
@@ -892,13 +959,23 @@
   }
 
   // --- Socratic Oracle Chat Actions ---
-  async function sendStudentMessage() {
-    const text = chatInputText.trim();
+  async function sendStudentMessage(explicitText = null) {
+    const raw = typeof explicitText === 'string' ? explicitText : chatInputText;
+    const text = raw.trim();
     if (!text || isOracleThinking || !activeSentence) return;
 
     chatInputText = '';
+    showSlashMenu = false;
     chatMessages = [...chatMessages, { role: 'student', content: text }];
     isOracleThinking = true;
+
+    if (text.startsWith('/mode')) {
+      const modeArg = text.replace('/mode', '').trim().toLowerCase();
+      if (modeArg && ['socratic', 'adversarial', 'brainstorm', 'structural', 'hint', 'assumptions'].includes(modeArg)) {
+        oraclePressure = modeArg;
+        if (onPressureChange) onPressureChange(modeArg);
+      }
+    }
 
     // Scroll chat feed
     setTimeout(() => {
@@ -1539,53 +1616,79 @@
     <aside class="socratic-chat-drawer" aria-label="Socratic Oracle Dialectic Panel">
       <!-- Drawer Header -->
       <div class="drawer-header">
-        <div class="drawer-header-title">
+        <div class="drawer-header-left">
           <div class="oracle-status-indicator" class:is-satisfied={isOracleSatisfied}>
-            <span class="status-pulse-dot"></span>
+            <span class="oracle-symbol">◌</span>
             <span class="oracle-name">Socratic Oracle</span>
           </div>
+          <button 
+            type="button" 
+            class="mode-badge-btn" 
+            onclick={() => { chatInputText = '/mode '; showSlashMenu = true; }}
+            title="Click to switch reasoning mode (or type /mode in chat)"
+          >
+            <span class="mode-dot">●</span>
+            <span class="mode-name">{oraclePressure || 'socratic'}</span>
+          </button>
           {#if isOracleSatisfied}
-            <span class="status-pill satisfied">✓ Standard Met</span>
+            <span class="status-pill satisfied">✓ Verified</span>
           {:else}
             <span class="status-pill probing">● Probing</span>
           {/if}
         </div>
-        <button type="button" class="drawer-close-btn" onclick={closeSentenceChat} title="Close chat (Esc)">
+        <button type="button" class="drawer-close-btn" onclick={closeSentenceChat} title="Close drawer (Esc)">
           ✕
         </button>
       </div>
 
       <!-- Active Sentence Quote Card -->
-      <div class="drawer-quote-card {activeSentence.epistemic_type || 'claim'}">
-        <div class="quote-meta-row">
-          <span class="epistemic-badge {activeSentence.epistemic_type || 'claim'}">
-            <span>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.icon || '🔵'}</span>
-            <strong>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.label || 'Claim'}</strong>
-          </span>
-          {#if activeSentence.targeted_vulnerability}
-            <span class="vulnerability-tag">
-              ⚠️ {activeSentence.targeted_vulnerability}
+      {#if activeSentence.is_general_inquiry}
+        <div class="drawer-quote-card general-inquiry">
+          <div class="quote-meta-row">
+            <span class="epistemic-badge general">
+              <span>✦</span>
+              <strong>Assignment Scope</strong>
             </span>
-          {/if}
+            <span class="vulnerability-tag info">
+              {oraclePressure} mode active
+            </span>
+          </div>
+          <blockquote class="sentence-text-quote general">
+            "{activeSentence.text}"
+          </blockquote>
         </div>
-        <blockquote class="sentence-text-quote">
-          "{activeSentence.text}"
-        </blockquote>
+      {:else}
+        <div class="drawer-quote-card {activeSentence.epistemic_type || 'claim'}">
+          <div class="quote-meta-row">
+            <span class="epistemic-badge {activeSentence.epistemic_type || 'claim'}">
+              <span>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.icon || '🔵'}</span>
+              <strong>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.label || 'Claim'}</strong>
+            </span>
+            {#if activeSentence.targeted_vulnerability}
+              <span class="vulnerability-tag">
+                ⚠️ {activeSentence.targeted_vulnerability}
+              </span>
+            {/if}
+          </div>
+          <blockquote class="sentence-text-quote">
+            "{activeSentence.text}"
+          </blockquote>
 
-        <!-- Minimalist Conversation Progress Indicator -->
-        <div class="conversation-progress-box">
-          <div class="progress-info-row">
-            <span class="progress-title">Conversation Progress</span>
-            <span class="progress-fraction">{Math.round(epistemicProgress * 100)}%</span>
-          </div>
-          <div class="progress-track-minimal">
-            <div 
-              class="progress-fill-minimal" 
-              style="width: {Math.max(10, Math.min(100, Math.round(epistemicProgress * 100)))}%"
-            ></div>
+          <!-- Minimalist Conversation Progress Indicator -->
+          <div class="conversation-progress-box">
+            <div class="progress-info-row">
+              <span class="progress-title">Conversation Progress</span>
+              <span class="progress-fraction">{Math.round(epistemicProgress * 100)}%</span>
+            </div>
+            <div class="progress-track-minimal">
+              <div 
+                class="progress-fill-minimal" 
+                style="width: {Math.max(10, Math.min(100, Math.round(epistemicProgress * 100)))}%"
+              ></div>
+            </div>
           </div>
         </div>
-      </div>
+      {/if}
 
       <!-- Multi-Turn Chat Feed -->
       <div class="chat-messages-stream" bind:this={chatMessagesContainer}>
@@ -1636,16 +1739,87 @@
 
       <!-- Chat Input Footer -->
       <footer class="drawer-input-footer">
+        <!-- Floating Slash Command Palette -->
+        {#if showSlashMenu && filteredSlashCommands.length > 0}
+          <div class="slash-command-menu" role="menu">
+            <div class="slash-menu-header">Epistemic Tools & Modes (Press Enter to select)</div>
+            {#each filteredSlashCommands as item, idx}
+              <button 
+                type="button" 
+                class="slash-menu-item" 
+                class:selected={idx === slashMenuIndex}
+                onclick={() => applySlashCommand(item)}
+              >
+                <span class="item-icon">{item.icon}</span>
+                <div class="item-details">
+                  <div class="item-top">
+                    <strong class="item-cmd">{item.cmd}</strong>
+                    <span class="item-label">{item.label}</span>
+                  </div>
+                  <small class="item-desc">{item.desc}</small>
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Quick Epistemic Action Pills -->
+        <div class="quick-epistemic-pills" aria-label="Epistemic Quick Actions">
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/structure')} title="Scaffold assignment structure onto canvas">
+            <span class="pill-icon">✦</span> /structure
+          </button>
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/hint')} title="Get primary source hint without solution leakage">
+            <span class="pill-icon">💡</span> /hint
+          </button>
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/brainstorm')} title="Brainstorm 3 competing historical angles">
+            <span class="pill-icon">⚡</span> /brainstorm
+          </button>
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/assumptions')} title="Expose implicit premises in your reasoning">
+            <span class="pill-icon">🔍</span> /assumptions
+          </button>
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/counter')} title="Challenge your claim with a steelmanned counter-argument">
+            <span class="pill-icon">🛡️</span> /counter
+          </button>
+          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/why')} title="Drill into root causal mechanisms">
+            <span class="pill-icon">🪜</span> /why
+          </button>
+        </div>
+
         <div class="input-controls-row">
           <textarea
             bind:value={chatInputText}
+            oninput={(e) => {
+              showSlashMenu = chatInputText.startsWith('/');
+              slashMenuIndex = 0;
+            }}
             onkeydown={(e) => {
+              if (showSlashMenu && filteredSlashCommands.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  slashMenuIndex = (slashMenuIndex + 1) % filteredSlashCommands.length;
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  slashMenuIndex = (slashMenuIndex - 1 + filteredSlashCommands.length) % filteredSlashCommands.length;
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  applySlashCommand(filteredSlashCommands[slashMenuIndex]);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  showSlashMenu = false;
+                  return;
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendStudentMessage();
               }
             }}
-            placeholder="Defend your premise, cite a source, or qualify your claim..."
+            placeholder="Type your defense, cite evidence, or type / for tools..."
             rows="2"
             class="drawer-textarea"
             disabled={isOracleThinking}
@@ -1661,7 +1835,7 @@
           </button>
         </div>
         <div class="input-hints-row">
-          <small>Press <strong>Enter ↵</strong> to send • <strong>Shift+Enter</strong> for newline</small>
+          <small>Type <strong>/</strong> for tools & modes • <strong>Enter ↵</strong> to send</small>
         </div>
       </footer>
     </aside>
@@ -2530,6 +2704,42 @@
     gap: 10px;
   }
 
+  .drawer-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .oracle-symbol {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--color-aurora, #0284c7);
+  }
+
+  .mode-badge-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px solid rgba(2, 132, 199, 0.22);
+    border-radius: 99px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-aurora, #0284c7);
+    cursor: pointer;
+    text-transform: capitalize;
+    transition: all 0.15s ease;
+  }
+  .mode-badge-btn:hover {
+    background: rgba(2, 132, 199, 0.18);
+    transform: translateY(-0.5px);
+  }
+  .mode-dot {
+    font-size: 8px;
+  }
+
   .oracle-status-indicator {
     display: flex;
     align-items: center;
@@ -2911,6 +3121,136 @@
     justify-content: flex-end;
     color: var(--color-slate-muted, #94a3b8);
     font-size: 10px;
+  }
+
+  /* Quick Epistemic Action Pills */
+  .quick-epistemic-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 0 6px;
+    scrollbar-width: none;
+  }
+  .quick-epistemic-pills::-webkit-scrollbar {
+    display: none;
+  }
+  .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-bone-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.1));
+    border-radius: 99px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-heading, #334155);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.14s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  .pill-btn:hover {
+    background: #f1f5f9;
+    border-color: #0284c7;
+    color: #0284c7;
+    transform: translateY(-0.5px);
+  }
+  .pill-icon {
+    font-size: 11px;
+  }
+
+  /* Floating Slash Command Menu */
+  .slash-command-menu {
+    position: relative;
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.12));
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    margin-bottom: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+  }
+  .slash-menu-header {
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-slate-muted, #94a3b8);
+    background: var(--color-bone-muted, #f8fafc);
+    border-bottom: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.06));
+  }
+  .slash-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+  }
+  .slash-menu-item:hover,
+  .slash-menu-item.selected {
+    background: rgba(2, 132, 199, 0.08);
+  }
+  .slash-menu-item .item-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .slash-menu-item .item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .slash-menu-item .item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slash-menu-item .item-cmd {
+    font-size: 12px;
+    font-family: monospace;
+    color: #0284c7;
+  }
+  .slash-menu-item .item-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-heading, #1e293b);
+  }
+  .slash-menu-item .item-desc {
+    font-size: 10.5px;
+    color: var(--color-slate-muted, #64748b);
+  }
+
+  .drawer-quote-card.general-inquiry {
+    border-left: 3px solid #0284c7;
+    background: rgba(2, 132, 199, 0.04);
+  }
+  .sentence-text-quote.general {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--color-heading, #1e293b);
+    line-height: 1.45;
+  }
+  .epistemic-badge.general {
+    background: rgba(2, 132, 199, 0.12);
+    color: #0284c7;
+  }
+  .vulnerability-tag.info {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
   }
 
   /* Active Sentence in Editor */

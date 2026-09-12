@@ -38,7 +38,19 @@
   let supportResult = $state(null);
   let isSupportBusy = $state(false);
   let liveBlocks = $state([]);
-  let oraclePressure = $state('socratic'); // 'silent' | 'socratic' | 'challenger' | 'ruthless'
+  let oraclePressure = $state('socratic'); // 'socratic' | 'adversarial' | 'brainstorm' | 'structural' | 'hint' | 'assumptions'
+  let isDrawerOpen = $state(false);
+
+  function toggleSocraticDrawer() {
+    if (activeWorkspaceTab !== 'canvas') {
+      activeWorkspaceTab = 'canvas';
+    }
+    setTimeout(() => {
+      if (editorRef && typeof editorRef.toggleSocraticDrawer === 'function') {
+        editorRef.toggleSocraticDrawer();
+      }
+    }, activeWorkspaceTab !== 'canvas' ? 50 : 0);
+  }
 
   let allDocumentBlocks = $derived.by(() => {
     if (liveBlocks && liveBlocks.length > 0) return liveBlocks;
@@ -587,21 +599,24 @@
       </nav>
 
       <div class="topbar-right">
-        <!-- Oracle Pressure Controller -->
-        <div class="oracle-pressure-widget" title="Oracle pressure controls how aggressively the Socratic tutor stress-tests your claims">
-          <span class="pressure-symbol">◌</span>
-          <select 
-            class="pressure-dropdown" 
-            bind:value={oraclePressure} 
-            onchange={handlePressureChange}
-            aria-label="Oracle Pressure Controller"
-          >
-            <option value="silent">○ Silent Observer</option>
-            <option value="socratic">● Socratic Inquirer</option>
-            <option value="challenger">⚡ Adversarial Challenger</option>
-            <option value="ruthless">🔥 Ruthless Pressure</option>
-          </select>
-        </div>
+        <!-- Socratic Enquirer Tactile Button (Not a dropdown) -->
+        <button 
+          type="button" 
+          class="socratic-enquirer-btn" 
+          class:active={isDrawerOpen}
+          onclick={toggleSocraticDrawer}
+          title="Open Socratic Enquirer (Press ⌘K or click) — Switch modes in chat with /mode"
+          aria-label="Open Socratic Enquirer"
+        >
+          <span class="enquirer-icon-wrap">
+            <span class="enquirer-symbol">◌</span>
+            {#if isDrawerOpen}
+              <span class="enquirer-pulse-dot"></span>
+            {/if}
+          </span>
+          <span class="enquirer-label">Socratic Enquirer</span>
+          <span class="enquirer-mode-pill">{oraclePressure}</span>
+        </button>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
@@ -779,6 +794,8 @@
               onProbeDefer={(id) => changeProbe(id, 'defer')}
               onProbeDismiss={(id) => changeProbe(id, 'dismiss')}
               onChallengeIdea={handleChallengeIdea}
+              onDrawerStateChange={(open) => isDrawerOpen = open}
+              onPressureChange={(p) => oraclePressure = p}
             />
           {/if}
         </main>
@@ -2187,39 +2204,77 @@
   .support-result-card p,.support-result-card li { color: var(--color-slate-light); font-size: 11px; line-height: 1.5; margin: 0; }
   .support-result-card ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
 
-  /* Oracle Pressure Topbar Widget */
-  .oracle-pressure-widget {
+  /* Socratic Enquirer Tactile Trigger Button (Not a dropdown) */
+  .socratic-enquirer-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: var(--color-graphite, #ffffff);
+    gap: 8px;
+    background: var(--color-surface, #ffffff);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
     border-radius: var(--radius-sm, 6px);
-    padding: 3px 8px;
-    transition: all 0.15s ease;
+    padding: 5px 12px;
+    font-family: var(--font-ui, sans-serif);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-heading, #121418);
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
-  .oracle-pressure-widget:hover {
-    background: var(--color-graphite-hover, #f1f2ed);
+  .socratic-enquirer-btn:hover {
+    background: var(--color-graphite-hover, #f8f9fa);
     border-color: var(--color-aurora, #0284c7);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12);
   }
-  .pressure-symbol {
-    font-size: 12px;
+  .socratic-enquirer-btn.active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.09), rgba(99, 102, 241, 0.09));
+    border-color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #0284c7);
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+  }
+  .enquirer-icon-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .enquirer-symbol {
+    font-size: 13.5px;
     font-weight: 800;
     color: var(--color-aurora, #0284c7);
+    transition: transform 0.2s ease;
   }
-  .pressure-dropdown {
-    background: transparent;
-    border: none;
-    color: var(--color-heading, #121418);
-    font-family: var(--font-ui, sans-serif);
-    font-size: 12px;
-    font-weight: 600;
-    outline: none;
-    cursor: pointer;
+  .socratic-enquirer-btn:hover .enquirer-symbol {
+    transform: scale(1.15);
   }
-  .pressure-dropdown option {
-    background: var(--color-graphite, #ffffff);
-    color: var(--color-heading, #121418);
+  .enquirer-pulse-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 6px #10b981;
+  }
+  .enquirer-label {
+    letter-spacing: -0.01em;
+  }
+  .enquirer-mode-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: capitalize;
+    background: rgba(2, 132, 199, 0.09);
+    color: var(--color-aurora, #0284c7);
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid rgba(2, 132, 199, 0.2);
+  }
+  .socratic-enquirer-btn.active .enquirer-mode-pill {
+    background: var(--color-aurora, #0284c7);
+    color: #ffffff;
+    border-color: var(--color-aurora, #0284c7);
   }
 
   /* Reasoning Graph & Claim Tree Panel */
