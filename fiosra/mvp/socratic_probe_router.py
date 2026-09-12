@@ -6,10 +6,16 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, status
 
 from fiosra.mvp.socratic_probe_schemas import (
+    DialecticalTurnRequest,
+    DialecticalTurnResponse,
+    EpistemicClassifyRequest,
+    EpistemicClassifyResponse,
     ProbeDispositionResponse,
     ProbeEvaluationRequest,
     ProbeEvaluationResponse,
     ProbeListResponse,
+    SentenceInquireRequest,
+    SentenceInquireResponse,
     SubmitProbeResponseRequest,
 )
 from fiosra.mvp.socratic_probe_service import (
@@ -96,3 +102,45 @@ async def dismiss_proactive_probe(
         return await socratic_probe_service.dismiss_probe(session_id, session_token, probe_id)
     except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
         _raise_probe_error(error)
+
+
+@router.post("/epistemic-classify", response_model=EpistemicClassifyResponse)
+async def classify_epistemic_structure(
+    session_id: UUID,
+    request: EpistemicClassifyRequest,
+    session_token: SessionToken = None,
+) -> EpistemicClassifyResponse:
+    """Classify each sentence's epistemic role with LLM-backed evaluation and targeted Socratic probes."""
+    try:
+        return await socratic_probe_service.classify_sentences(session_id, session_token, request)
+    except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
+        _raise_probe_error(error)
+
+
+@router.post("/sentence-inquire", response_model=SentenceInquireResponse)
+async def inquire_sentence_dialectics(
+    session_id: UUID,
+    request: SentenceInquireRequest,
+    session_token: SessionToken = None,
+) -> SentenceInquireResponse:
+    """Execute an on-demand bespoke Socratic Agent inquiry examining an individual sentence."""
+    try:
+        return await socratic_probe_service.inquire_sentence(session_id, session_token, request)
+    except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
+        _raise_probe_error(error)
+
+
+@router.post("/dialectical-turn", response_model=DialecticalTurnResponse)
+async def process_dialectical_turn(
+    session_id: UUID,
+    request: DialecticalTurnRequest,
+    session_token: SessionToken = None,
+) -> DialecticalTurnResponse:
+    """Evaluate student reasoning in an active multi-turn dialectical exchange until satisfied."""
+    try:
+        return await socratic_probe_service.dialectical_turn(session_id, session_token, request)
+    except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
+        _raise_probe_error(error)
+
+
+

@@ -15,7 +15,9 @@ services:
       - NEO4J_PASSWORD=fiosra_neo4j_password
       - HOST=0.0.0.0
       - PORT=8000
-      - FIOSRA_LLM_PROVIDER=${FIOSRA_LLM_PROVIDER:-ollama}
+      - FIOSRA_LLM_PROVIDER=${FIOSRA_LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini/gemini-3.6-flash}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_API_BASE=${OPENROUTER_API_BASE:-https://openrouter.ai/api/v1}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free}

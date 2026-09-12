@@ -241,3 +241,148 @@ async def test_probes_reject_nonmember_blocks_and_submitted_sessions(monkeypatch
             f"/learning-documents/sessions/{session['session_id']}/probes", headers=headers
         )
         assert blocked.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_epistemic_classify_sentences():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        classify_url = f"/learning-documents/sessions/{session['session_id']}/probes/epistemic-classify"
+
+        sentences = [
+            "Remote work inherently maximizes organizational efficiency.",
+            "This assumes all team members possess high autonomy.",
+            "According to the 2023 remote productivity dataset, output rose by 12%.",
+            "Because asynchronous communication reduces meeting fragmentation, deep work intervals increase.",
+            "Therefore, physical offices will become completely obsolete.",
+        ]
+
+        text_corpus = " ".join(sentences)
+        response = await client.post(
+            classify_url,
+            headers=headers,
+            json={"text": text_corpus, "oracle_pressure": "socratic"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sentences"]) >= 4
+        types = [item["epistemic_type"] for item in data["sentences"]]
+        assert "claim" in types or "assumption" in types
+        assert "evidence" in types
+        # Verify sentences returned are typed
+        for item in data["sentences"]:
+            assert item["sentence"]
+            assert item["epistemic_type"] in ["claim", "evidence", "reasoning", "assumption", "premature_closure"]
+
+
+@pytest.mark.asyncio
+async def test_sentence_inquire_socratic_agent():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        inquire_url = f"/learning-documents/sessions/{session['session_id']}/probes/sentence-inquire"
+
+        # Challenge inquiry
+        response = await client.post(
+            inquire_url,
+            headers=headers,
+            json={
+                "sentence": "Therefore, physical offices will become completely obsolete.",
+                "epistemic_type": "premature_closure",
+                "surrounding_context": "Remote work increases deep focus. Therefore, physical offices will become completely obsolete.",
+                "move_type": "challenge",
+                "oracle_pressure": "socratic",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["oracle_probe"].endswith("?")
+        assert len(data["socratic_moves"]) >= 2
+        assert data["move_type"] == "challenge"
+        assert data["targeted_vulnerability"]
+
+        # Why ladder inquiry
+        why_response = await client.post(
+            inquire_url,
+            headers=headers,
+            json={
+                "sentence": "Because asynchronous communication reduces meeting fragmentation, deep work intervals increase.",
+                "epistemic_type": "reasoning",
+                "move_type": "why_ladder",
+            },
+        )
+        assert why_response.status_code == 200
+        why_data = why_response.json()
+        assert why_data["oracle_probe"].endswith("?")
+        assert why_data["move_type"] == "why_ladder"
+
+
+@pytest.mark.asyncio
+async def test_dialectical_turn_socratic_oracle(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        turn_url = f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn"
+
+        # Turn 1: Incomplete / ungrounded defense -> Oracle remains unsatisfied and asks follow-up
+        response_incomplete = await client.post(
+            turn_url,
+            headers=headers,
+            json={
+                "sentence": "Therefore, physical offices will become completely obsolete.",
+                "epistemic_type": "premature_closure",
+                "history": [
+                    {
+                        "role": "oracle",
+                        "content": "What empirical evidence supports your claim that physical offices will become completely obsolete?",
+                    }
+                ],
+                "student_reply": "I just think everyone likes working from home more.",
+                "move_type": "challenge",
+            },
+        )
+        assert response_incomplete.status_code == 200
+        data1 = response_incomplete.json()
+        assert "oracle_reply" in data1
+        assert not data1["is_satisfied"]
+        assert data1["suggested_revision"] is None
+        assert data1["epistemic_progress"] < 1.0
+
+        # Turn 2: Rigorous empirical defense -> Oracle is satisfied and provides suggested revision
+        response_rigorous = await client.post(
+            turn_url,
+            headers=headers,
+            json={
+                "sentence": "Therefore, physical offices will become completely obsolete.",
+                "epistemic_type": "premature_closure",
+                "history": [
+                    {
+                        "role": "oracle",
+                        "content": "What empirical evidence supports your claim that physical offices will become completely obsolete?",
+                    },
+                    {
+                        "role": "student",
+                        "content": "I just think everyone likes working from home more.",
+                    },
+                    {
+                        "role": "oracle",
+                        "content": "What verifiable source excerpt demonstrates that preference eliminates commercial office need?",
+                    },
+                ],
+                "student_reply": (
+                    "According to Source 1 on the 1881 Land Act agrarian reforms, structural economic displacement "
+                    "does not happen purely by preference; rather, as demonstrated by the economic dataset, "
+                    "hybrid occupancy models persist specifically because collaborative legal synthesis requires co-location."
+                ),
+                "move_type": "source",
+            },
+        )
+        assert response_rigorous.status_code == 200
+        data2 = response_rigorous.json()
+        assert data2["is_satisfied"] is True
+        assert data2["satisfaction_reason"]
+        assert data2["suggested_revision"] is not None
+        assert data2["epistemic_progress"] >= 0.9
+

@@ -177,24 +177,26 @@
           >
             Course Map
           </a>
-          <a
-            href="#/student/sources{parsed.courseQuery}"
-            class="nav-pill {parsed.activeTab === 'student-sources' ? 'active' : ''}"
-          >
-            Primary Sources
-          </a>
-          <a
-            href="#/student{parsed.courseQuery}"
-            class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
-          >
-            Reasoning Canvas
-          </a>
-          <a
-            href="#/student/trace{parsed.courseQuery}"
-            class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
-          >
-            Evidence Trace
-          </a>
+          {#if parsed.activeTab !== 'student-canvas'}
+            <a
+              href="#/student/sources{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-sources' ? 'active' : ''}"
+            >
+              Primary Sources
+            </a>
+            <a
+              href="#/student{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
+            >
+              Reasoning Canvas
+            </a>
+            <a
+              href="#/student/trace{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
+            >
+              Evidence Trace
+            </a>
+          {/if}
         {/if}
       {:else}
         <a

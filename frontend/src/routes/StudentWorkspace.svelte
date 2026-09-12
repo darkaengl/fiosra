@@ -23,9 +23,9 @@
   let documentHeadings = $state([]);
   let isLoading = $state(true);
 
-  // Sidebar and Panel Controls
   let isSidebarOpen = $state(true);
-  let activeSidebarTab = $state('scope'); // 'scope' | 'outline' | 'trace'
+  let activeSidebarTab = $state('scope'); // 'scope' | 'outline' | 'graph' | 'trace'
+  let activeWorkspaceTab = $state('canvas'); // 'materials' | 'canvas' | 'trace'
   let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
   let probeResponse = $state('');
@@ -37,6 +37,75 @@
   let editorRef = $state(null);
   let supportResult = $state(null);
   let isSupportBusy = $state(false);
+  let liveBlocks = $state([]);
+  let oraclePressure = $state('socratic'); // 'silent' | 'socratic' | 'challenger' | 'ruthless'
+
+  let allDocumentBlocks = $derived.by(() => {
+    if (liveBlocks && liveBlocks.length > 0) return liveBlocks;
+    return (learningDocument?.blocks || []).map((b) => ({
+      block_id: b.block_id,
+      block_type: b.block_type,
+      plaintext: b.plaintext || '',
+      semantic_type: b.semantic_type || b.content?.attrs?.semanticType || 'claim',
+      position: b.position,
+      section_id: b.section_id,
+    }));
+  });
+
+  let graphMetrics = $derived.by(() => {
+    let c = 0, e = 0, w = 0, a = 0, p = 0;
+    for (const b of allDocumentBlocks) {
+      const sem = b.semantic_type;
+      if (sem === 'claim') c++;
+      else if (sem === 'evidence') e++;
+      else if (sem === 'reasoning') w++;
+      else if (sem === 'assumption') a++;
+      if (probes.some((pr) => pr.block_id === b.block_id && pr.status !== 'superseded')) p++;
+    }
+    return { claims: c, evidence: e, warrants: w, assumptions: a, probes: p };
+  });
+
+  let graphSections = $derived.by(() => {
+    const sections = [];
+    let currentSec = {
+      heading: { text: 'Provisional Claims & Thesis', level: 2, pos: 0 },
+      blocks: [],
+    };
+
+    for (const b of allDocumentBlocks) {
+      if (b.block_type === 'heading') {
+        if (currentSec.blocks.length > 0) {
+          sections.push(currentSec);
+        }
+        currentSec = {
+          heading: { text: b.plaintext || 'Section', level: 2, pos: b.position },
+          blocks: [],
+        };
+      } else {
+        const text = b.plaintext ? b.plaintext.trim() : '';
+        if (text.length > 3) {
+          const sem = b.semantic_type || 'claim';
+          const hasProbe = probes.some((pr) => pr.block_id === b.block_id && pr.status !== 'superseded');
+          const hasPremature = /(?:therefore|thus|hence|in conclusion|consequently)\b/i.test(text) && !/(?:source|evidence|data|table|figure)\b/i.test(text);
+          const icon = sem === 'evidence' ? '📜' : sem === 'reasoning' ? '⚡' : sem === 'assumption' ? '⚠️' : sem === 'counter' ? '🔄' : sem === 'conclusion' ? '🏁' : '🎯';
+          const label = sem.charAt(0).toUpperCase() + sem.slice(1);
+          currentSec.blocks.push({
+            block_id: b.block_id,
+            text: text.slice(0, 110),
+            semanticType: sem,
+            icon,
+            label,
+            hasProbe,
+            hasPremature,
+          });
+        }
+      }
+    }
+    if (currentSec.blocks.length > 0 || sections.length === 0) {
+      sections.push(currentSec);
+    }
+    return sections;
+  });
 
   let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
@@ -312,6 +381,58 @@
     await changeProbe(probe.probe_id, 'responses', { response_text: probeResponse.trim() });
   }
 
+  async function handleInlineProbeResponse(probeId, responseText) {
+    const existing = probes.find((p) => p.probe_id === probeId);
+    if (existing) {
+      await changeProbe(probeId, 'responses', { response_text: responseText });
+    } else {
+      if (sessionId) {
+        try {
+          await fetch(`/events/session/${sessionId}`, {
+            method: 'POST',
+            headers: sessionHeaders(),
+            body: JSON.stringify({
+              event_type: 'socratic_inquiry_answered',
+              payload: { block_id: probeId, response_text: responseText, pressure: oraclePressure },
+            }),
+          });
+        } catch (e) {
+          console.warn('Logging inline inquiry answer:', e);
+        }
+        await loadSessionEvents();
+        await loadProbes();
+      }
+    }
+  }
+
+  async function handleChallengeIdea(blockId, text, moveType = 'challenge') {
+    if (!sessionId) return;
+    try {
+      await fetch(`/events/session/${sessionId}`, {
+        method: 'POST',
+        headers: sessionHeaders(),
+        body: JSON.stringify({
+          event_type: 'socratic_move_triggered',
+          payload: { block_id: blockId, move_type: moveType, text: text.slice(0, 200), pressure: oraclePressure },
+        }),
+      });
+      await loadSessionEvents();
+    } catch (e) {
+      console.warn('Logging Socratic move:', e);
+    }
+  }
+
+  function handlePressureChange() {
+    const msgs = {
+      silent: 'Oracle is in Silent Observer mode: Questions only on request.',
+      socratic: 'Oracle is in Socratic Inquirer mode: Balanced inquiries into warrants and causal mechanisms.',
+      challenger: 'Oracle is in Adversarial Challenger mode: Actively pushing counter-hypotheses.',
+      ruthless: 'Oracle is in Ruthless Pressure mode: Stress-testing every unexamined premise and closure leap.',
+    };
+    probeNotice = msgs[oraclePressure] || 'Oracle mode updated.';
+    setTimeout(() => { if (probeNotice === msgs[oraclePressure]) probeNotice = ''; }, 6000);
+  }
+
   function insertSourceFromSidebar(source) {
     if (editorRef?.insertSourceQuote) {
       editorRef.insertSourceQuote(source);
@@ -327,6 +448,22 @@
   function handleHeadingJump(pos) {
     if (editorRef?.scrollToHeading) {
       editorRef.scrollToHeading(pos);
+    }
+  }
+
+  async function submitSession() {
+    if (!sessionId || sessionStatus !== 'active') return;
+    if (!confirm('Are you ready to submit your verified reasoning milestone for educator evaluation?')) return;
+    try {
+      const res = await fetch(`/events/session/${sessionId}/submit`, {
+        method: 'POST',
+        headers: sessionHeaders(),
+      });
+      if (res.ok) {
+        sessionStatus = 'submitted';
+      }
+    } catch (e) {
+      console.error('Submit error:', e);
     }
   }
 
@@ -390,271 +527,449 @@
   </main>
 {:else}
   <div class="workspace-viewport">
-    <!-- Top Control Bar -->
+    <!-- Top Control Bar with Segmented Horizontal Navigation -->
     <header class="workspace-topbar">
       <div class="topbar-left">
-        <button 
-          class="sidebar-toggle-btn" 
-          class:active={isSidebarOpen}
-          onclick={() => isSidebarOpen = !isSidebarOpen}
-          title="Toggle Navigation & Learning Context Sidebar"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-          <span>{isSidebarOpen ? 'Hide Sidebar' : 'Sidebar'}</span>
-        </button>
-
         <div class="assignment-headline">
-          <span class="eyebrow">Reasoning Milestone</span>
+          <span class="eyebrow">{published?.domain || 'Reasoning Milestone'}</span>
           <h1>{published?.title || 'Assignment'}</h1>
         </div>
       </div>
 
-      <div class="topbar-right">
-        {#if courseId}
-          <a
-            class="role-switch-btn"
-            style="padding: 5px 10px; font-size: 11.5px; text-decoration: none;"
-            href={`#/student/sources?course_id=${encodeURIComponent(courseId)}`}
-            title="Open Course Primary Sources Reader"
-          >
-            <span>📖 Sources</span>
-          </a>
-        {/if}
+      <!-- Center: 3 Primary Horizontal Workspace Tabs -->
+      <nav class="workspace-horizontal-tabs" role="tablist" aria-label="Workspace Navigation">
+        <button 
+          type="button"
+          class="tab-btn" 
+          class:active={activeWorkspaceTab === 'materials'}
+          onclick={() => activeWorkspaceTab = 'materials'}
+          role="tab"
+          aria-selected={activeWorkspaceTab === 'materials'}
+        >
+          <span class="tab-icon">📖</span>
+          <span class="tab-label">Assignment & Materials</span>
+          <span class="tab-pill">{publicSources.length} sources</span>
+        </button>
 
         <button 
-          class="tutor-toggle-btn" 
-          class:active={isTutorPanelOpen}
-          onclick={toggleTutorPanel}
-          title="Open optional writing support"
+          type="button"
+          class="tab-btn" 
+          class:active={activeWorkspaceTab === 'canvas'}
+          onclick={() => activeWorkspaceTab = 'canvas'}
+          role="tab"
+          aria-selected={activeWorkspaceTab === 'canvas'}
         >
-          <span class="probe-dot" class:has-probes={probes.length > 0}></span>
-          <span>Writing support</span>
+          <span class="tab-icon">✍️</span>
+          <span class="tab-label">Reasoning Canvas</span>
+          <span class="tab-pill canvas-pill">{allDocumentBlocks.length > 0 ? `${allDocumentBlocks.length} blocks` : 'Draft'}</span>
+        </button>
+
+        <button 
+          type="button"
+          class="tab-btn" 
+          class:active={activeWorkspaceTab === 'trace'}
+          onclick={() => activeWorkspaceTab = 'trace'}
+          role="tab"
+          aria-selected={activeWorkspaceTab === 'trace'}
+        >
+          <span class="tab-icon">🎓</span>
+          <span class="tab-label">Engagement Trace</span>
           {#if probes.length > 0}
-            <span class="probe-count-pill">{probes.length}</span>
+            <span class="tab-pill alert-pill">{probes.length} probes</span>
+          {:else}
+            <span class="tab-pill">Portfolio</span>
           {/if}
         </button>
+      </nav>
+
+      <div class="topbar-right">
+        <!-- Oracle Pressure Controller -->
+        <div class="oracle-pressure-widget" title="Oracle pressure controls how aggressively the Socratic tutor stress-tests your claims">
+          <span class="pressure-symbol">◌</span>
+          <select 
+            class="pressure-dropdown" 
+            bind:value={oraclePressure} 
+            onchange={handlePressureChange}
+            aria-label="Oracle Pressure Controller"
+          >
+            <option value="silent">○ Silent Observer</option>
+            <option value="socratic">● Socratic Inquirer</option>
+            <option value="challenger">⚡ Adversarial Challenger</option>
+            <option value="ruthless">🔥 Ruthless Pressure</option>
+          </select>
+        </div>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
     </header>
 
-    <!-- 3-Zone Workspace Layout Container -->
-    <div class="workspace-grid" class:sidebar-closed={!isSidebarOpen} class:tutor-open={isTutorPanelOpen}>
-      
-      <!-- ZONE 1: LEFT SIDEBAR WITH VERTICAL NAVIGATION -->
-      {#if isSidebarOpen}
-        <aside class="workspace-sidebar" aria-label="Learning Materials and Navigation Sidebar">
-          <!-- Vertically Stacked Navigation Switcher -->
-          <div class="sidebar-nav-stack" role="tablist">
-            <button 
-              class="nav-item-btn" 
-              class:active={activeSidebarTab === 'scope'}
-              onclick={() => activeSidebarTab = 'scope'}
-              role="tab"
-              aria-selected={activeSidebarTab === 'scope'}
-            >
-              <div class="nav-item-left">
-                <span class="nav-icon">📋</span>
-                <span class="nav-title">Assignment</span>
-              </div>
-              <span class="nav-badge">{publicSources.length} sources</span>
-            </button>
-
-            <button 
-              class="nav-item-btn" 
-              class:active={activeSidebarTab === 'outline'}
-              onclick={() => activeSidebarTab = 'outline'}
-              role="tab"
-              aria-selected={activeSidebarTab === 'outline'}
-            >
-              <div class="nav-item-left">
-                <span class="nav-icon">📑</span>
-                <span class="nav-title">Document Outline</span>
-              </div>
-              <span class="nav-badge">{documentHeadings.length} sec</span>
-            </button>
-
-            <button 
-              class="nav-item-btn" 
-              class:active={activeSidebarTab === 'trace'}
-              onclick={() => activeSidebarTab = 'trace'}
-              role="tab"
-              aria-selected={activeSidebarTab === 'trace'}
-            >
-              <div class="nav-item-left">
-                <span class="nav-icon">✓</span>
-                <span class="nav-title">Rubric</span>
-              </div>
-              <span class="nav-badge">{published?.public_rubric?.length || 0} criteria</span>
-            </button>
-          </div>
-
-          <!-- Active Sidebar View Body -->
-          <div class="sidebar-tab-body">
-            <!-- VIEW 1: CONSOLIDATED SCOPE & ALLOWED SOURCES -->
-            {#if activeSidebarTab === 'scope'}
-              <div class="tab-panel scope-panel">
-                <div class="section-card">
-                  <span class="card-eyebrow">Why this matters</span>
-                  <p class="prompt-text">{published?.purpose}</p>
-                </div>
-
-                <div class="section-card">
-                  <span class="card-eyebrow">Your task</span>
-                  <p class="prompt-text">{published?.task?.prompt}</p>
-                  <p class="scope-text"><strong>Scope:</strong> {published?.task?.scope}</p>
-                  <p class="scope-text"><strong>Deliverable:</strong> {published?.task?.deliverable}</p>
-                </div>
-
-                <div class="section-card">
-                  <span class="card-eyebrow">What you will practice</span>
-                  <ul class="goal-list">
-                    {#each published?.learning_goals || [] as goal}<li>{goal}</li>{/each}
-                  </ul>
-                </div>
-
-                <div class="section-card sources-section">
-                  <div class="sources-header-bar">
-                    <span class="card-eyebrow">Assigned materials ({publicSources.length})</span>
+    <!-- Workspace Content Body with 3 Horizontal Tabs -->
+    <div class="workspace-content-body">
+      <!-- ============================================================ -->
+      <!-- TAB 1: ASSIGNMENT, PRIMARY SOURCES & PUBLIC RUBRICS          -->
+      <!-- ============================================================ -->
+      {#if activeWorkspaceTab === 'materials'}
+        <div class="materials-tab-viewport">
+          <div class="materials-grid-container">
+            <!-- Left / Main Column: Brief, Task Scope & Primary Sources -->
+            <div class="materials-main-col">
+              <!-- Task Prompt & Purpose Card -->
+              <section class="materials-card hero-prompt-card">
+                <span class="card-eyebrow">Milestone Brief & Task</span>
+                <h2 class="task-prompt-heading">{published?.task?.prompt || 'No prompt specified.'}</h2>
+                {#if published?.purpose}
+                  <div class="purpose-callout">
+                    <strong>Why this matters:</strong>
+                    <p>{published.purpose}</p>
                   </div>
-                  
-                  <div class="source-search-box">
-                    <input 
-                      type="text" 
-                      placeholder="Filter allowed sources..."
-                      bind:value={sourceSearchQuery}
-                      class="sidebar-search-input"
-                    />
+                {/if}
+                <div class="scope-tags-row">
+                  <div class="scope-tag">
+                    <span class="tag-label">Deliverable:</span>
+                    <strong>{published?.task?.deliverable || 'Argumentative Essay'}</strong>
                   </div>
-
-                  <div class="sources-stream">
-                    {#each filteredSources as source}
-                      <div class="source-evidence-card">
-                        <div class="source-top">
-                          <span class="source-tag">Assigned material</span>
-                          <h6>{source.title || 'Course Material'}</h6>
-                        </div>
-                        <blockquote class="source-body">{source.excerpt || 'No excerpt available.'}</blockquote>
-                        <p class="source-guidance">{source.relevance_guidance}</p>
-                        <div class="source-bottom">
-                          <button class="cite-action-btn" onclick={() => insertSourceFromSidebar(source)}>
-                            <span>+ Use in my draft</span>
-                          </button>
-                          {#if source.source_url}<a class="source-link" href={source.source_url} target="_blank" rel="noreferrer">Open source ↗</a>{/if}
-                        </div>
-                      </div>
-                    {:else}
-                      <div class="empty-state">
-                        <p>No assigned materials match your search.</p>
-                      </div>
-                    {/each}
+                  <div class="scope-tag">
+                    <span class="tag-label">Permitted Scope:</span>
+                    <strong>{published?.task?.scope || 'Course scope'}</strong>
                   </div>
                 </div>
-              </div>
+              </section>
 
-            <!-- VIEW 2: DOCUMENT OUTLINE & SECTION STEPS (Migrated from toolbar) -->
-            {:else if activeSidebarTab === 'outline'}
-              <div class="tab-panel outline-panel">
-                <div class="section-card">
-                  <span class="card-eyebrow">Active Document Outline</span>
-                  <p class="outline-hint">Click any heading to jump to that section in your draft.</p>
-                  
-                  <div class="headings-tree">
-                    {#each documentHeadings as heading, i}
-                      <button 
-                        class="outline-tree-item level-{heading.level}"
-                        onclick={() => handleHeadingJump(heading.pos)}
-                      >
-                        <span class="heading-num">{i + 1}</span>
-                        <span class="heading-label">{heading.text}</span>
-                      </button>
-                    {:else}
-                      <div class="empty-outline-box">
-                        <p>No headings in document yet.</p>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-
-                <div class="section-card">
-                  <span class="card-eyebrow">+ Add a section</span>
-                  <div class="preset-grid">
-                    <button class="preset-btn" onclick={() => addSectionFromSidebar('claim')}>
-                      <span>🎯 Main idea</span>
-                    </button>
-                    <button class="preset-btn" onclick={() => addSectionFromSidebar('evidence')}>
-                      <span>📜 Source notes</span>
-                    </button>
-                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reasoning')}>
-                      <span>⚡ Explanation</span>
-                    </button>
-                    <button class="preset-btn" onclick={() => addSectionFromSidebar('alternative')}>
-                      <span>🔄 Consider another view</span>
-                    </button>
-                    <button class="preset-btn" onclick={() => addSectionFromSidebar('reflection')}>
-                      <span>🔍 Revision notes</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            <!-- VIEW 3: PUBLIC RUBRIC -->
-            {:else if activeSidebarTab === 'trace'}
-              <div class="tab-panel trace-panel">
-                <div class="trace-header">
+              <!-- Primary Source Pack (Deep Reader) -->
+              <section class="materials-card sources-section-card">
+                <div class="sources-header-bar">
                   <div>
-                    <span class="card-eyebrow">How your work is evaluated</span>
-                    <span class="trace-count">Use this rubric to review your draft before submitting.</span>
+                    <span class="card-eyebrow">Grounding Evidence Pack</span>
+                    <h3>Primary Source Readings ({publicSources.length})</h3>
                   </div>
+                  <input
+                    type="search"
+                    class="sources-search-box"
+                    placeholder="Search source titles or text..."
+                    bind:value={sourceSearchQuery}
+                  />
                 </div>
 
-                <div class="rubric-list">
+                <div class="sources-deck-grid">
+                  {#each filteredSources as source}
+                    <article class="source-reader-item">
+                      <div class="source-reader-header">
+                        <span class="source-type-pill">{source.resource_type || 'Primary Source'}</span>
+                        <h4>{source.title}</h4>
+                      </div>
+                      <div class="source-excerpt-content">
+                        <p>{source.excerpt}</p>
+                      </div>
+                      <div class="source-reader-footer">
+                        <div class="relevance-guidance-box">
+                          <strong>Why assigned:</strong> {source.relevance_guidance}
+                        </div>
+                        <button 
+                          type="button" 
+                          class="btn-cite-to-canvas"
+                          onclick={() => { activeWorkspaceTab = 'canvas'; }}
+                          title="Switch to Reasoning Canvas"
+                        >
+                          Write with Source ✍️
+                        </button>
+                      </div>
+                    </article>
+                  {:else}
+                    <p class="empty-sources-msg">No sources match your search query.</p>
+                  {/each}
+                </div>
+              </section>
+            </div>
+
+            <!-- Right Column: Learning Goals, Rubric & Checklist -->
+            <div class="materials-side-col">
+              <!-- Milestone Goals -->
+              {#if published?.learning_goals?.length}
+                <section class="materials-card">
+                  <span class="card-eyebrow">Learning Goals</span>
+                  <ul class="materials-goals-list">
+                    {#each published.learning_goals as goal}
+                      <li>✓ {goal}</li>
+                    {/each}
+                  </ul>
+                </section>
+              {/if}
+
+              <!-- Public Rubric Criteria -->
+              <section class="materials-card rubric-overview-card">
+                <span class="card-eyebrow">Assessment Rubric</span>
+                <h3>Evaluation Criteria ({published?.public_rubric?.length || 0})</h3>
+                <div class="rubric-items-stack">
                   {#each published?.public_rubric || [] as criterion}
-                    <article class="rubric-card">
-                      <div class="rubric-heading"><strong>{criterion.title}</strong>{#if criterion.weight}<span>{criterion.weight}%</span>{/if}</div>
-                      <p>{criterion.description}</p>
-                      <div class="rubric-levels">{#each criterion.levels as level}<div><strong>{level.label}</strong><small>{level.description}</small></div>{/each}</div>
-                      <p class="self-review"><strong>Self-review:</strong> {criterion.self_review_prompt}</p>
+                    <article class="rubric-overview-item">
+                      <div class="rubric-item-header">
+                        <strong>{criterion.title}</strong>
+                        {#if criterion.weight}
+                          <span class="rubric-weight-chip">{criterion.weight}%</span>
+                        {/if}
+                      </div>
+                      <p class="rubric-item-desc">{criterion.description}</p>
+                      <div class="rubric-levels-mini-grid">
+                        {#each criterion.levels as level}
+                          <div class="level-mini-box">
+                            <span class="level-title">{level.label}</span>
+                            <small>{level.description}</small>
+                          </div>
+                        {/each}
+                      </div>
+                      <p class="rubric-self-review">
+                        <em>Self-review prompt: {criterion.self_review_prompt}</em>
+                      </p>
                     </article>
                   {/each}
                 </div>
-              </div>
-            {/if}
+              </section>
+
+              <!-- Completion Checklist & Integrity Notice -->
+              <section class="materials-card checklist-card">
+                <span class="card-eyebrow">Readiness Checklist</span>
+                <ul class="checklist-items-stack">
+                  {#each published?.completion_checklist || [] as check}
+                    <li>◻ {check}</li>
+                  {/each}
+                </ul>
+                <div class="integrity-notice-box">
+                  <small>🔒 {published?.integrity_notice || 'Your educator evaluates the final submission.'}</small>
+                </div>
+              </section>
+            </div>
           </div>
-        </aside>
+        </div>
       {/if}
 
-      <!-- ZONE 2: CENTER REASONING CANVAS -->
-      <main class="canvas-main-area">
-        {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-        {#if probeNotice && !isTutorPanelOpen}
-          <button class="probe-alert-bar" onclick={toggleTutorPanel}>
-            💡 {probeNotice} (Open writing support)
-          </button>
-        {/if}
+      <!-- ============================================================ -->
+      <!-- TAB 2: REASONING CANVAS (Always preserved in DOM)            -->
+      <!-- ============================================================ -->
+      <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
+        <main class="canvas-main-area">
+          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          {#if probeNotice}
+            <div class="probe-alert-bar">
+              💡 {probeNotice}
+            </div>
+          {/if}
 
-        {#if learningDocument}
-          <LongFormDocumentEditor
-            bind:this={editorRef}
-            {learningDocument}
-            {assignment}
-            disabled={sessionStatus !== 'active'}
-            onSync={syncDocument}
-            onSynced={scheduleProbeEvaluation}
-            onOpenQuestions={toggleTutorPanel}
-            onHeadingsChange={(h) => documentHeadings = h}
-            probeCount={probes.length}
-          />
-        {/if}
-      </main>
+          {#if learningDocument}
+            <LongFormDocumentEditor
+              bind:this={editorRef}
+              {learningDocument}
+              {assignment}
+              {sessionId}
+              {sessionAccessToken}
+              disabled={sessionStatus !== 'active'}
+              onSync={syncDocument}
+              onSynced={scheduleProbeEvaluation}
+              onOpenQuestions={() => { activeWorkspaceTab = 'trace'; }}
+              onOpenSources={() => { activeWorkspaceTab = 'materials'; }}
+              onHeadingsChange={(h) => documentHeadings = h}
+              onBlocksChange={(b) => liveBlocks = b}
+              probes={probes}
+              probeCount={probes.length}
+              oraclePressure={oraclePressure}
+              onProbeResponse={handleInlineProbeResponse}
+              onProbeDefer={(id) => changeProbe(id, 'defer')}
+              onProbeDismiss={(id) => changeProbe(id, 'dismiss')}
+              onChallengeIdea={handleChallengeIdea}
+            />
+          {/if}
+        </main>
+      </div>
 
-      <!-- ZONE 3: RIGHT SOCRATIC PROBE PANEL (Inline push-layout) -->
+      <!-- ============================================================ -->
+      <!-- TAB 3: ENGAGEMENT TRACE & REASONING PORTFOLIO               -->
+      <!-- ============================================================ -->
+      {#if activeWorkspaceTab === 'trace'}
+        <div class="trace-tab-viewport">
+          <div class="trace-dashboard-container">
+            <!-- Top Metric Banner -->
+            <div class="trace-metrics-banner">
+              <div class="trace-stat-tile">
+                <span class="stat-num claims">{graphMetrics.claims}</span>
+                <span class="stat-lbl">Claims Drafted</span>
+              </div>
+              <div class="trace-stat-tile">
+                <span class="stat-num evidence">{graphMetrics.evidence}</span>
+                <span class="stat-lbl">Evidence Grounded</span>
+              </div>
+              <div class="trace-stat-tile">
+                <span class="stat-num warrants">{graphMetrics.warrants}</span>
+                <span class="stat-lbl">Causal Warrants</span>
+              </div>
+              <div class="trace-stat-tile">
+                <span class="stat-num assumptions">{graphMetrics.assumptions}</span>
+                <span class="stat-lbl">Implicit Assumptions</span>
+              </div>
+              <div class="trace-stat-tile">
+                <span class="stat-num probes">{probes.length}</span>
+                <span class="stat-lbl">Active Probes</span>
+              </div>
+            </div>
+
+            <!-- Two-Column Trace Grid -->
+            <div class="trace-two-col-grid">
+              <!-- Left Column: Living Reasoning Graph Tree -->
+              <div class="trace-panel-card graph-map-card">
+                <header class="panel-card-header">
+                  <div>
+                    <span class="card-eyebrow">Living Argument Architecture</span>
+                    <h3>Reasoning Graph & Claim Tree</h3>
+                  </div>
+                </header>
+
+                <div class="trace-graph-tree-body">
+                  {#if graphSections.length === 0}
+                    <div class="empty-trace-state">
+                      <p>Start writing in the Reasoning Canvas to see your living argument tree assemble in real time.</p>
+                      <button type="button" class="btn btn-secondary" onclick={() => activeWorkspaceTab = 'canvas'}>
+                        Open Canvas ✍️
+                      </button>
+                    </div>
+                  {:else}
+                    <div class="graph-root-node">
+                      <div class="node-badge-chip root">Central Thesis</div>
+                      <h5>{published?.task?.prompt || published?.title || 'Thesis'}</h5>
+                    </div>
+
+                    {#each graphSections as section, sIdx}
+                      <div class="graph-section-group">
+                        <div class="section-branch-header">
+                          <span class="branch-connector">├─ Section {sIdx + 1}:</span>
+                          <span class="sec-title">{section.heading.text}</span>
+                        </div>
+                        <div class="section-children-tree">
+                          {#each section.blocks as item}
+                            <div class="graph-claim-node {item.semanticType}" class:has-probe={item.hasProbe}>
+                              <div class="claim-node-top">
+                                <span class="claim-badge-icon">{item.icon}</span>
+                                <span class="claim-type-label">{item.label}</span>
+                                {#if item.hasProbe}
+                                  <span class="claim-status-tag probe">◌ Socratic Tension</span>
+                                {:else if item.semanticType === 'evidence'}
+                                  <span class="claim-status-tag grounded">✓ Grounding</span>
+                                {:else if item.hasPremature}
+                                  <span class="claim-status-tag premature">🔴 Premature Leap</span>
+                                {:else if item.semanticType === 'claim'}
+                                  <span class="claim-status-tag ungrounded">? Needs Warrant</span>
+                                {/if}
+                              </div>
+                              <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
+                              <div class="claim-node-actions">
+                                <button 
+                                  type="button" 
+                                  class="node-jump-btn"
+                                  onclick={() => {
+                                    activeWorkspaceTab = 'canvas';
+                                    setTimeout(() => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(item.block_id); }, 60);
+                                  }}
+                                  title="Jump to this block in canvas"
+                                >
+                                  Jump to Canvas ↗
+                                </button>
+                                <button 
+                                  type="button" 
+                                  class="node-probe-btn"
+                                  onclick={() => {
+                                    activeWorkspaceTab = 'canvas';
+                                    setTimeout(() => { if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(item.block_id); }, 60);
+                                  }}
+                                  title="Examine Socratic inquiry on this block"
+                                >
+                                  ◌ Examine ⚡
+                                </button>
+                              </div>
+                            </div>
+                          {:else}
+                            <p class="empty-leaf-note">No claims drafted in this section yet.</p>
+                          {/each}
+                        </div>
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Right Column: Socratic Inquiry Dossier & Milestone Submission -->
+              <div class="trace-panel-card trace-dossier-card">
+                <header class="panel-card-header">
+                  <div>
+                    <span class="card-eyebrow">Epistemic Audit & Dossier</span>
+                    <h3>Socratic Inquiries & Justifications</h3>
+                  </div>
+                </header>
+
+                <div class="trace-dossier-body">
+                  <!-- Milestone Submission Action Tile -->
+                  <div class="milestone-submission-banner">
+                    <div class="submission-meta">
+                      <span class="sub-badge" class:submitted={sessionStatus === 'submitted'}>
+                        {sessionStatus === 'submitted' ? '✓ Submitted for Review' : '● In Progress (Draft)'}
+                      </span>
+                      <h4>Reasoning Milestone Verification</h4>
+                      <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
+                    </div>
+                    {#if sessionStatus === 'submitted'}
+                      <div class="submission-complete-pill">
+                        <span>Milestone safely submitted to instructor. Your reasoning audit trace is preserved.</span>
+                      </div>
+                    {:else}
+                      <button 
+                        type="button" 
+                        class="btn-submit-milestone" 
+                        onclick={submitSession}
+                        disabled={graphMetrics.claims === 0}
+                      >
+                        Submit Milestone for Evaluation 🚀
+                      </button>
+                    {/if}
+                  </div>
+
+                  <!-- Dossier Events List -->
+                  <h4 class="dossier-section-title">Dialectic Inquiry History ({sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe')).length})</h4>
+                  
+                  <div class="dossier-events-stack">
+                    {#each sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe') || e.event_type === 'milestone_submitted') as evt}
+                      <div class="dossier-event-item">
+                        <div class="event-header-row">
+                          <span class="event-type-pill {evt.event_type}">{evt.event_type.replace(/_/g, ' ')}</span>
+                          <span class="event-time">{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ''}</span>
+                        </div>
+                        {#if evt.payload?.text}
+                          <p class="event-text"><em>"{evt.payload.text}"</em></p>
+                        {/if}
+                        {#if evt.payload?.response_text}
+                          <div class="event-student-note">
+                            <strong>Student Note:</strong> {evt.payload.response_text}
+                          </div>
+                        {/if}
+                        {#if evt.payload?.move_type}
+                          <span class="event-move-tag">Move: {evt.payload.move_type}</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="empty-dossier-state">
+                        <p>No Socratic inquiries recorded yet. As you engage with the Oracle and answer probes, your epistemic reasoning history will be collected here.</p>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Optional Flyout Support Panel (Toggleable from Top Bar) -->
       {#if isTutorPanelOpen}
-        <aside class="socratic-tutor-column" aria-label="Optional writing support">
+        <aside class="socratic-tutor-column flyout-mode" aria-label="Optional writing support">
           <header class="tutor-header">
             <div>
-                    <span class="eyebrow">Optional support</span>
-                    <h3>Writing support</h3>
+              <span class="eyebrow">Optional support</span>
+              <h3>Writing support</h3>
             </div>
             <button class="close-panel-btn" onclick={() => isTutorPanelOpen = false} title="Close Panel (Esc)">✕</button>
           </header>
@@ -727,7 +1042,6 @@
           </div>
         </aside>
       {/if}
-
     </div>
   </div>
 {/if}
@@ -877,477 +1191,805 @@
     border-color: rgba(217, 119, 6, 0.25);
   }
 
-  /* Main 3-Zone Workspace Grid */
-  .workspace-grid {
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    transition: all 0.2s ease;
-  }
-
-  .workspace-grid.sidebar-closed {
-    grid-template-columns: 0px 1fr;
-  }
-
-  .workspace-grid.tutor-open {
-    grid-template-columns: 340px 1fr 380px;
-  }
-
-  .workspace-grid.sidebar-closed.tutor-open {
-    grid-template-columns: 0px 1fr 380px;
-  }
-
-  /* ZONE 1: LEFT SIDEBAR */
-  .workspace-sidebar {
-    background: var(--color-graphite);
-    border-right: 1px solid var(--color-graphite-border);
+  /* Horizontal Tabs in Top Control Bar */
+  .workspace-horizontal-tabs {
     display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 5;
-  }
-
-  /* Vertical Navigation Menu */
-  .sidebar-nav-stack {
-    display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 4px;
-    padding: 10px 12px;
-    background: var(--color-bone-muted);
-    border-bottom: 1px solid var(--color-graphite-border);
+    background: var(--pill-bg, rgba(0, 0, 0, 0.04));
+    border: 1px solid var(--pill-border, rgba(0, 0, 0, 0.08));
+    border-radius: 99px;
+    padding: 3px 5px;
   }
 
-  .nav-item-btn {
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs);
-    padding: 8px 10px;
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 99px;
     font-size: 12px;
     font-weight: 600;
     color: var(--color-slate-light);
+    background: transparent;
+    border: none;
     cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .tab-btn:hover {
+    color: var(--color-heading);
+    background: var(--pill-hover, rgba(0, 0, 0, 0.05));
+  }
+
+  .tab-btn.active {
+    color: var(--color-heading);
+    background: var(--color-bone-surface, #ffffff);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
+    font-weight: 700;
+  }
+
+  .tab-icon {
+    font-size: 13px;
+  }
+
+  .tab-label {
+    letter-spacing: 0.1px;
+  }
+
+  .tab-pill {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+    background: var(--pill-bg, rgba(0, 0, 0, 0.06));
+    color: var(--color-slate-muted);
+  }
+
+  .tab-btn.active .tab-pill {
+    background: rgba(139, 92, 246, 0.15);
+    color: #7c3aed;
+  }
+
+  .tab-pill.canvas-pill {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+  }
+
+  .tab-pill.alert-pill {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fcd34d;
+  }
+
+  /* Workspace Content Body Container */
+  .workspace-content-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Canvas Tab Wrapper (Always mounted to preserve cursor/undo/state) */
+  .canvas-tab-wrapper {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .canvas-tab-wrapper.tab-hidden {
+    display: none !important;
+  }
+
+  .canvas-main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+  }
+
+  .error-banner {
+    margin: 12px 24px 0;
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: var(--radius-sm);
+    color: #fca5a5;
+    font-size: 12px;
+  }
+
+  .probe-alert-bar {
+    margin: 12px 24px 0;
+    padding: 10px 16px;
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: var(--radius-sm);
+    color: #c4b5fd;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+  }
+
+  .probe-alert-bar:hover {
+    background: rgba(139, 92, 246, 0.25);
+  }
+
+  /* ============================================================ */
+  /* TAB 1: MATERIALS & ASSIGNMENT VIEWPORT                       */
+  /* ============================================================ */
+  .materials-tab-viewport {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 28px 36px;
+    background: var(--color-obsidian);
+  }
+
+  .materials-grid-container {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 28px;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .materials-main-col, .materials-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .materials-card {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 12px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .hero-prompt-card {
+    border-top: 3px solid var(--color-horizon-blue);
+  }
+
+  .task-prompt-heading {
+    margin: 0;
+    font-family: var(--font-brand);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-heading);
+    line-height: 1.45;
+  }
+
+  .purpose-callout {
+    background: rgba(59, 130, 246, 0.08);
+    border-left: 3px solid #3b82f6;
+    padding: 12px 16px;
+    border-radius: var(--radius-xs);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--color-slate-light);
+  }
+
+  .purpose-callout strong {
+    color: #93c5fd;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .purpose-callout p {
+    margin: 0;
+  }
+
+  .scope-tags-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .scope-tag {
+    background: var(--color-bone-muted);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .scope-tag .tag-label {
+    color: var(--color-slate-muted);
+  }
+
+  .scope-tag strong {
+    color: var(--color-heading);
+  }
+
+  /* Sources Deck in Materials */
+  .sources-header-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    transition: all 0.12s ease;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-graphite-border);
   }
 
-  .nav-item-btn:hover {
-    background: var(--color-graphite-hover);
+  .sources-header-bar h3 {
+    margin: 2px 0 0;
+    font-size: 16px;
     color: var(--color-heading);
   }
 
-  .nav-item-btn.active {
-    background: var(--color-graphite);
-    border-color: var(--color-graphite-border);
-    color: var(--color-heading);
-    font-weight: 700;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .nav-item-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .nav-icon { font-size: 14px; }
-  .nav-title { font-size: 12px; }
-
-  .nav-badge {
-    font-size: 10px;
-    color: var(--color-slate-subtle);
-    background: var(--color-bone-surface, var(--color-graphite));
+  .sources-search-box {
+    background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--color-graphite-border);
-    padding: 1px 5px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    color: var(--color-heading);
+    font-size: 12.5px;
+    width: 260px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .sources-search-box:focus {
+    border-color: var(--color-horizon-blue);
+  }
+
+  .sources-deck-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 18px;
+  }
+
+  .source-reader-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.15s ease;
+  }
+
+  .source-reader-item:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .source-reader-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .source-reader-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-heading);
+    line-height: 1.35;
+  }
+
+  .source-type-pill {
+    align-self: flex-start;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+    padding: 2px 8px;
     border-radius: 99px;
   }
 
-  .sidebar-tab-body {
-    flex: 1;
+  .source-excerpt-content {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--color-slate-light);
+    max-height: 180px;
     overflow-y: auto;
-    padding: 14px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 12px;
+    border-radius: 6px;
+    font-style: italic;
+  }
+
+  .source-excerpt-content p {
+    margin: 0;
+  }
+
+  .source-reader-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: auto;
+  }
+
+  .relevance-guidance-box {
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--color-slate-muted);
+  }
+
+  .relevance-guidance-box strong {
+    color: #93c5fd;
+  }
+
+  .btn-cite-to-canvas {
+    align-self: flex-start;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-cite-to-canvas:hover {
+    background: rgba(59, 130, 246, 0.22);
+    border-color: #3b82f6;
+    color: #fff;
+  }
+
+  .empty-sources-msg {
+    color: var(--color-slate-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px;
+    grid-column: 1 / -1;
+  }
+
+  /* Side Column: Goals, Rubric & Checklist */
+  .materials-goals-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--color-slate-light);
+  }
+
+  .materials-goals-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1.45;
+  }
+
+  .rubric-overview-card h3 {
+    margin: 0;
+    font-size: 15px;
+    color: var(--color-heading);
+  }
+
+  .rubric-items-stack {
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
 
-  .tab-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .section-card {
-    background: var(--color-bone-surface, var(--color-graphite));
+  .rubric-overview-item {
+    background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: 8px;
     padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
-  .card-eyebrow {
+  .rubric-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .rubric-item-header strong {
+    font-size: 12.5px;
+    color: var(--color-heading);
+  }
+
+  .rubric-weight-chip {
     font-size: 10px;
     font-weight: 800;
+    color: var(--color-horizon-blue);
+    background: rgba(217, 119, 6, 0.12);
+    padding: 1px 6px;
+    border-radius: 99px;
+  }
+
+  .rubric-item-desc {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+  }
+
+  .rubric-levels-mini-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .level-mini-box {
+    background: var(--color-bone-muted);
+    border-left: 2px solid var(--color-horizon-blue);
+    padding: 5px 8px;
+    border-radius: 2px;
+  }
+
+  .level-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-heading);
+    display: block;
+  }
+
+  .level-mini-box small {
+    font-size: 10px;
+    color: var(--color-slate-muted);
+    line-height: 1.35;
+    display: block;
+  }
+
+  .rubric-self-review {
+    margin: 0;
+    font-size: 10.5px;
+    color: #93c5fd;
+    line-height: 1.4;
+  }
+
+  .checklist-items-stack {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-slate-light);
+  }
+
+  .integrity-notice-box {
+    padding-top: 10px;
+    border-top: 1px dashed var(--color-graphite-border);
+    color: var(--color-slate-muted);
+  }
+
+  /* TAB 3: TRACE & PORTFOLIO VIEWPORT */
+  .trace-tab-viewport {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 28px 36px;
+    background: var(--color-obsidian);
+  }
+
+  .trace-dashboard-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .trace-metrics-banner {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .trace-stat-tile {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .stat-num {
+    font-size: 26px;
+    font-weight: 800;
+    font-family: var(--font-mono, monospace);
+    line-height: 1.1;
+  }
+
+  .stat-num.claims { color: #93c5fd; }
+  .stat-num.evidence { color: #6ee7b7; }
+  .stat-num.warrants { color: #c4b5fd; }
+  .stat-num.assumptions { color: #fcd34d; }
+  .stat-num.probes { color: #f87171; }
+
+  .stat-lbl {
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--color-slate-muted);
   }
 
-  .prompt-text {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.55;
-    color: var(--color-slate-bright);
+  .trace-two-col-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: flex-start;
   }
 
-  .kc-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .kc-pill {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--color-horizon-blue);
-    padding: 2px 6px;
-  }
-
-  /* Sources section inside scope view */
-  .sources-header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .sidebar-search-input {
-    width: 100%;
-    background: var(--input-bg, var(--color-graphite));
-    border: 1px solid var(--input-border, var(--color-graphite-border));
-    border-radius: var(--radius-xs);
-    padding: 6px 10px;
-    font-size: 11px;
-    color: var(--color-slate-bright);
-    outline: none;
-    box-sizing: border-box;
-  }
-  .sidebar-search-input:focus {
-    border-color: var(--color-aurora);
-  }
-
-  .sources-stream {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 4px;
-  }
-
-  .source-evidence-card {
-    background: var(--color-graphite-card, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .source-top {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-  }
-
-  .source-tag {
-    font-size: 8px;
-    font-weight: 800;
-    text-transform: uppercase;
-    background: rgba(2, 132, 199, 0.1);
-    color: var(--color-aurora);
-    padding: 1px 4px;
-    border-radius: 99px;
-  }
-
-  .source-top h6 {
-    margin: 0;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .source-body {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--color-slate-light);
-    background: var(--color-bone-muted);
-    border-left: 2px solid var(--color-aurora);
-    padding: 6px 8px;
-    font-style: italic;
-  }
-
-  .cite-action-btn {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    color: var(--color-aurora);
-    font-size: 10px;
-    font-weight: 700;
-    padding: 4px 8px;
-    cursor: pointer;
-    width: 100%;
-  }
-  .cite-action-btn:hover {
-    background: var(--color-aurora);
-    color: #fff;
-    border-color: var(--color-aurora);
-  }
-
-  /* Outline View */
-  .outline-hint {
-    margin: 0;
-    font-size: 11px;
-    color: var(--color-slate-muted);
-  }
-
-  .headings-tree {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 4px;
-  }
-
-  .outline-tree-item {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    padding: 6px 8px;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    text-align: left;
-    cursor: pointer;
-    color: var(--color-slate-bright);
-    font-size: 12px;
-    transition: all 0.12s ease;
-    width: 100%;
-  }
-
-  .outline-tree-item:hover {
-    background: var(--color-graphite-hover);
-    border-color: var(--color-horizon-blue);
-    color: var(--color-horizon-blue);
-  }
-
-  .outline-tree-item.level-3 {
-    margin-left: 14px;
-    width: calc(100% - 14px);
-    font-size: 11px;
-    opacity: 0.85;
-  }
-
-  .heading-num {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-horizon-blue);
-    min-width: 14px;
-  }
-
-  .heading-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .empty-outline-box {
-    text-align: center;
-    padding: 12px 0;
-    color: var(--color-slate-muted);
-    font-size: 11px;
-  }
-
-  /* Outline Presets */
-  .preset-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 4px;
-  }
-
-  .preset-btn {
+  .trace-panel-card {
     background: var(--color-bone-surface, var(--color-graphite));
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    padding: 8px 10px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-slate-bright);
-    cursor: pointer;
-    transition: all 0.12s ease;
-  }
-  .preset-btn:hover {
-    background: var(--color-graphite-hover);
-    border-color: var(--color-horizon-blue);
-    color: var(--color-horizon-blue);
-  }
-
-  /* Trace Timeline */
-  .trace-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--color-graphite-border);
-  }
-
-  .trace-count {
-    font-size: 10px;
-    color: var(--color-slate-muted);
-    display: block;
-  }
-
-  .deep-trace-link {
-    font-size: 11px;
-    color: var(--color-horizon-blue);
-    font-weight: 700;
-    text-decoration: none;
-  }
-  .deep-trace-link:hover { text-decoration: underline; }
-
-  .trace-timeline {
+    border-radius: 12px;
+    padding: 22px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 6px;
+    gap: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
 
-  .trace-node {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-  }
-
-  .node-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--color-horizon-blue);
-  }
-
-  .node-content {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    font-size: 11px;
-  }
-
-  .node-type {
+  .panel-card-header h3 {
+    margin: 2px 0 0;
+    font-size: 16px;
     color: var(--color-heading);
-    font-weight: 600;
-    text-transform: capitalize;
   }
 
-  .node-time {
-    color: var(--color-slate-subtle);
-    font-size: 10px;
-  }
-
-  /* ZONE 2: CENTER CANVAS MAIN AREA */
-  .canvas-main-area {
+  .trace-graph-tree-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 600px;
     overflow-y: auto;
-    padding: 20px clamp(16px, 3vw, 40px) 60px;
+    padding-right: 6px;
+  }
+
+  .empty-trace-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--color-slate-muted);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .trace-dossier-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+
+  .milestone-submission-banner {
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.7), rgba(17, 24, 39, 0.85));
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 10px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .submission-meta h4 {
+    margin: 6px 0 4px;
+    font-size: 15px;
+    color: var(--color-heading);
+  }
+
+  .submission-meta p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+  }
+
+  .sub-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(245, 158, 11, 0.18);
+    color: #fcd34d;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+  }
+
+  .sub-badge.submitted {
+    background: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .submission-complete-pill {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .btn-submit-milestone {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    border: 1px solid #8b5cf6;
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    align-self: flex-start;
+  }
+
+  .btn-submit-milestone:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+  }
+
+  .btn-submit-milestone:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .dossier-section-title {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-heading);
+    border-bottom: 1px solid var(--color-graphite-border);
+    padding-bottom: 8px;
+  }
+
+  .dossier-events-stack {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
 
-  .probe-alert-bar {
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: var(--radius-sm);
-    color: #8b5cf6;
-    font: 600 12px var(--font-ui);
-    padding: 10px 14px;
-    text-align: left;
-    cursor: pointer;
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-  }
-  .probe-alert-bar:hover {
-    background: rgba(139, 92, 246, 0.18);
-  }
-
-  .error-banner {
-    background: var(--color-rose-bg);
-    border: 1px solid rgba(220, 38, 38, 0.3);
-    border-radius: var(--radius-sm);
-    color: var(--color-rose);
-    font-size: 12px;
-    padding: 10px 14px;
-    max-width: 960px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  /* ZONE 3: RIGHT SOCRATIC TUTOR PANEL */
-  .socratic-tutor-column {
-    background: var(--color-graphite);
-    border-left: 1px solid var(--color-graphite-border);
+  .dossier-event-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 8px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    z-index: 5;
+    gap: 8px;
+  }
+
+  .event-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .event-type-pill {
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 2px 7px;
+    border-radius: 99px;
+    background: rgba(139, 92, 246, 0.18);
+    color: #c4b5fd;
+  }
+
+  .event-time {
+    font-size: 10px;
+    color: var(--color-slate-muted);
+  }
+
+  .event-text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--color-slate-light);
+  }
+
+  .event-student-note {
+    background: rgba(139, 92, 246, 0.1);
+    border-left: 2px solid #8b5cf6;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: #e2e8f0;
+  }
+
+  .event-move-tag {
+    font-size: 10px;
+    color: #93c5fd;
+    font-weight: 600;
+  }
+
+  .empty-dossier-state {
+    text-align: center;
+    padding: 24px;
+    color: var(--color-slate-muted);
+    font-size: 12px;
+  }
+
+  /* Optional Flyout Mode for Socratic Writing Support Panel */
+  .socratic-tutor-column.flyout-mode {
+    position: fixed;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    width: 380px;
+    background: var(--color-graphite);
+    border-left: 1px solid var(--color-graphite-border);
+    box-shadow: -6px 0 28px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
     animation: slideInRight 0.2s ease-out;
   }
 
   @keyframes slideInRight {
-    from { opacity: 0; transform: translateX(16px); }
-    to { opacity: 1; transform: translateX(0); }
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
   }
 
   .tutor-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--color-graphite-border);
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    background: var(--color-bone-muted);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--color-graphite-border);
   }
 
   .tutor-header h3 {
-    margin: 2px 0 0;
-    font-family: var(--font-brand);
-    font-size: 16px;
-    font-weight: 700;
+    margin: 0;
+    font-size: 15px;
     color: var(--color-heading);
   }
 
   .close-panel-btn {
     background: transparent;
     border: none;
-    color: var(--color-slate-subtle);
-    font-size: 15px;
+    color: var(--color-slate-muted);
+    font-size: 16px;
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: var(--radius-xs);
+    padding: 4px 8px;
+    border-radius: 4px;
   }
+
   .close-panel-btn:hover {
     color: var(--color-heading);
     background: var(--color-graphite-hover);
   }
 
   .tutor-body {
+    flex: 1;
+    overflow-y: auto;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -1355,6 +1997,10 @@
   }
 
   .probe-card {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 8px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1363,128 +2009,104 @@
   .probe-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
   }
 
   .section-tag {
-    font-size: 11px;
-    color: var(--color-slate-muted);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-horizon-blue);
   }
 
   .focus-pill {
-    background: rgba(139, 92, 246, 0.12);
-    border: 1px solid rgba(139, 92, 246, 0.28);
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: rgba(139, 92, 246, 0.2);
+    color: #c4b5fd;
+    padding: 1px 6px;
     border-radius: 99px;
-    color: #8b5cf6;
-    font-size: 9px;
-    font-weight: 700;
-    padding: 1px 7px;
-    text-transform: capitalize;
   }
 
   .probe-question {
-    color: var(--color-heading);
-    font-family: var(--font-brand);
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.5;
     margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--color-heading);
   }
 
   .probe-pedagogy-tip {
-    background: var(--color-bone-muted);
-    border-left: 2px solid var(--color-aurora);
-    padding: 8px 10px;
-    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--color-slate-muted);
   }
 
   .probe-pedagogy-tip p {
     margin: 0;
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--color-slate-light);
   }
 
   .probe-input-label {
     font-size: 11px;
     font-weight: 700;
-    color: var(--color-heading);
-    margin-top: 4px;
+    color: var(--color-slate-light);
   }
 
   .probe-textarea {
     width: 100%;
-    background: var(--input-bg, var(--color-graphite));
-    border: 1px solid var(--input-border, var(--color-graphite-border));
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-bright);
-    font: 13px/1.55 var(--font-ui);
-    min-height: 120px;
-    outline: none;
+    min-height: 80px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 6px;
     padding: 10px;
+    color: var(--color-heading);
+    font-size: 12px;
     resize: vertical;
-    box-sizing: border-box;
-  }
-  .probe-textarea:focus {
-    border-color: var(--color-horizon-blue);
-    box-shadow: 0 0 0 2px var(--color-horizon-glow);
+    outline: none;
+    font-family: inherit;
   }
 
-  .probe-status-msg {
-    margin: 0;
-    font-size: 11px;
-    color: var(--color-horizon-blue);
+  .probe-textarea:focus {
+    border-color: #8b5cf6;
   }
 
   .probe-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
   }
 
   .save-evidence-btn {
-    background: var(--color-horizon-blue);
-    border: 1px solid var(--color-horizon-bright);
-    border-radius: var(--radius-xs);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 7px 11px;
-    cursor: pointer;
     flex: 1;
-  }
-  .save-evidence-btn:hover:not(:disabled) {
-    background: var(--color-horizon-bright);
-  }
-
-  .defer-btn {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    color: var(--color-slate-light);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 7px 10px;
-    cursor: pointer;
-  }
-
-  .dismiss-btn {
-    background: transparent;
+    background: #8b5cf6;
+    color: #fff;
     border: none;
-    color: var(--color-slate-subtle);
-    font-size: 10px;
-    font-weight: 600;
-    padding: 7px 8px;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
     cursor: pointer;
   }
-  .dismiss-btn:hover { color: var(--color-amber); }
+
+  .defer-btn, .dismiss-btn {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    color: var(--color-slate-muted);
+    cursor: pointer;
+  }
+
+  .defer-btn:hover, .dismiss-btn:hover {
+    color: var(--color-heading);
+    background: var(--color-graphite-hover);
+  }
 
   .empty-probe-state {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 16px;
     text-align: center;
+    padding: 24px 12px;
+    color: var(--color-slate-muted);
+    font-size: 12px;
   }
 
   .empty-probe-state h4 {
@@ -1493,19 +2115,15 @@
     color: var(--color-heading);
   }
 
-  .empty-probe-state p {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--color-slate-muted);
-  }
-
   .evidence-badge {
     display: inline-block;
-    color: var(--color-signal-green);
-    font-size: 10px;
-    font-weight: 700;
     margin-top: 10px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    background: rgba(16, 185, 129, 0.15);
+    color: #6ee7b7;
+    font-size: 11px;
+    font-weight: 700;
   }
 
   .empty-state {
@@ -1564,6 +2182,286 @@
   .support-result-card h4 { color: var(--color-heading); font-size: 14px; margin: 0; }
   .support-result-card p,.support-result-card li { color: var(--color-slate-light); font-size: 11px; line-height: 1.5; margin: 0; }
   .support-result-card ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
+
+  /* Oracle Pressure Topbar Widget */
+  .oracle-pressure-widget {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-graphite, #ffffff);
+    border: 1px solid var(--color-graphite-border, #e2e4dc);
+    border-radius: var(--radius-sm, 6px);
+    padding: 3px 8px;
+    transition: all 0.15s ease;
+  }
+  .oracle-pressure-widget:hover {
+    background: var(--color-graphite-hover, #f1f2ed);
+    border-color: var(--color-aurora, #0284c7);
+  }
+  .pressure-symbol {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--color-aurora, #0284c7);
+  }
+  .pressure-dropdown {
+    background: transparent;
+    border: none;
+    color: var(--color-heading, #121418);
+    font-family: var(--font-ui, sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+  }
+  .pressure-dropdown option {
+    background: var(--color-graphite, #ffffff);
+    color: var(--color-heading, #121418);
+  }
+
+  /* Reasoning Graph & Claim Tree Panel */
+  .graph-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 2px 0;
+  }
+  .graph-header-card {
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.8), rgba(17, 24, 39, 0.9));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .graph-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .graph-icon {
+    font-size: 20px;
+  }
+  .graph-title-row h6 {
+    margin: 0 0 2px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .graph-title-row p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+  .graph-stat-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .g-pill {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--color-slate-light);
+  }
+  .g-pill.claims { color: #93c5fd; border-color: rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.1); }
+  .g-pill.evidence { color: #6ee7b7; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); }
+  .g-pill.warrants { color: #c4b5fd; border-color: rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.1); }
+  .g-pill.assumptions { color: #fcd34d; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); }
+  .g-pill.probes { color: #a78bfa; border-color: #8b5cf6; background: rgba(139, 92, 246, 0.2); font-weight: 800; }
+
+  .graph-tree-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .empty-graph-box {
+    background: var(--color-bone-muted);
+    border: 1px dashed var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: center;
+    color: var(--color-slate-muted);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .graph-root-node {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    border-left: 3px solid var(--color-horizon-blue);
+  }
+  .node-badge-chip.root {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--color-horizon-blue);
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  .graph-root-node h5 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-heading);
+    line-height: 1.4;
+  }
+
+  .graph-section-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 6px;
+    border-left: 1px dashed rgba(139, 92, 246, 0.3);
+    margin-left: 8px;
+  }
+  .section-branch-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branch-connector {
+    color: rgba(139, 92, 246, 0.6);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .section-node-btn {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+  }
+  .section-node-btn:hover {
+    border-color: var(--color-horizon-blue);
+    background: var(--color-graphite-hover);
+  }
+  .sec-num {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--color-horizon-blue);
+  }
+  .sec-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-heading);
+  }
+
+  .section-children-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 14px;
+  }
+  .graph-claim-node {
+    background: var(--color-bone-surface, var(--color-graphite));
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    padding: 9px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .graph-claim-node:hover {
+    border-color: rgba(139, 92, 246, 0.5);
+    background: var(--color-graphite-hover);
+  }
+  .graph-claim-node.claim { border-left: 3px solid #3b82f6; }
+  .graph-claim-node.evidence { border-left: 3px solid #10b981; }
+  .graph-claim-node.reasoning { border-left: 3px solid #8b5cf6; }
+  .graph-claim-node.assumption { border-left: 3px solid #f59e0b; }
+  .graph-claim-node.counter { border-left: 3px solid #ec4899; }
+  .graph-claim-node.conclusion { border-left: 3px solid #14b8a6; }
+  .graph-claim-node.has-probe {
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.08);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.2);
+  }
+
+  .claim-node-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .claim-badge-icon { font-size: 13px; }
+  .claim-type-label { font-size: 10.5px; font-weight: 700; color: var(--color-heading); }
+  .claim-status-tag {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .claim-status-tag.probe {
+    background: rgba(139, 92, 246, 0.25);
+    color: #c4b5fd;
+    border: 1px solid rgba(139, 92, 246, 0.5);
+  }
+  .claim-status-tag.grounded {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+  }
+  .claim-status-tag.premature {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+  }
+  .claim-status-tag.ungrounded {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+  }
+
+  .claim-excerpt {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-slate-light);
+    font-style: italic;
+  }
+  .claim-node-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .node-jump-btn, .node-probe-btn {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-xs);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-slate-muted);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .node-jump-btn:hover {
+    color: var(--color-heading);
+    border-color: var(--color-horizon-blue);
+  }
+  .node-probe-btn:hover {
+    color: #c4b5fd;
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.15);
+  }
+  .empty-sec-leaf {
+    font-size: 10px;
+    color: var(--color-slate-muted);
+    padding: 4px 0;
+  }
 
   @media (max-width: 1024px) {
     .workspace-grid {

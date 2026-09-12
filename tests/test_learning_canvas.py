@@ -28,8 +28,8 @@ async def create_published_grounded_assignment(client: AsyncClient) -> tuple[dic
         json={
             "title": "Excavation report",
             "content": (
-                "The report describes brick drains connecting houses with wider channels. "
-                "It does not identify who organized the construction."
+                "The excavation report describes fired brick drains connecting houses with wider channels and domestic courtyards. "
+                "However, the archaeological record does not identify who planned or organized this civic construction."
             ),
             "resource_type": "primary_source",
         },
