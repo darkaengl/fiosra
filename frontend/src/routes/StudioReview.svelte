@@ -9,6 +9,10 @@
   let trace = $state([]);
   let grade = $state('');
   let feedback = $state('');
+  // criterion_id -> 'met' | 'partially_met' | 'not_met'. Feeds the concept mastery
+  // graph (see concept_mastery/service.py) - defaulted from AutoSCORE's deterministic
+  // evidence check, but the educator has final say and can override any of these.
+  let criterionOutcomes = $state({});
   let teacherId = $state('educator_workspace');
   let isLoading = $state(true);
   let isFinalizing = $state(false);
@@ -31,6 +35,7 @@
     trace = [];
     feedback = '';
     grade = '';
+    criterionOutcomes = {};
     error = '';
     const [dossierResponse, traceResponse] = await Promise.all([
       fetch(`/evidence/dossier/${item.session_id}`),
@@ -42,6 +47,13 @@
     }
     dossier = await dossierResponse.json();
     if (traceResponse.ok) trace = (await traceResponse.json()).trace_nodes || [];
+    const nextOutcomes = {};
+    for (const question of dossier.per_question_evidence || []) {
+      for (const criterion of Object.values(question.rubric_evidence || {})) {
+        nextOutcomes[criterion.criterion_id] = criterion.met ? 'met' : 'not_met';
+      }
+    }
+    criterionOutcomes = nextOutcomes;
   }
 
   async function finalise() {
@@ -58,6 +70,7 @@
           teacher_id: teacherId.trim() || 'educator_workspace',
           teacher_override: grade.trim() !== selected.suggested_grade,
           feedback_comments: feedback.trim(),
+          criterion_grades: Object.entries(criterionOutcomes).map(([criterion_id, outcome]) => ({ criterion_id, outcome })),
         }),
       });
       if (!response.ok) throw new Error(await responseError(response, 'The final grade could not be recorded.'));
@@ -142,7 +155,7 @@
               <div class="probe-evidence-list">{#each proactiveEvidence as probe (probe.probe_id)}<article class:responded={probe.evidence_state === 'evidence_submitted'} class="probe-evidence-card"><div class="probe-card-meta"><span>{probe.section_label}</span><strong>{probe.focus_type.replaceAll('_', ' ')}</strong><em>{probe.status}</em></div><p class="probe-question">{probe.question}</p>{#if probe.response_text}<div class="probe-response"><span>Learner response</span><p>{probe.response_text}</p></div>{:else}<p class="probe-no-response">No learner response was submitted for this question.</p>{/if}</article>{/each}</div>
             </section>
           {/if}
-          <section class="evidence-section"><h3>Evidence by published rubric criterion</h3>{#each dossier.per_question_evidence || [] as question}{#each Object.entries(question.rubric_evidence || {}) as [, criterion]}<article class:met={criterion.met} class="criterion"><div><strong>{criterion.label || (criterion.met ? 'Evidence found' : 'Needs review')}</strong><span>{Math.round((criterion.confidence || 0) * 100)}% evidence confidence</span></div><p class="criterion-description">{criterion.description}</p><p>{criterion.evidence}</p><small>{criterion.explanation}</small></article>{/each}{/each}</section>
+          <section class="evidence-section"><h3>Evidence by published rubric criterion</h3><p class="section-hint">Confirm or override each criterion below - this is what populates the student's concept knowledge graph, not the overall grade.</p>{#each dossier.per_question_evidence || [] as question}{#each Object.entries(question.rubric_evidence || {}) as [, criterion]}<article class:met={criterion.met} class="criterion"><div><strong>{criterion.label || (criterion.met ? 'Evidence found' : 'Needs review')}</strong><span>{Math.round((criterion.confidence || 0) * 100)}% evidence confidence</span></div><p class="criterion-description">{criterion.description}</p><p>{criterion.evidence}</p><small>{criterion.explanation}</small><label class="criterion-outcome">Outcome<select bind:value={criterionOutcomes[criterion.criterion_id]}><option value="met">Met</option><option value="partially_met">Partially met</option><option value="not_met">Not met</option></select></label></article>{/each}{/each}</section>
           <section class="grade-form"><h3>Educator finalization</h3><div class="form-grid"><label>Approved grade<input bind:value={grade} placeholder="A, B+, 88%" /></label><label>Educator identifier<input bind:value={teacherId} /></label></div><label>Formative feedback<textarea bind:value={feedback} rows="3" placeholder="Optional feedback for the student’s next reasoning cycle."></textarea></label><button class="btn btn-success" onclick={finalise} disabled={isFinalizing}>{isFinalizing ? 'Finalizing…' : 'Finalize grade and seal session'}</button></section>
         {/if}
       </section>
@@ -209,6 +222,10 @@
   .criterion span{color:var(--color-slate-muted);font-size:10px}
   .criterion p{color:var(--color-slate-light);font-size:11px;line-height:1.5;margin:6px 0}
   .criterion small{color:var(--color-slate-muted);font-size:10px}
+  .section-hint{color:var(--color-slate-muted);font-size:11px;margin:0 0 4px}
+  .criterion-outcome{align-items:center;display:flex;gap:8px;margin-top:8px}
+  .criterion-outcome{color:var(--color-slate-muted);font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+  .criterion-outcome select{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-bright);font:inherit;font-size:11px;padding:5px 8px;text-transform:none}
   .grade-form{display:flex;flex-direction:column;gap:10px}
   .grade-form label{color:var(--color-slate-light);display:flex;flex-direction:column;font-size:10px;font-weight:700;gap:5px;letter-spacing:.35px;text-transform:uppercase}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
