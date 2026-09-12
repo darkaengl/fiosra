@@ -75,6 +75,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(_text(
             "CREATE INDEX IF NOT EXISTS idx_concept_mastery_student ON concept_mastery (student_id, course_id);"
         ))
+        # Ensure the student_emergent_concepts table exists (migration 010). Same
+        # idempotent startup pattern as above.
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS student_emergent_concepts (
+                emergent_id        UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                student_id         VARCHAR(64)  NOT NULL,
+                course_id          UUID         NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
+                session_id         UUID         REFERENCES student_sessions(session_id) ON DELETE SET NULL,
+                label              VARCHAR(200) NOT NULL,
+                context_snippet    TEXT,
+                related_concept_id VARCHAR(96),
+                created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                UNIQUE (student_id, course_id, label)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_student_emergent_concepts_course ON student_emergent_concepts (course_id);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_student_emergent_concepts_student ON student_emergent_concepts (student_id, course_id);"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()

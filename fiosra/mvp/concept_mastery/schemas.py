@@ -10,7 +10,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 CriterionOutcome = Literal["met", "partially_met", "not_met"]
-MasteryState = Literal["unassessed", "weak", "developing", "strong"]
+# "emergent" is never assigned by the deterministic scorer - it marks a
+# student-introduced concept extracted (best-effort, LLM-assisted) from their own
+# work, not one of the teacher's tracked course concepts. See EmergentConceptNode.
+MasteryState = Literal["unassessed", "weak", "developing", "strong", "emergent"]
 
 
 class CriterionGradeInput(BaseModel):
@@ -36,10 +39,29 @@ class ConceptMasteryNode(BaseModel):
     last_evidence_at: str | None = None
 
 
+class EmergentConceptNode(BaseModel):
+    """A concept the student mentioned that is not part of the teacher's course graph.
+
+    Extracted best-effort by an LLM pass over the student's own submitted text at
+    grading time (see ConceptMasteryService._extract_emergent_concepts). Never
+    written into the shared Neo4j course graph - scoped to one student, stored in
+    Postgres, and surfaced only in that student's own overlay.
+    """
+
+    concept_id: str  # synthetic id, e.g. "EMERGENT_<uuid>" - not a real Concept.concept_id
+    label: str
+    definition: str = ""
+    concept_type: str = "emergent"
+    level: str = "emergent"
+    state: MasteryState = "emergent"
+    related_concept_id: str | None = None
+
+
 class StudentConceptMasteryResponse(BaseModel):
     course_id: str
     student_id: str
     nodes: list[ConceptMasteryNode] = Field(default_factory=list)
+    emergent_nodes: list[EmergentConceptNode] = Field(default_factory=list)
     edges: list[dict] = Field(default_factory=list)
 
 

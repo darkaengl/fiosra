@@ -2,7 +2,9 @@
   import { onDestroy } from 'svelte';
   import { Network, DataSet } from 'vis-network/standalone';
 
-  let { graph = { nodes: [], edges: [] }, selectedConceptId = '', onSelect = () => {} } = $props();
+  // colorBy: 'level' (default - the teacher-facing course topology) or 'mastery'
+  // (a student overlay - color encodes what THIS student knows, not hierarchy).
+  let { graph = { nodes: [], edges: [] }, selectedConceptId = '', onSelect = () => {}, colorBy = 'level' } = $props();
 
   const levelLabels = {
     course_theme: 'Course theme', strand: 'Strand', topic: 'Topic',
@@ -17,11 +19,23 @@
     subtopic: { bg: '#0d9488', border: '#5eead4' },
     atomic_concept: { bg: '#059669', border: '#6ee7b7' },
   };
-  const levelSize = { course_theme: 30, strand: 25, topic: 21, subtopic: 18, atomic_concept: 15 };
+  const levelSize = { course_theme: 30, strand: 25, topic: 21, subtopic: 18, atomic_concept: 15, emergent: 14 };
   const DEFAULT_COLOR = { bg: '#475569', border: '#94a3b8' };
+
+  // Mastery mode palette: grey = never assessed, red = assessed and lacking,
+  // blue (two shades) = assessed and shown, green = the student's own concept,
+  // not part of the course graph at all. See the mastery-overlay design doc.
+  const stateColor = {
+    unassessed: { bg: '#3f4552', border: '#8b93a3' },
+    weak: { bg: '#b91c1c', border: '#fca5a5' },
+    developing: { bg: '#1e3a8a', border: '#93c5fd' },
+    strong: { bg: '#2563eb', border: '#60a5fa' },
+    emergent: { bg: '#15803d', border: '#86efac' },
+  };
 
   const CONTAINS_COLOR = '#60a5fa';
   const PREREQ_COLOR = '#c084fc';
+  const MENTIONED_COLOR = '#4ade80';
 
   let canvasEl = $state(null);
   let network = null;
@@ -38,8 +52,13 @@
     const nodes = currentGraph?.nodes || [];
     const edges = currentGraph?.edges || [];
     const visNodes = nodes.map((node) => {
-      const palette = levelColor[node.level] || DEFAULT_COLOR;
-      const size = (levelSize[node.level] || 16) + Math.min(6, degreeOf(node.concept_id, edges));
+      const isMastery = colorBy === 'mastery';
+      const palette = (isMastery ? stateColor[node.state] : levelColor[node.level]) || DEFAULT_COLOR;
+      // Unassessed/emergent nodes stay a fixed modest size in mastery mode - size there
+      // shouldn't imply "more important", only the base topology's level does that.
+      const size = isMastery
+        ? (node.state === 'emergent' ? 14 : 17) + Math.min(4, degreeOf(node.concept_id, edges))
+        : (levelSize[node.level] || 16) + Math.min(6, degreeOf(node.concept_id, edges));
       return {
         id: node.concept_id,
         label: node.label,
@@ -58,17 +77,20 @@
         shadow: { enabled: true, color: `${palette.bg}99`, size: 14, x: 0, y: 0 },
         level: node.level,
         concept_type: node.concept_type,
+        state: node.state,
       };
     });
     const visEdges = edges.map((edge, index) => {
       const isPrereq = edge.relation === 'PREREQUISITE_OF';
+      const isMentioned = edge.relation === 'MENTIONED_ALONGSIDE';
+      const color = isMentioned ? MENTIONED_COLOR : isPrereq ? PREREQ_COLOR : CONTAINS_COLOR;
       return {
         id: `${edge.source}->${edge.target}-${index}`,
         from: edge.source,
         to: edge.target,
         arrows: 'to',
-        color: { color: isPrereq ? PREREQ_COLOR : CONTAINS_COLOR, opacity: 0.65, highlight: isPrereq ? PREREQ_COLOR : CONTAINS_COLOR },
-        dashes: isPrereq ? [6, 5] : false,
+        color: { color, opacity: isMentioned ? 0.55 : 0.65, highlight: color },
+        dashes: isMentioned ? [2, 4] : isPrereq ? [6, 5] : false,
         width: 1.75,
         smooth: { type: 'curvedCW', roundness: 0.15 },
         relation: edge.relation,
@@ -142,8 +164,9 @@
   onDestroy(() => network?.destroy());
 
   $effect(() => {
-    // Re-render whenever the underlying graph data actually changes shape.
+    // Re-render whenever the underlying graph data, or the color mode, changes.
     void graph;
+    void colorBy;
     if (canvasEl) renderNetwork();
   });
 
@@ -168,8 +191,16 @@
 <div class="canvas-shell">
   <div class="canvas-toolbar">
     <div class="canvas-key">
-      <span><i class="hierarchy"></i> Contains</span>
-      <span><i class="prerequisite"></i> Prerequisite</span>
+      {#if colorBy === 'mastery'}
+        <span><i class="state-strong"></i> Strong</span>
+        <span><i class="state-developing"></i> Developing</span>
+        <span><i class="state-weak"></i> Weak</span>
+        <span><i class="state-unassessed"></i> Unassessed</span>
+        <span><i class="state-emergent"></i> Student's own</span>
+      {:else}
+        <span><i class="hierarchy"></i> Contains</span>
+        <span><i class="prerequisite"></i> Prerequisite</span>
+      {/if}
     </div>
     <div class="toolbar-actions">
       <button type="button" class="physics-toggle" class:active={physicsOn} onclick={togglePhysics}>
@@ -198,6 +229,11 @@
   .canvas-key i { border-radius: 50%; display: inline-block; height: 7px; width: 7px; }
   .canvas-key .hierarchy { background: #60a5fa; }
   .canvas-key .prerequisite { background: #c084fc; }
+  .canvas-key .state-strong { background: #2563eb; }
+  .canvas-key .state-developing { background: #1e3a8a; }
+  .canvas-key .state-weak { background: #b91c1c; }
+  .canvas-key .state-unassessed { background: #3f4552; }
+  .canvas-key .state-emergent { background: #15803d; }
   .toolbar-actions { align-items: center; display: flex; gap: 10px; }
   .physics-toggle { align-items: center; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; color: #9ca3af; cursor: pointer; display: flex; font-size: 10px; font-weight: 600; gap: 6px; letter-spacing: .3px; padding: 5px 10px; text-transform: uppercase; transition: all .15s; }
   .physics-toggle .dot { background: #4b5563; border-radius: 50%; height: 6px; width: 6px; transition: all .15s; }
