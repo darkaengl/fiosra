@@ -207,9 +207,15 @@
         </a>
         <a
           href="#/modules{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'modules' || parsed.activeTab === 'designer' || parsed.activeTab === 'review' || parsed.activeTab === 'diagnostics' || parsed.activeTab === 'graph' ? 'active' : ''}"
+          class="nav-pill {parsed.activeTab === 'modules' || parsed.activeTab === 'designer' || parsed.activeTab === 'review' || parsed.activeTab === 'diagnostics' ? 'active' : ''}"
         >
           Curriculum
+        </a>
+        <a
+          href="#/graph{parsed.courseQuery}"
+          class="nav-pill {parsed.activeTab === 'graph' ? 'active' : ''}"
+        >
+          Concept Graph
         </a>
       {/if}
     </nav>
