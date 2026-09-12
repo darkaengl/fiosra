@@ -993,22 +993,48 @@ class SocraticProbeService:
             fallback_moves = ["Anchor in 1541 Crown of Ireland Act", "Contrast tanistry with feudal primogeniture"]
             fallback_progress = 0.20
         elif cmd_text.startswith("/hint"):
+            hint_arg = re.sub(r"^/hint\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "source"
-            fallback_reply = (
-                "**Evidentiary Hint**: Examine Section 3 of the *Crown of Ireland Act (1541)* regarding how Brehon customary tenure "
-                "was converted into English letters patent, and compare this with Lord Deputy St. Leger's despatches on how tanistry "
-                "was abolished in favor of knight's service in capite. Notice how younger sons and secondary chieftains (*urritha*) "
-                "were disinherited by feudal primogeniture. How might this tenurial mechanism explain the eventual armed resistance in 1599?"
-            )
-            fallback_reason = "Answer-blind evidentiary hint provided from primary source statutory records."
+            if any(k in hint_arg.lower() for k in ("ref", "source", "doc", "assign", "cite", "material", "statute")):
+                fallback_reply = (
+                    "**Primary Source References for this Assignment**:\n\n"
+                    "1. **Crown of Ireland Act (1541)** (*33 Hen. 8 c. 1*):\n"
+                    "   - *Section 3*: Formally unites Ireland to the Imperial Crown of England and provides the statutory mechanism for converting Brehon customary tenure into royal letters patent.\n"
+                    "2. **Lord Deputy Anthony St. Leger — State Papers (1541–1543)**:\n"
+                    "   - Details the conditions granted to Conn O'Neill (created Earl of Tyrone): holding lands in *capite* knight's service, renouncing tanistry, but warning that younger sons and clan kinsmen would be disinherited by feudal primogeniture.\n"
+                    "3. **Hugh O'Neill — Articles of Grievance (1599)** (*Salisbury MSS*):\n"
+                    "   - Articulates why surrender-and-regrant broke down: English provincial sheriffs, martial law, and disputes over fraudulent patents.\n\n"
+                    "Which of these three documents directly addresses your current argument?"
+                )
+                fallback_reason = "Answer-blind primary source statutory references provided for assignment."
+                fallback_moves = ["Examine Section 3 of 1541 Act", "Analyze St. Leger 1541 despatches", "Contrast with 1599 grievances"]
+            elif hint_arg:
+                fallback_reply = (
+                    f"**Evidentiary Hint regarding '{hint_arg}'**:\n\n"
+                    f"To examine '{hint_arg}' without premature assumptions, look into Lord Deputy St. Leger's 1541 despatches and Section 3 of the 1541 Crown of Ireland Act. "
+                    "Notice how the conversion to English knight's service altered the legal status of secondary chieftains (*urritha*) and younger sons who were previously eligible for tanist election. "
+                    "How does this specific tenurial friction relate to what you are investigating?"
+                )
+                fallback_reason = f"Answer-blind hint provided on query '{hint_arg}'."
+                fallback_moves = ["Examine 1541 statutory mechanism", "Trace urritha inheritance status"]
+            else:
+                fallback_reply = (
+                    "**Evidentiary Hint**: Examine Section 3 of the *Crown of Ireland Act (1541)* regarding how Brehon customary tenure "
+                    "was converted into English letters patent, and compare this with Lord Deputy St. Leger's despatches on how tanistry "
+                    "was abolished in favor of knight's service in capite. Notice how younger sons and secondary chieftains (*urritha*) "
+                    "were disinherited by feudal primogeniture. How might this tenurial mechanism explain the eventual armed resistance in 1599?"
+                )
+                fallback_reason = "Answer-blind evidentiary hint provided from primary source statutory records."
+                fallback_moves = ["Examine St. Leger despatches (1541)", "Analyze Section 3 of 1541 Act"]
             fallback_satisfied = False
             fallback_revision = None
-            fallback_moves = ["Examine St. Leger despatches (1541)", "Analyze Section 3 of 1541 Act"]
             fallback_progress = 0.35
         elif cmd_text.startswith("/brainstorm"):
+            brainstorm_arg = re.sub(r"^/brainstorm\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "creative"
+            focus_str = f" regarding '{brainstorm_arg}'" if brainstorm_arg else ""
             fallback_reply = (
-                "**Brainstorming Angles & Competing Hypotheses**:\n\n"
+                f"**Brainstorming Angles & Competing Hypotheses{focus_str}**:\n\n"
                 "1. **Pragmatic Assimilation**: St. Leger's policy was a genuine attempt at peaceful, consensual constitutional integration "
                 "that was only derailed when militarist Dublin administrators imposed provincial sheriffs and martial law.\n"
                 "2. **Tenurial Destabilization**: The structural clash between clan ownership (tanistry) and individual feudal primogeniture "
@@ -1016,15 +1042,17 @@ class SocraticProbeService:
                 "3. **Fiscal Subjugation**: The Crown's true motive was extending wardships, liveries, and knight-service revenues rather than genuine legal integration.\n\n"
                 "Which of these hypotheses do your assigned primary sources support or complicate most strongly?"
             )
-            fallback_reason = "Exploratory hypotheses brainstormed across institutional, cultural, and fiscal dimensions."
+            fallback_reason = f"Exploratory hypotheses brainstormed{focus_str}."
             fallback_satisfied = False
             fallback_revision = None
             fallback_moves = ["Select preferred working hypothesis", "Cite primary source for selected angle"]
             fallback_progress = 0.40
         elif cmd_text.startswith("/assumptions"):
+            assump_arg = re.sub(r"^/assumptions\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "assumptions"
+            prefix = f" examining '{assump_arg}'" if assump_arg else ""
             fallback_reply = (
-                "**Implicit Assumption Analysis**:\n\n"
+                f"**Implicit Assumption Analysis{prefix}**:\n\n"
                 "1. **Tenure Assumption**: You are assuming that Gaelic lords possessed exclusive private ownership over land, rather than acting as elective trustees under customary Brehon law.\n"
                 "2. **Institutional Alignment**: You assume royal letters patent were interpreted identically by Westminster lawyers and Irish clan septs.\n"
                 "3. **Causality Assumption**: You assume the 1599 confederation was triggered predominantly by tenurial grievances rather than religious and continental geopolitical alliances.\n\n"
@@ -1036,9 +1064,12 @@ class SocraticProbeService:
             fallback_moves = ["Examine Brehon trustee model", "Analyze Hugh O'Neill 1599 grievances"]
             fallback_progress = 0.45
         elif cmd_text.startswith("/counter"):
+            counter_arg = re.sub(r"^/counter\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "counterfactual"
+            target = f"'{counter_arg}'" if counter_arg else "your working thesis"
             fallback_reply = (
-                "**Steelman Counter-Argument**: A contemporary Tudor administrator (or modern constitutional historian) would argue that "
+                f"**Steelman Counter-Argument against {target}**:\n\n"
+                "A contemporary Tudor administrator (or modern constitutional historian like Brendan Bradshaw) would argue that "
                 "the 1541 Act was an unprecedented triumph of conciliation: Gaelic magnates willingly attended the Dublin Parliament, "
                 "celebrated Henry VIII's coronation as King of Ireland, and welcomed English peerage titles (Earl of Tyrone, Earl of Thomond). "
                 "Therefore, the Nine Years' War was caused not by the policy itself, but by rogue opportunistic lords.\n\n"
@@ -1050,12 +1081,13 @@ class SocraticProbeService:
             fallback_moves = ["Address Bradshaw's conciliation thesis", "Cite disinheritance evidence from St. Leger"]
             fallback_progress = 0.50
         elif cmd_text.startswith("/why"):
+            why_arg = re.sub(r"^/why\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "why_ladder"
+            question = f"Why did '{why_arg}' occur?" if why_arg else "Why did substituting tanistry with English feudal primogeniture trigger violent resistance?"
             fallback_reply = (
-                "**Why-Ladder Causal Probe**:\n\n"
-                "Why did substituting tanistry with English feudal primogeniture trigger violent resistance? "
-                "Step down the causal ladder: What happened to the *urritha* (sub-chieftains)? What happened to younger brothers? "
-                "Why could Brehon law not peacefully coexist with knight-service letters patent?"
+                f"**Why-Ladder Causal Probe**:\n\n"
+                f"{question} Step down the causal ladder: What happened to the *urritha* (sub-chieftains)? "
+                "What happened to younger brothers? Why could Brehon law not peacefully coexist with knight-service letters patent?"
             )
             fallback_reason = "Why-ladder inquiry into tenurial causality."
             fallback_satisfied = False
@@ -1063,9 +1095,12 @@ class SocraticProbeService:
             fallback_moves = ["Trace urritha subordination", "Explain primogeniture disinheritance"]
             fallback_progress = 0.50
         elif cmd_text.startswith("/falsify"):
+            falsify_arg = re.sub(r"^/falsify\s*", "", student_reply, flags=re.IGNORECASE).strip()
             fallback_category = "challenge"
+            subject = f"'{falsify_arg}'" if falsify_arg else "your thesis"
             fallback_reply = (
-                "**Falsification Test**: What observation or documentary evidence would prove that your thesis is wrong? "
+                f"**Falsification Test for {subject}**:\n\n"
+                "What observation or documentary evidence would prove that your argument is wrong? "
                 "If historical records showed that junior Gaelic kinsmen and secondary chieftains overwhelmingly endorsed primogeniture "
                 "and paid English quit-rents willingly throughout the 1580s, would your central argument still stand?"
             )
@@ -1208,6 +1243,19 @@ class SocraticProbeService:
             fallback_revision = f"{target_sentence.rstrip('.')} when evaluated under 16th-century feudal tenurial conditions."
             fallback_moves = ["Synthesize into main thesis", "Cross-reference alternative source"]
             fallback_progress = 1.0
+
+        # Short-circuit slash commands, evasions, and drift for deterministic epistemic response
+        if is_slash_cmd or is_evasion or is_drift:
+            return DialecticalTurnResponse(
+                oracle_reply=fallback_reply,
+                is_satisfied=fallback_satisfied,
+                satisfaction_reason=fallback_reason,
+                current_probe_category=fallback_category,
+                suggested_revision=fallback_revision,
+                epistemic_progress=fallback_progress,
+                socratic_moves=fallback_moves,
+                helper_action=fallback_helper_action,
+            )
 
         try:
             formatted_history = "\n".join(

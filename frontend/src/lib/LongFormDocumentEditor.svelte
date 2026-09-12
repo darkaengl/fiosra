@@ -79,19 +79,17 @@
   let chatMessagesContainer = $state(null);
   let showSlashMenu = $state(false);
   let slashMenuIndex = $state(0);
+  let chatTextareaRef = $state(null);
 
   const SLASH_COMMANDS = [
-    { cmd: '/structure', label: 'Structure Assignment', icon: '✦', desc: 'Scaffold sections onto canvas via Helper Agent' },
-    { cmd: '/hint', label: 'Evidentiary Hint', icon: '💡', desc: 'Answer-blind statutory hints from primary sources' },
-    { cmd: '/brainstorm', label: 'Brainstorm Angles', icon: '⚡', desc: 'Explore 3 competing historical hypotheses' },
-    { cmd: '/assumptions', label: 'Expose Assumptions', icon: '🔍', desc: 'Uncover hidden premises in your reasoning' },
-    { cmd: '/counter', label: 'Steelman Counter-Argument', icon: '🛡️', desc: 'Stress-test claim with historical opposition' },
-    { cmd: '/why', label: 'Why-Ladder Probe', icon: '🪜', desc: 'Drill into root causal mechanisms' },
-    { cmd: '/falsify', label: 'Falsification Test', icon: '🎯', desc: 'Test what evidence would prove you wrong' },
-    { cmd: '/mode socratic', label: 'Mode: Socratic Inquirer', icon: '●', desc: 'Balanced inquiries into warrants & causality' },
-    { cmd: '/mode adversarial', label: 'Mode: Adversarial', icon: '🔥', desc: 'Aggressive pressure testing & steelmanning' },
-    { cmd: '/mode brainstorm', label: 'Mode: Brainstorm', icon: '✦', desc: 'Hypothesis exploration without premature closure' },
-    { cmd: '/mode structural', label: 'Mode: Structural', icon: '⊞', desc: 'Section outlining & rubric scaffolding' },
+    { cmd: '/hint', label: 'Evidentiary Hint', paramHint: '<topic or "references for the assignment">', icon: '💡', desc: 'Answer-blind statutory citations & historical hints' },
+    { cmd: '/brainstorm', label: 'Brainstorm Angles', paramHint: '<topic>', icon: '⚡', desc: 'Explore 3 competing historical hypotheses' },
+    { cmd: '/structure', label: 'Structure Assignment', paramHint: '<prompt>', icon: '✦', desc: 'Scaffold sections onto canvas via Helper Agent' },
+    { cmd: '/assumptions', label: 'Expose Assumptions', paramHint: '<claim>', icon: '🔍', desc: 'Uncover hidden premises in your reasoning' },
+    { cmd: '/counter', label: 'Steelman Counter-Argument', paramHint: '<claim>', icon: '🛡️', desc: 'Stress-test claim with historical opposition' },
+    { cmd: '/why', label: 'Why-Ladder Probe', paramHint: '<observation>', icon: '🪜', desc: 'Drill into root causal mechanisms' },
+    { cmd: '/falsify', label: 'Falsification Test', paramHint: '<thesis>', icon: '🎯', desc: 'Test what evidence would prove you wrong' },
+    { cmd: '/mode', label: 'Switch Mode', paramHint: '<socratic | adversarial | brainstorm | structural | dialetheism>', icon: '⚙', desc: 'Switch epistemic pressure and inquiry mode' },
   ];
 
   let filteredSlashCommands = $derived.by(() => {
@@ -120,24 +118,25 @@
     isOracleSatisfied = false;
     oracleSatisfactionReason = '';
     suggestedRevision = null;
-    epistemicProgress = 0.35;
+    epistemicProgress = 0.0;
     activeMoveType = 'socratic';
     chatInputText = '';
-    chatMessages = [
-      {
-        role: 'oracle',
-        content: `I am your Socratic Oracle for this inquiry. We are examining:\n\n> *"${promptText}"*\n\nHow do you plan to establish your core thesis? You can use \`/structure\` to scaffold sections on the canvas, \`/brainstorm\` for historical angles, or \`/hint\` for statutory citations.`,
-        category: 'socratic',
-      }
-    ];
+    // Student initiates the conversation cleanly (no unprompted Oracle greeting)
+    chatMessages = [];
     if (onDrawerStateChange) onDrawerStateChange(true);
     triggerDecorationsUpdate();
   }
 
   function applySlashCommand(command) {
     showSlashMenu = false;
-    chatInputText = '';
-    sendStudentMessage(command.cmd);
+    chatInputText = command.cmd + ' ';
+    setTimeout(() => {
+      if (chatTextareaRef) {
+        chatTextareaRef.focus();
+        const len = chatInputText.length;
+        chatTextareaRef.setSelectionRange(len, len);
+      }
+    }, 20);
   }
 
   // Sentence-level epistemic registry: key = sentence text or fingerprint -> classification
@@ -426,11 +425,6 @@
         activeSentence.targeted_vulnerability = data.targeted_vulnerability;
         activeSentence.socratic_moves = data.socratic_moves || [];
         activeMoveType = moveType;
-
-        // If chat has only the initial probe, update it with the tailored probe
-        if (chatMessages.length <= 1) {
-          chatMessages = [{ role: 'oracle', content: data.oracle_probe, category: data.move_type || moveType }];
-        }
       }
       if (sentenceMap[sentenceText]) {
         sentenceMap[sentenceText].oracle_probe = data.oracle_probe;
@@ -471,19 +465,12 @@
     isOracleSatisfied = false;
     oracleSatisfactionReason = '';
     suggestedRevision = null;
-    epistemicProgress = 0.25;
+    epistemicProgress = 0.0;
     const initialCategory = item.targeted_vulnerability ? 'assumptions' : 'challenge';
     activeMoveType = initialCategory;
     chatInputText = '';
-
-    const initialProbe = item.oracle_probe || `What empirical evidence grounds your assertion that "${item.text.slice(0, 60)}..."?`;
-    chatMessages = [
-      {
-        role: 'oracle',
-        content: initialProbe,
-        category: initialCategory,
-      }
-    ];
+    // Student initiates the conversation cleanly
+    chatMessages = [];
 
     if (!item.targeted_vulnerability) {
       requestSentenceInquiry(item.text, initialCategory, item.epistemic_type || 'claim');
@@ -985,11 +972,17 @@
     }, 50);
 
     try {
+      const validMoveTypes = new Set(['challenge', 'why_ladder', 'assumptions', 'source', 'counterfactual', 'creative', 'socratic']);
+      const safeMoveType = validMoveTypes.has(activeMoveType) ? activeMoveType : 'challenge';
+
       const headers = {
         'Content-Type': 'application/json',
         ...(sessionAccessToken ? { 'X-Fiosra-Session-Token': sessionAccessToken } : {}),
       };
-      const response = await fetch(`/learning-documents/sessions/${sessionId}/probes/dialectical-turn`, {
+      const url = sessionAccessToken 
+        ? `/learning-documents/sessions/${sessionId}/probes/dialectical-turn?access_token=${encodeURIComponent(sessionAccessToken)}`
+        : `/learning-documents/sessions/${sessionId}/probes/dialectical-turn`;
+      const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -998,7 +991,7 @@
           history: chatMessages.slice(0, -1),
           student_reply: text,
           surrounding_context: activeSentence.surrounding_context || '',
-          move_type: activeMoveType,
+          move_type: safeMoveType,
           oracle_pressure: oraclePressure,
         }),
       });
@@ -1692,6 +1685,87 @@
 
       <!-- Multi-Turn Chat Feed -->
       <div class="chat-messages-stream" bind:this={chatMessagesContainer}>
+        {#if chatMessages.length === 0}
+          <div class="empty-inquiry-starter">
+            <div class="starter-hero">
+              <div class="starter-symbol">◌</div>
+              <h4 class="starter-title">Socratic Enquirer Ready</h4>
+              <p class="starter-subtitle">
+                {#if activeSentence?.is_general_inquiry}
+                  Student initiates the inquiry. Formulate your thesis, request statutory references, or use slash tools to begin.
+                {:else if activeSentence}
+                  Targeting: <em>"{activeSentence.text.slice(0, 80)}{activeSentence.text.length > 80 ? '…' : ''}"</em>
+                {/if}
+              </p>
+            </div>
+
+            <div class="starter-suggestions-box">
+              <div class="starter-suggestions-label">Antigravity Slash Prompts (Click to run):</div>
+              <div class="starter-suggestions-list">
+                <button 
+                  type="button" 
+                  class="starter-card" 
+                  onclick={() => { 
+                    chatInputText = '/hint references for the assignment'; 
+                    sendStudentMessage('/hint references for the assignment'); 
+                  }}
+                >
+                  <div class="starter-card-top">
+                    <span class="starter-cmd-pill">/hint references for the assignment</span>
+                    <span class="starter-card-tag">Primary Sources</span>
+                  </div>
+                  <div class="starter-card-desc">Obtain statutory citations for 1541 Crown of Ireland Act, St. Leger, and 1599 Grievances.</div>
+                </button>
+
+                <button 
+                  type="button" 
+                  class="starter-card" 
+                  onclick={() => { 
+                    chatInputText = '/brainstorm historical angles'; 
+                    sendStudentMessage('/brainstorm historical angles'); 
+                  }}
+                >
+                  <div class="starter-card-top">
+                    <span class="starter-cmd-pill">/brainstorm historical angles</span>
+                    <span class="starter-card-tag">Angles</span>
+                  </div>
+                  <div class="starter-card-desc">Examine Crown assimilation vs Gaelic clan tenure destabilization.</div>
+                </button>
+
+                <button 
+                  type="button" 
+                  class="starter-card" 
+                  onclick={() => { 
+                    chatInputText = '/structure 3 sections on tanistry'; 
+                    sendStudentMessage('/structure 3 sections on tanistry'); 
+                  }}
+                >
+                  <div class="starter-card-top">
+                    <span class="starter-cmd-pill">/structure 3 sections on tanistry</span>
+                    <span class="starter-card-tag">Helper Agent</span>
+                  </div>
+                  <div class="starter-card-desc">Scaffold outline section headings directly onto your canvas.</div>
+                </button>
+
+                <button 
+                  type="button" 
+                  class="starter-card" 
+                  onclick={() => { 
+                    chatInputText = '/mode dialetheism'; 
+                    sendStudentMessage('/mode dialetheism'); 
+                  }}
+                >
+                  <div class="starter-card-top">
+                    <span class="starter-cmd-pill">/mode dialetheism</span>
+                    <span class="starter-card-tag">Epistemic Mode</span>
+                  </div>
+                  <div class="starter-card-desc">Pressure test the contradictions of Brehon election vs English feudalism.</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        {/if}
+
         {#each chatMessages as msg}
           <div class="chat-bubble-row {msg.role}">
             <div class="chat-bubble {msg.role}">
@@ -1742,7 +1816,7 @@
         <!-- Floating Slash Command Palette -->
         {#if showSlashMenu && filteredSlashCommands.length > 0}
           <div class="slash-command-menu" role="menu">
-            <div class="slash-menu-header">Epistemic Tools & Modes (Press Enter to select)</div>
+            <div class="slash-menu-header">Epistemic Tools & Modes (Press Enter or Click)</div>
             {#each filteredSlashCommands as item, idx}
               <button 
                 type="button" 
@@ -1754,6 +1828,9 @@
                 <div class="item-details">
                   <div class="item-top">
                     <strong class="item-cmd">{item.cmd}</strong>
+                    {#if item.paramHint}
+                      <span class="item-param-hint">{item.paramHint}</span>
+                    {/if}
                     <span class="item-label">{item.label}</span>
                   </div>
                   <small class="item-desc">{item.desc}</small>
@@ -1765,28 +1842,29 @@
 
         <!-- Quick Epistemic Action Pills -->
         <div class="quick-epistemic-pills" aria-label="Epistemic Quick Actions">
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/structure')} title="Scaffold assignment structure onto canvas">
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/structure '; chatTextareaRef?.focus(); }} title="Scaffold assignment structure onto canvas">
             <span class="pill-icon">✦</span> /structure
           </button>
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/hint')} title="Get primary source hint without solution leakage">
-            <span class="pill-icon">💡</span> /hint
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/hint references for the assignment'; chatTextareaRef?.focus(); }} title="Get primary source hint without solution leakage">
+            <span class="pill-icon">💡</span> /hint references
           </button>
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/brainstorm')} title="Brainstorm 3 competing historical angles">
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/brainstorm '; chatTextareaRef?.focus(); }} title="Brainstorm 3 competing historical angles">
             <span class="pill-icon">⚡</span> /brainstorm
           </button>
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/assumptions')} title="Expose implicit premises in your reasoning">
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/assumptions '; chatTextareaRef?.focus(); }} title="Expose implicit premises in your reasoning">
             <span class="pill-icon">🔍</span> /assumptions
           </button>
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/counter')} title="Challenge your claim with a steelmanned counter-argument">
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/counter '; chatTextareaRef?.focus(); }} title="Challenge your claim with a steelmanned counter-argument">
             <span class="pill-icon">🛡️</span> /counter
           </button>
-          <button type="button" class="pill-btn" onclick={() => sendStudentMessage('/why')} title="Drill into root causal mechanisms">
+          <button type="button" class="pill-btn" onclick={() => { chatInputText = '/why '; chatTextareaRef?.focus(); }} title="Drill into root causal mechanisms">
             <span class="pill-icon">🪜</span> /why
           </button>
         </div>
 
         <div class="input-controls-row">
           <textarea
+            bind:this={chatTextareaRef}
             bind:value={chatInputText}
             oninput={(e) => {
               showSlashMenu = chatInputText.startsWith('/');
@@ -1827,7 +1905,7 @@
           <button 
             type="button" 
             class="drawer-send-btn" 
-            onclick={sendStudentMessage}
+            onclick={() => sendStudentMessage()}
             disabled={isOracleThinking || chatInputText.trim().length === 0}
             title="Send response (Enter)"
           >
@@ -3231,6 +3309,112 @@
   .slash-menu-item .item-desc {
     font-size: 10.5px;
     color: var(--color-slate-muted, #64748b);
+  }
+  .item-param-hint {
+    font-size: 11px;
+    font-family: monospace;
+    color: #64748b;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+
+  /* Antigravity-Style Empty Inquiry Starter State */
+  .empty-inquiry-starter {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 12px;
+    animation: fadeIn 0.18s ease-out;
+  }
+  .starter-hero {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .starter-symbol {
+    font-size: 28px;
+    color: #0284c7;
+    line-height: 1;
+  }
+  .starter-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-heading, #0f172a);
+    margin: 0;
+  }
+  .starter-subtitle {
+    font-size: 12px;
+    color: var(--color-slate-muted, #64748b);
+    max-width: 320px;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .starter-suggestions-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .starter-suggestions-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+  }
+  .starter-suggestions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .starter-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--color-bone-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.09));
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+  .starter-card:hover {
+    background: #f8fafc;
+    border-color: #0284c7;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08);
+  }
+  .starter-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .starter-cmd-pill {
+    font-size: 11.5px;
+    font-family: monospace;
+    font-weight: 600;
+    color: #0284c7;
+  }
+  .starter-card-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(2, 132, 199, 0.08);
+    color: #0369a1;
+  }
+  .starter-card-desc {
+    font-size: 11px;
+    color: var(--color-slate-muted, #64748b);
+    line-height: 1.35;
   }
 
   .drawer-quote-card.general-inquiry {

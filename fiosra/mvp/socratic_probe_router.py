@@ -109,10 +109,11 @@ async def classify_epistemic_structure(
     session_id: UUID,
     request: EpistemicClassifyRequest,
     session_token: SessionToken = None,
+    access_token: str | None = None,
 ) -> EpistemicClassifyResponse:
     """Classify each sentence's epistemic role with LLM-backed evaluation and targeted Socratic probes."""
     try:
-        return await socratic_probe_service.classify_sentences(session_id, session_token, request)
+        return await socratic_probe_service.classify_sentences(session_id, session_token or access_token, request)
     except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
         _raise_probe_error(error)
 
@@ -122,10 +123,11 @@ async def inquire_sentence_dialectics(
     session_id: UUID,
     request: SentenceInquireRequest,
     session_token: SessionToken = None,
+    access_token: str | None = None,
 ) -> SentenceInquireResponse:
     """Execute an on-demand bespoke Socratic Agent inquiry examining an individual sentence."""
     try:
-        return await socratic_probe_service.inquire_sentence(session_id, session_token, request)
+        return await socratic_probe_service.inquire_sentence(session_id, session_token or access_token, request)
     except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
         _raise_probe_error(error)
 
@@ -135,10 +137,11 @@ async def process_dialectical_turn(
     session_id: UUID,
     request: DialecticalTurnRequest,
     session_token: SessionToken = None,
+    access_token: str | None = None,
 ) -> DialecticalTurnResponse:
     """Evaluate student reasoning in an active multi-turn dialectical exchange until satisfied."""
     try:
-        return await socratic_probe_service.dialectical_turn(session_id, session_token, request)
+        return await socratic_probe_service.dialectical_turn(session_id, session_token or access_token, request)
     except (SocraticProbeAccessError, SocraticProbeConflictError, SocraticProbeValidationError) as error:
         _raise_probe_error(error)
 

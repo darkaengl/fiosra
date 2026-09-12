@@ -140,7 +140,7 @@ class EpistemicClassifyResponse(BaseModel):
     sentences: list[SentenceClassification]
 
 
-SocraticMoveType = Literal["challenge", "why_ladder", "assumptions", "source", "counterfactual", "creative"]
+SocraticMoveType = Literal["challenge", "why_ladder", "assumptions", "source", "counterfactual", "creative", "socratic"]
 
 
 class SentenceInquireRequest(BaseModel):
