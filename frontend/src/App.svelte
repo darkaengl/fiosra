@@ -11,6 +11,8 @@
   import AssignmentDesigner from './routes/AssignmentDesigner.svelte';
   import StudentHome from './routes/StudentHome.svelte';
   import StudentPortal from './routes/StudentPortal.svelte';
+  import StudentSources from './routes/StudentSources.svelte';
+  import StudentTimeline from './routes/StudentTimeline.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
 
   let assistantOpen = $state(false);
@@ -22,8 +24,11 @@
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
+    '/student/courses': StudentPortal,
     '/student/home': StudentHome,
     '/student/portal': StudentPortal,
+    '/student/sources': StudentSources,
+    '/student/timeline': StudentTimeline,
     '/student/trace': StudentTrace,
     '*': Modules,
   };

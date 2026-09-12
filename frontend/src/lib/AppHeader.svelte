@@ -69,6 +69,7 @@
 
     let activeTab = 'modules';
     let isStudentView = false;
+    let isStudentGlobal = false;
 
     if (path.startsWith('/courses')) {
       activeTab = 'courses';
@@ -84,19 +85,30 @@
       activeTab = 'graph';
     } else if (path.startsWith('/student')) {
       isStudentView = true;
-      if (path.startsWith('/student/portal')) activeTab = 'student-portal';
-      else if (path.startsWith('/student/home')) activeTab = 'student-home';
-      else if (path.startsWith('/student/trace')) activeTab = 'student-trace';
-      else activeTab = 'student-canvas';
+      if (path.startsWith('/student/timeline')) {
+        activeTab = 'student-timeline';
+        isStudentGlobal = true;
+      } else if (path.startsWith('/student/portal') || path.startsWith('/student/courses')) {
+        activeTab = 'student-portal';
+        isStudentGlobal = true;
+      } else if (path.startsWith('/student/home')) {
+        activeTab = 'student-home';
+      } else if (path.startsWith('/student/sources')) {
+        activeTab = 'student-sources';
+      } else if (path.startsWith('/student/trace')) {
+        activeTab = 'student-trace';
+      } else {
+        activeTab = 'student-canvas';
+      }
     } else {
       activeTab = 'modules';
     }
 
     const logoHref = isStudentView ? '#/student/portal' : '#/courses';
-    const logoTitle = isStudentView ? 'Return to Student Hub' : 'Return to Course Portfolio';
+    const logoTitle = isStudentView ? 'Return to Student Courses' : 'Return to Course Portfolio';
     const isGlobalView = !isStudentView && activeTab === 'courses';
 
-    return { path, courseId, courseQuery, activeTab, isStudentView, isGlobalView, logoHref, logoTitle };
+    return { path, courseId, courseQuery, activeTab, isStudentView, isStudentGlobal, isGlobalView, logoHref, logoTitle };
   });
 
   let activeCourseLabel = $derived.by(() => {
@@ -123,7 +135,7 @@
         <span class="context-badge">LMS</span>
       {/if}
 
-      {#if activeCourseLabel && !parsed.isGlobalView}
+      {#if activeCourseLabel && !parsed.isGlobalView && !parsed.isStudentGlobal}
         <span class="context-separator">/</span>
         <a
           href={parsed.isStudentView ? `#/student/home${parsed.courseQuery}` : `#/modules${parsed.courseQuery}`}
@@ -138,30 +150,54 @@
 
     <nav class="nav-segmented" aria-label="Main Navigation">
       {#if parsed.isStudentView}
-        <a
-          href="#/student/portal{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'student-portal' ? 'active' : ''}"
-        >
-          Timeline
-        </a>
-        <a
-          href="#/student/home{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'student-home' ? 'active' : ''}"
-        >
-          Home
-        </a>
-        <a
-          href="#/student{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
-        >
-          Canvas
-        </a>
-        <a
-          href="#/student/trace{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
-        >
-          Trace
-        </a>
+        {#if parsed.isStudentGlobal}
+          <a
+            href="#/student/portal"
+            class="nav-pill {parsed.activeTab === 'student-portal' ? 'active' : ''}"
+          >
+            📚 Courses & Enrollment
+          </a>
+          <a
+            href="#/student/timeline"
+            class="nav-pill {parsed.activeTab === 'student-timeline' ? 'active' : ''}"
+          >
+            📈 Progression Timeline
+          </a>
+        {:else}
+          <a
+            href="#/student/portal"
+            class="nav-pill nav-pill-back"
+            title="Return to Course Catalog & Global Hub"
+          >
+            ← All Courses
+          </a>
+          <a
+            href="#/student/home{parsed.courseQuery}"
+            class="nav-pill {parsed.activeTab === 'student-home' ? 'active' : ''}"
+          >
+            Course Map
+          </a>
+          {#if parsed.activeTab !== 'student-canvas'}
+            <a
+              href="#/student/sources{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-sources' ? 'active' : ''}"
+            >
+              Primary Sources
+            </a>
+            <a
+              href="#/student{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
+            >
+              Reasoning Canvas
+            </a>
+            <a
+              href="#/student/trace{parsed.courseQuery}"
+              class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
+            >
+              Evidence Trace
+            </a>
+          {/if}
+        {/if}
       {:else}
         <a
           href="#/courses"
@@ -356,6 +392,19 @@
     border-color: var(--pill-active-border);
     font-weight: 600;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  .nav-pill.nav-pill-back {
+    color: var(--color-slate-muted);
+    font-size: 11.5px;
+    padding: 5px 11px;
+    border-right: 1px solid var(--pill-border);
+    border-radius: var(--radius-sm);
+    margin-right: 2px;
+  }
+  .nav-pill.nav-pill-back:hover {
+    color: var(--color-heading);
+    background: var(--pill-hover);
   }
 
   /* Right Cluster */

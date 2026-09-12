@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     OPENAI_API_BASE: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str | None = None
-    GEMINI_MODEL: str = "gemini/gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini/gemini-3.6-flash"
     OLLAMA_API_BASE: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "ollama/llama3.2"
     # Local models can take longer than hosted providers to generate a complete

@@ -10,6 +10,8 @@ from fiosra.mvp.courses.schemas import (
     CohortRosterResponse,
     CourseCreate,
     CourseResponse,
+    EnrollmentResponse,
+    EnrollRequest,
     ModuleCreate,
     ModuleResponse,
     ResourceCreateRequest,
@@ -55,6 +57,23 @@ async def list_courses() -> list[CourseResponse]:
         ) from e
 
 
+@router.get("/enrolled", response_model=list[CourseResponse])
+async def list_enrolled_courses(
+    student_id: Annotated[str, Query(min_length=1, description="Student identifier")],
+) -> list[CourseResponse]:
+    """
+    Lists courses a specific student is enrolled in.
+    """
+    try:
+        return await course_service.list_enrolled_courses(student_id)
+    except Exception as e:
+        logger.exception("Error listing enrolled courses")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list enrolled courses: {e!s}",
+        ) from e
+
+
 @router.get("/{course_id}", response_model=CourseResponse)
 async def get_course(course_id: UUID) -> CourseResponse:
     """
@@ -67,6 +86,40 @@ async def get_course(course_id: UUID) -> CourseResponse:
             detail=f"Course with ID '{course_id}' not found.",
         )
     return course
+
+
+@router.post("/{course_id}/enroll", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def enroll_student(course_id: UUID, payload: EnrollRequest) -> EnrollmentResponse:
+    """
+    Enrolls a student in a course. Idempotent — re-enrolling returns the existing enrollment.
+    """
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    try:
+        return await course_service.enroll_student(course_id, payload.student_id)
+    except Exception as e:
+        logger.exception("Error enrolling student")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enroll: {e!s}",
+        ) from e
+
+
+@router.delete("/{course_id}/enroll/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unenroll_student(course_id: UUID, student_id: str) -> None:
+    """
+    Removes a student's enrollment from a course.
+    """
+    deleted = await course_service.unenroll_student(course_id, student_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No enrollment found for student '{student_id}' in course '{course_id}'.",
+        )
 
 
 @router.post("/{course_id}/modules", response_model=ModuleResponse, status_code=status.HTTP_201_CREATED)

@@ -89,3 +89,15 @@ class CohortRosterResponse(BaseModel):
     course_title: str
     total_enrolled: int
     students: list[CohortStudentMetrics] = Field(default_factory=list)
+
+
+class EnrollRequest(BaseModel):
+    student_id: str = Field(..., description="Student identifier from browser localStorage")
+
+
+class EnrollmentResponse(BaseModel):
+    enrollment_id: UUID
+    course_id: UUID
+    student_id: str
+    enrolled_at: datetime
+

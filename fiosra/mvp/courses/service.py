@@ -11,6 +11,7 @@ from fiosra.mvp.courses.schemas import (
     CohortStudentMetrics,
     CourseCreate,
     CourseResponse,
+    EnrollmentResponse,
     ModuleCreate,
     ModuleResponse,
 )
@@ -290,6 +291,90 @@ class CourseService:
             is_locked=row["position"] > 1,
             assignments=assignments,
         )
+
+    # ------------------------------------------------------------------
+    # Enrollment Management
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def enroll_student(cls, course_id: UUID | str, student_id: str) -> EnrollmentResponse:
+        """Enroll a student in a course. Idempotent — re-enrolling returns existing row."""
+        upsert_sql = text("""
+            INSERT INTO enrollments (course_id, student_id, enrolled_at)
+            VALUES (:course_id, :student_id, NOW())
+            ON CONFLICT (course_id, student_id) DO NOTHING
+            RETURNING enrollment_id, course_id, student_id, enrolled_at;
+        """)
+        select_sql = text("""
+            SELECT enrollment_id, course_id, student_id, enrolled_at
+            FROM enrollments
+            WHERE course_id = :course_id AND student_id = :student_id;
+        """)
+        params = {"course_id": str(course_id), "student_id": student_id}
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(upsert_sql, params)
+            row = result.mappings().first()
+            if not row:
+                # Already enrolled — fetch existing record
+                result = await session.execute(select_sql, params)
+                row = result.mappings().first()
+            await session.commit()
+
+        return EnrollmentResponse(
+            enrollment_id=row["enrollment_id"],
+            course_id=row["course_id"],
+            student_id=row["student_id"],
+            enrolled_at=row["enrolled_at"],
+        )
+
+    @classmethod
+    async def unenroll_student(cls, course_id: UUID | str, student_id: str) -> bool:
+        """Remove a student's enrollment. Returns True if a row was deleted."""
+        delete_sql = text("""
+            DELETE FROM enrollments
+            WHERE course_id = :course_id AND student_id = :student_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                delete_sql,
+                {"course_id": str(course_id), "student_id": student_id},
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def list_enrolled_courses(cls, student_id: str) -> list[CourseResponse]:
+        """Return all courses a student is enrolled in, with modules and assignment counts."""
+        enrolled_sql = text("""
+            SELECT c.course_id, c.title, c.domain, c.created_by, c.syllabus_context, c.created_at
+            FROM courses c
+            JOIN enrollments e ON c.course_id = e.course_id
+            WHERE e.student_id = :student_id
+            ORDER BY e.enrolled_at DESC;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(enrolled_sql, {"student_id": student_id})
+            rows = result.mappings().all()
+
+        courses: list[CourseResponse] = []
+        for row in rows:
+            cid = row["course_id"]
+            modules = await cls.get_modules_for_course(cid)
+            assignment_count = sum(len(m.assignments) for m in modules)
+            courses.append(
+                CourseResponse(
+                    course_id=cid,
+                    title=row["title"],
+                    domain=row["domain"] or "General",
+                    created_by=row["created_by"],
+                    syllabus_context=row["syllabus_context"],
+                    created_at=row["created_at"],
+                    modules=modules,
+                    assignments_count=assignment_count,
+                )
+            )
+        return courses
 
     @classmethod
     async def get_cohort_roster(cls, course_id: UUID | str) -> CohortRosterResponse:
