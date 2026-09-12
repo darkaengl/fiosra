@@ -16,6 +16,7 @@
   "dependencies": {
     "@tiptap/core": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
-    "svelte-spa-router": "^5.1.1"
+    "svelte-spa-router": "^5.1.1",
+    "vis-network": "^10.1.2"
   }
 }
