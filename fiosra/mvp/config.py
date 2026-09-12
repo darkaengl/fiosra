@@ -36,7 +36,10 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
     OPENAI_API_KEY: str | None = None
     OPENAI_API_BASE: str | None = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    # Nano is appropriate for brief, structured, answer-blind writing help.
+    # It can be promoted per environment without changing application code.
+    OPENAI_MODEL: str = "gpt-4.1-nano"
+    OPENAI_TIMEOUT_SECONDS: float = 30.0
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini/gemini-3.6-flash"
     OLLAMA_API_BASE: str = "http://localhost:11434"

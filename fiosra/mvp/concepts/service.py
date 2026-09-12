@@ -683,5 +683,50 @@ class ConceptGraphService:
             },
         }
 
+    async def match_claim_concepts(
+        self,
+        course_id: str,
+        claim_text: str,
+        limit: int = 2,
+    ) -> list[dict[str, str]]:
+        """Return approved concepts whose teacher-validated language overlaps a claim.
+
+        This is a deliberately conservative retrieval step, not a claim-truth
+        classifier. A concept match tells the Socratic agent what relationship to
+        probe; it never determines whether the learner's claim is correct.
+        """
+        claim_terms = set(re.findall(r"[a-z0-9]{4,}", claim_text.lower()))
+        if not claim_terms:
+            return []
+        query = """
+        MATCH (concept:Concept {course_id: $course_id, status: 'approved'})
+        RETURN concept.concept_id AS concept_id,
+               concept.label AS label,
+               concept.definition AS definition,
+               concept.level AS level
+        """
+        async with self.client.get_session() as session:
+            result = await session.run(query, {"course_id": str(course_id)})
+            candidates = [dict(record) for record in await result.data()]
+
+        scored: list[tuple[int, dict[str, str]]] = []
+        for candidate in candidates:
+            label_terms = set(re.findall(r"[a-z0-9]{4,}", str(candidate.get("label") or "").lower()))
+            definition_terms = set(re.findall(r"[a-z0-9]{4,}", str(candidate.get("definition") or "").lower()))
+            score = 3 * len(claim_terms & label_terms) + len(claim_terms & definition_terms)
+            if score:
+                scored.append(
+                    (
+                        score,
+                        {
+                            "concept_id": str(candidate["concept_id"]),
+                            "label": str(candidate["label"]),
+                            "definition": str(candidate.get("definition") or ""),
+                            "level": str(candidate.get("level") or ""),
+                        },
+                    )
+                )
+        return [candidate for _, candidate in sorted(scored, key=lambda item: (-item[0], item[1]["label"]))[:limit]]
+
 
 concept_graph_service = ConceptGraphService()

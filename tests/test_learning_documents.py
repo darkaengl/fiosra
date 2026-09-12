@@ -23,7 +23,7 @@ def paragraph_block(block_id: str, position: int, text: str, section_id: str = "
 
 
 @pytest.mark.asyncio
-async def test_long_form_document_imports_canvas_and_requires_session_capability():
+async def test_long_form_document_starts_blank_and_requires_session_capability():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assignment, _source_chunk_id = await create_published_grounded_assignment(client)
         session_response = await client.post(
@@ -46,16 +46,13 @@ async def test_long_form_document_imports_canvas_and_requires_session_capability
         state = state_response.json()
         assert state["session_id"] == session_id
         assert state["document_revision"] == 0
-        assert len(state["blocks"]) == 10
-        assert [block["block_type"] for block in state["blocks"]] == ["heading", "paragraph"] * 5
-        assert all(block["content"]["attrs"]["blockId"] == block["block_id"] for block in state["blocks"])
+        assert state["blocks"] == []
 
-        paragraph = next(block for block in state["blocks"] if block["block_type"] == "paragraph")
         changed = paragraph_block(
-            paragraph["block_id"],
-            paragraph["position"],
+            str(uuid.uuid4()),
+            1,
             "The drainage pattern supports an inference about coordination but not its institution.",
-            paragraph["section_id"],
+            "page_1",
         )
         sync_response = await client.put(
             f"/learning-documents/sessions/{session_id}",
@@ -65,9 +62,9 @@ async def test_long_form_document_imports_canvas_and_requires_session_capability
         assert sync_response.status_code == 200
         synced = sync_response.json()
         assert synced["document_revision"] == 1
-        restored = next(block for block in synced["blocks"] if block["block_id"] == paragraph["block_id"])
+        restored = next(block for block in synced["blocks"] if block["block_id"] == changed["block_id"])
         assert restored["plaintext"] == changed["content"]["content"][0]["text"]
-        assert restored["revision"] == 2
+        assert restored["revision"] == 1
 
         stale_response = await client.put(
             f"/learning-documents/sessions/{session_id}",
@@ -108,7 +105,7 @@ async def test_long_document_accepts_many_incremental_blocks_without_document_wi
         paragraph_text = "evidence " * 240
         blocks = [
             paragraph_block(str(uuid.uuid4()), position, paragraph_text)
-            for position in range(11, 136)
+            for position in range(1, 126)
         ]
         sync_response = await client.put(
             f"/learning-documents/sessions/{session_id}",
@@ -118,7 +115,7 @@ async def test_long_document_accepts_many_incremental_blocks_without_document_wi
         assert sync_response.status_code == 200
         synced = sync_response.json()
         assert synced["document_revision"] == 1
-        assert len(synced["blocks"]) == 135
+        assert len(synced["blocks"]) == 125
         assert sum(len(block["plaintext"]) for block in synced["blocks"]) > 200_000
 
         replay = await client.get(f"/events/session/{session_id}", headers=headers)

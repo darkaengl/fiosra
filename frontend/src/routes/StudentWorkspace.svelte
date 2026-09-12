@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
   import {
     getStudentId,
@@ -38,7 +38,19 @@
   let supportResult = $state(null);
   let isSupportBusy = $state(false);
   let liveBlocks = $state([]);
-  let oraclePressure = $state('socratic'); // 'silent' | 'socratic' | 'challenger' | 'ruthless'
+  let oraclePressure = $state('socratic'); // 'socratic' | 'adversarial' | 'brainstorm' | 'structural' | 'hint' | 'assumptions'
+  let isDrawerOpen = $state(false);
+
+  function toggleSocraticDrawer() {
+    if (activeWorkspaceTab !== 'canvas') {
+      activeWorkspaceTab = 'canvas';
+    }
+    setTimeout(() => {
+      if (editorRef && typeof editorRef.toggleSocraticDrawer === 'function') {
+        editorRef.toggleSocraticDrawer();
+      }
+    }, activeWorkspaceTab !== 'canvas' ? 50 : 0);
+  }
 
   let allDocumentBlocks = $derived.by(() => {
     if (liveBlocks && liveBlocks.length > 0) return liveBlocks;
@@ -110,8 +122,6 @@
   let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
   let publicSources = $derived(published?.source_pack || []);
-
-  const QUIET_PERIOD_MS = 5000;
 
   function sessionHeaders() {
     return {
@@ -236,11 +246,15 @@
       });
       if (existing.ok) {
         const session = (await existing.json()).session;
-        if (session.status === 'active') {
+        if (session.status === 'active' && session.assignment_id === assignmentId) {
           sessionId = persistedSessionId;
           sessionAccessToken = persistedAccessToken;
           sessionStatus = session.status;
+        } else {
+          localStorage.removeItem(key);
         }
+      } else {
+        localStorage.removeItem(key);
       }
     }
 
@@ -269,7 +283,6 @@
   }
 
   async function syncDocument(patch) {
-    clearTimeout(probeTimer);
     const response = await fetch(`/learning-documents/sessions/${sessionId}`, {
       method: 'PUT',
       headers: sessionHeaders(),
@@ -280,35 +293,23 @@
     return learningDocument;
   }
 
-  function scheduleProbeEvaluation(syncedDocument) {
-    clearTimeout(probeTimer);
-    if (sessionStatus !== 'active' || !syncedDocument?.changed_block_ids?.length) return;
-    probeTimer = setTimeout(() => evaluateProbes(syncedDocument), QUIET_PERIOD_MS);
-  }
-
-  async function evaluateProbes(syncedDocument) {
+  async function offerConceptProbes(request) {
+    if (!sessionId || sessionStatus !== 'active') return;
     try {
       const response = await fetch(`/learning-documents/sessions/${sessionId}/probes/evaluate`, {
         method: 'POST',
         headers: sessionHeaders(),
-        body: JSON.stringify({
-          document_revision: syncedDocument.document_revision,
-          changed_block_ids: syncedDocument.changed_block_ids,
-        }),
+        body: JSON.stringify(request),
       });
-      if (response.status === 409) return;
-      if (!response.ok) throw new Error(await responseError(response, 'Your writing was saved, but its evidence question could not be checked.'));
+      if (!response.ok) throw new Error(await responseError(response, 'Writing help is unavailable right now.'));
       const result = await response.json();
       probes = result.pending || [];
       evidenceSummary = result.evidence_summary || evidenceSummary;
-      if (result.created?.length) {
-        activeProbeId = result.created[0].probe_id;
-        probeNotice = 'An optional writing prompt is available if you would like support with your next step.';
-        isTutorPanelOpen = false;
-      }
-      await loadSessionEvents();
+      if (!activeProbeId && probes[0]) activeProbeId = probes[0].probe_id;
+      if (result.availability_notice) probeNotice = result.availability_notice;
     } catch (err) {
-      probeNotice = err.message || 'Your writing is saved. A question could not be checked right now.';
+      // Saving has already completed; an optional background offer must never interrupt writing.
+      console.warn('Offering concept-aware Socratic question:', err);
     }
   }
 
@@ -485,7 +486,6 @@
     }
   });
 
-  onDestroy(() => clearTimeout(probeTimer));
 </script>
 
 <svelte:window onkeydown={(e) => {
@@ -583,21 +583,23 @@
       </nav>
 
       <div class="topbar-right">
-        <!-- Oracle Pressure Controller -->
-        <div class="oracle-pressure-widget" title="Oracle pressure controls how aggressively the Socratic tutor stress-tests your claims">
-          <span class="pressure-symbol">◌</span>
-          <select 
-            class="pressure-dropdown" 
-            bind:value={oraclePressure} 
-            onchange={handlePressureChange}
-            aria-label="Oracle Pressure Controller"
-          >
-            <option value="silent">○ Silent Observer</option>
-            <option value="socratic">● Socratic Inquirer</option>
-            <option value="challenger">⚡ Adversarial Challenger</option>
-            <option value="ruthless">🔥 Ruthless Pressure</option>
-          </select>
-        </div>
+        <!-- Single entry point for learner-controlled writing help. -->
+        <button 
+          type="button" 
+          class="socratic-enquirer-btn" 
+          class:active={isDrawerOpen}
+          onclick={toggleSocraticDrawer}
+          title="Open writing help"
+          aria-label="Open writing help"
+        >
+          <span class="enquirer-icon-wrap">
+            <span class="enquirer-symbol">◌</span>
+            {#if probes.length > 0 && !isDrawerOpen}
+              <span class="enquirer-pulse-dot"></span>
+            {/if}
+          </span>
+          <span class="enquirer-label">{probes.length > 0 && !isDrawerOpen ? 'Fiosra · question ready' : 'Ask Fiosra'}</span>
+        </button>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
@@ -763,18 +765,17 @@
               {sessionAccessToken}
               disabled={sessionStatus !== 'active'}
               onSync={syncDocument}
-              onSynced={scheduleProbeEvaluation}
-              onOpenQuestions={() => { activeWorkspaceTab = 'trace'; }}
+              onSynced={loadSessionEvents}
+              onStableDocument={offerConceptProbes}
+              proactiveProbes={probes}
+              onProbeAction={(probeId, action) => changeProbe(probeId, action)}
               onOpenSources={() => { activeWorkspaceTab = 'materials'; }}
               onHeadingsChange={(h) => documentHeadings = h}
               onBlocksChange={(b) => liveBlocks = b}
-              probes={probes}
-              probeCount={probes.length}
               oraclePressure={oraclePressure}
-              onProbeResponse={handleInlineProbeResponse}
-              onProbeDefer={(id) => changeProbe(id, 'defer')}
-              onProbeDismiss={(id) => changeProbe(id, 'dismiss')}
               onChallengeIdea={handleChallengeIdea}
+              onDrawerStateChange={(open) => isDrawerOpen = open}
+              onPressureChange={(p) => oraclePressure = p}
             />
           {/if}
         </main>
@@ -803,10 +804,6 @@
               <div class="trace-stat-tile">
                 <span class="stat-num assumptions">{graphMetrics.assumptions}</span>
                 <span class="stat-lbl">Implicit Assumptions</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num probes">{probes.length}</span>
-                <span class="stat-lbl">Active Probes</span>
               </div>
             </div>
 
@@ -1152,6 +1149,22 @@
   .tutor-toggle-btn:hover, .tutor-toggle-btn.active {
     background: rgba(139, 92, 246, 0.2);
     border-color: #8b5cf6;
+  }
+
+  .concept-inquiry-notice {
+    align-self: center;
+    background: transparent;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-slate-light);
+    cursor: pointer;
+    font-size: 11px;
+    margin: 8px 0 0;
+    padding: 7px 10px;
+  }
+
+  .concept-inquiry-notice:hover {
+    color: var(--color-heading);
   }
 
   .probe-dot {
@@ -2183,39 +2196,77 @@
   .support-result-card p,.support-result-card li { color: var(--color-slate-light); font-size: 11px; line-height: 1.5; margin: 0; }
   .support-result-card ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
 
-  /* Oracle Pressure Topbar Widget */
-  .oracle-pressure-widget {
+  /* Socratic Enquirer Tactile Trigger Button (Not a dropdown) */
+  .socratic-enquirer-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: var(--color-graphite, #ffffff);
+    gap: 8px;
+    background: var(--color-surface, #ffffff);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
     border-radius: var(--radius-sm, 6px);
-    padding: 3px 8px;
-    transition: all 0.15s ease;
+    padding: 5px 12px;
+    font-family: var(--font-ui, sans-serif);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-heading, #121418);
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
-  .oracle-pressure-widget:hover {
-    background: var(--color-graphite-hover, #f1f2ed);
+  .socratic-enquirer-btn:hover {
+    background: var(--color-graphite-hover, #f8f9fa);
     border-color: var(--color-aurora, #0284c7);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12);
   }
-  .pressure-symbol {
-    font-size: 12px;
+  .socratic-enquirer-btn.active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.09), rgba(99, 102, 241, 0.09));
+    border-color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #0284c7);
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+  }
+  .enquirer-icon-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .enquirer-symbol {
+    font-size: 13.5px;
     font-weight: 800;
     color: var(--color-aurora, #0284c7);
+    transition: transform 0.2s ease;
   }
-  .pressure-dropdown {
-    background: transparent;
-    border: none;
-    color: var(--color-heading, #121418);
-    font-family: var(--font-ui, sans-serif);
-    font-size: 12px;
-    font-weight: 600;
-    outline: none;
-    cursor: pointer;
+  .socratic-enquirer-btn:hover .enquirer-symbol {
+    transform: scale(1.15);
   }
-  .pressure-dropdown option {
-    background: var(--color-graphite, #ffffff);
-    color: var(--color-heading, #121418);
+  .enquirer-pulse-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 6px #10b981;
+  }
+  .enquirer-label {
+    letter-spacing: -0.01em;
+  }
+  .enquirer-mode-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: capitalize;
+    background: rgba(2, 132, 199, 0.09);
+    color: var(--color-aurora, #0284c7);
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid rgba(2, 132, 199, 0.2);
+  }
+  .socratic-enquirer-btn.active .enquirer-mode-pill {
+    background: var(--color-aurora, #0284c7);
+    color: #ffffff;
+    border-color: var(--color-aurora, #0284c7);
   }
 
   /* Reasoning Graph & Claim Tree Panel */

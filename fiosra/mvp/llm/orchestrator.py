@@ -156,6 +156,7 @@ class LLMOrchestrator:
         max_tokens: int,
         allow_live: bool = True,
         request_timeout_seconds: float | None = None,
+        response_format: dict[str, object] | None = None,
     ) -> GuardedGeneration:
         """Return a validated live response or the supplied deterministic fallback.
 
@@ -204,6 +205,7 @@ class LLMOrchestrator:
                     purpose=purpose,
                     max_tokens=max_tokens,
                     timeout_seconds=request_timeout_seconds,
+                    response_format=response_format,
                     metadata={"user": self._pseudonymous_user(pseudonymous_seed)},
                 )
             )

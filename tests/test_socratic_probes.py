@@ -4,7 +4,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from fiosra.mvp.config import settings
+from fiosra.mvp.llm.orchestrator import GenerationMetadata, GuardedGeneration, llm_orchestrator
 from fiosra.mvp.main import app
+from fiosra.mvp.socratic_probe_service import socratic_probe_service
 from tests.test_learning_canvas import create_published_grounded_assignment
 from tests.test_learning_documents import paragraph_block
 
@@ -35,15 +37,21 @@ async def save_meaningful_paragraph(
     headers: dict[str, str],
     suffix: str = "",
 ) -> tuple[dict, dict]:
-    paragraph = next(block for block in document["blocks"] if block["block_type"] == "paragraph")
     prose = (
         "The drainage channels indicate deliberate coordination across connected homes because "
         "their repeated alignment requires shared construction decisions, although the surviving "
         "evidence does not identify which institution organized the labour. "
         f"{suffix}"
     )
+    paragraph = next(
+        (block for block in document["blocks"] if block["block_type"] == "paragraph"),
+        None,
+    )
     changed = paragraph_block(
-        paragraph["block_id"], paragraph["position"], prose, paragraph["section_id"]
+        paragraph["block_id"] if paragraph else str(uuid.uuid4()),
+        paragraph["position"] if paragraph else 1,
+        prose,
+        paragraph["section_id"] if paragraph else "page_1",
     )
     saved_response = await client.put(
         f"/learning-documents/sessions/{session['session_id']}",
@@ -58,11 +66,32 @@ async def save_meaningful_paragraph(
     return saved_response.json(), changed
 
 
+def stub_live_concept_probe(monkeypatch) -> None:
+    """Keep lifecycle tests deterministic while proving questions require a live agent."""
+    async def concepts_for_claim(_assignment_id, _claim_text):
+        return [{
+            "concept_id": "coordination",
+            "label": "Civic coordination",
+            "definition": "Collective organization of shared infrastructure.",
+            "level": "topic",
+        }]
+
+    async def live_question(**_kwargs):
+        return GuardedGeneration(
+            content="What relationship in your claim shows civic coordination rather than an isolated household decision?",
+            metadata=GenerationMetadata(provider="test", model="test-concept-agent", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(socratic_probe_service, "_concepts_for_claim", concepts_for_claim)
+    monkeypatch.setattr(llm_orchestrator, "enhance", live_question)
+
+
 @pytest.mark.asyncio
 async def test_proactive_probe_is_authorized_idempotent_and_records_response(monkeypatch):
     monkeypatch.setattr(settings, "FIOSRA_PROBE_QUIET_SECONDS", 0)
     monkeypatch.setattr(settings, "FIOSRA_PROBE_COOLDOWN_SECONDS", 0)
     monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    stub_live_concept_probe(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         _assignment, session, document = await create_document_session(client)
         headers = {"X-Fiosra-Session-Token": session["access_token"]}
@@ -99,7 +128,8 @@ async def test_proactive_probe_is_authorized_idempotent_and_records_response(mon
         assert probe["evidence_state"] == "unverified"
         assert probe["question"].endswith("?")
         assert "answer" not in probe["question"].lower()
-        assert probe["generation_metadata"]["used_live_provider"] is False
+        assert probe["generation_metadata"]["used_live_provider"] is True
+        assert probe["concept_label"] == "Civic coordination"
 
         duplicate = await client.post(
             evaluate_url,
@@ -163,6 +193,7 @@ async def test_probe_defer_and_material_document_revision_supersede_prior_questi
     monkeypatch.setattr(settings, "FIOSRA_PROBE_QUIET_SECONDS", 0)
     monkeypatch.setattr(settings, "FIOSRA_PROBE_COOLDOWN_SECONDS", 0)
     monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    stub_live_concept_probe(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         _assignment, session, document = await create_document_session(client)
         headers = {"X-Fiosra-Session-Token": session["access_token"]}
@@ -209,7 +240,7 @@ async def test_probe_defer_and_material_document_revision_supersede_prior_questi
         next_probe = reevaluated.json()["created"]
         assert len(next_probe) == 1
         assert next_probe[0]["probe_id"] != first_probe["probe_id"]
-        assert next_probe[0]["source_block_revision"] == 3
+        assert next_probe[0]["source_block_revision"] == 2
 
         dismissed = await client.post(
             f"/learning-documents/sessions/{session['session_id']}/probes/{next_probe[0]['probe_id']}/dismiss",
@@ -244,7 +275,61 @@ async def test_probes_reject_nonmember_blocks_and_submitted_sessions(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_epistemic_classify_sentences():
+async def test_concept_probe_is_not_offered_when_the_live_model_is_unavailable(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_PROBE_QUIET_SECONDS", 0)
+    monkeypatch.setattr(settings, "FIOSRA_PROBE_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+
+    async def concepts_for_claim(_assignment_id, _claim_text):
+        return [{
+            "concept_id": "coordination",
+            "label": "Civic coordination",
+            "definition": "Collective organization of shared infrastructure.",
+            "level": "topic",
+        }]
+
+    monkeypatch.setattr(socratic_probe_service, "_concepts_for_claim", concepts_for_claim)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        saved, changed = await save_meaningful_paragraph(client, session, document, headers)
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/evaluate",
+            headers=headers,
+            json={"document_revision": saved["document_revision"], "changed_block_ids": [changed["block_id"]]},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["created"] == []
+        assert body["pending"] == []
+        assert "temporarily unavailable" in body["availability_notice"].lower()
+
+
+@pytest.mark.asyncio
+async def test_source_reference_request_opens_assigned_materials_without_model_text(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
+            headers=headers,
+            json={
+                "sentence": "I need to develop an argument.",
+                "student_reply": "give me source for reference",
+                "move_type": "socratic",
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "open" in body["oracle_reply"].lower()
+        assert body["interactive_actions"][0]["action_type"] == "cite_source"
+        assert "source proves" not in body["oracle_reply"].lower()
+
+
+@pytest.mark.asyncio
+async def test_epistemic_classify_sentences(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         _assignment, session, _document = await create_document_session(client)
         headers = {"X-Fiosra-Session-Token": session["access_token"]}
@@ -277,13 +362,13 @@ async def test_epistemic_classify_sentences():
 
 
 @pytest.mark.asyncio
-async def test_sentence_inquire_socratic_agent():
+async def test_sentence_inquire_reports_when_a_live_model_is_unavailable(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         _assignment, session, _document = await create_document_session(client)
         headers = {"X-Fiosra-Session-Token": session["access_token"]}
         inquire_url = f"/learning-documents/sessions/{session['session_id']}/probes/sentence-inquire"
 
-        # Challenge inquiry
         response = await client.post(
             inquire_url,
             headers=headers,
@@ -295,27 +380,10 @@ async def test_sentence_inquire_socratic_agent():
                 "oracle_pressure": "socratic",
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
-        assert data["oracle_probe"].endswith("?")
-        assert len(data["socratic_moves"]) >= 2
-        assert data["move_type"] == "challenge"
-        assert data["targeted_vulnerability"]
-
-        # Why ladder inquiry
-        why_response = await client.post(
-            inquire_url,
-            headers=headers,
-            json={
-                "sentence": "Because asynchronous communication reduces meeting fragmentation, deep work intervals increase.",
-                "epistemic_type": "reasoning",
-                "move_type": "why_ladder",
-            },
-        )
-        assert why_response.status_code == 200
-        why_data = why_response.json()
-        assert why_data["oracle_probe"].endswith("?")
-        assert why_data["move_type"] == "why_ladder"
+        assert "unavailable" in data["detail"].lower()
+        assert "draft has not changed" in data["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -326,7 +394,8 @@ async def test_dialectical_turn_socratic_oracle(monkeypatch):
         headers = {"X-Fiosra-Session-Token": session["access_token"]}
         turn_url = f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn"
 
-        # Turn 1: Incomplete / ungrounded defense -> Oracle remains unsatisfied and asks follow-up
+        # A live Enquirer does not substitute deterministic tutoring when no
+        # model is configured.
         response_incomplete = await client.post(
             turn_url,
             headers=headers,
@@ -343,46 +412,182 @@ async def test_dialectical_turn_socratic_oracle(monkeypatch):
                 "move_type": "challenge",
             },
         )
-        assert response_incomplete.status_code == 200
+        assert response_incomplete.status_code == 503
         data1 = response_incomplete.json()
-        assert "oracle_reply" in data1
-        assert not data1["is_satisfied"]
-        assert data1["suggested_revision"] is None
-        assert data1["epistemic_progress"] < 1.0
+        assert "unavailable" in data1["detail"].lower()
+        assert "draft has not changed" in data1["detail"].lower()
 
-        # Turn 2: Rigorous empirical defense -> Oracle is satisfied and provides suggested revision
-        response_rigorous = await client.post(
-            turn_url,
+
+@pytest.mark.asyncio
+async def test_continuation_requires_a_live_answer_blind_planning_question(monkeypatch):
+    """Brief follow-ups must use the conversation, never a fixed dismissal."""
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+
+    async def answer_instead_of_question(**_kwargs):
+        return GuardedGeneration(
+            content=(
+                '{"oracle_reply":"The policy ended traditional governance and caused the war.",'
+                '"helper_delegation":null,"interactive_actions":[]}'
+            ),
+            metadata=GenerationMetadata(provider="test", model="test", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", answer_instead_of_question)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
             headers=headers,
             json={
-                "sentence": "Therefore, physical offices will become completely obsolete.",
-                "epistemic_type": "premature_closure",
+                "sentence": "The policy changed political authority.",
+                "student_reply": "tell me",
+                "move_type": "socratic",
                 "history": [
                     {
                         "role": "oracle",
-                        "content": "What empirical evidence supports your claim that physical offices will become completely obsolete?",
-                    },
-                    {
-                        "role": "student",
-                        "content": "I just think everyone likes working from home more.",
-                    },
-                    {
-                        "role": "oracle",
-                        "content": "What verifiable source excerpt demonstrates that preference eliminates commercial office need?",
-                    },
+                        "content": "You could compare succession rules with the policy's intended integration.",
+                    }
                 ],
-                "student_reply": (
-                    "According to Source 1 on the 1881 Land Act agrarian reforms, structural economic displacement "
-                    "does not happen purely by preference; rather, as demonstrated by the economic dataset, "
-                    "hybrid occupancy models persist specifically because collaborative legal synthesis requires co-location."
-                ),
-                "move_type": "source",
             },
         )
-        assert response_rigorous.status_code == 200
-        data2 = response_rigorous.json()
-        assert data2["is_satisfied"] is True
-        assert data2["satisfaction_reason"]
-        assert data2["suggested_revision"] is not None
-        assert data2["epistemic_progress"] >= 0.9
+        assert response.status_code == 503
+        assert "valid follow-up after retrying" in response.json()["detail"].lower()
 
+
+@pytest.mark.asyncio
+async def test_continuation_returns_a_live_contextual_planning_question(monkeypatch):
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+
+    async def planning_question(**_kwargs):
+        return GuardedGeneration(
+            content=(
+                '{"oracle_reply":"Would comparing succession rules with the policy’s promise of integration give you a clearer first section?",'
+                '"helper_delegation":null,"interactive_actions":[]}'
+            ),
+            metadata=GenerationMetadata(provider="test", model="test", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", planning_question)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
+            headers=headers,
+            json={
+                "sentence": "The policy changed political authority.",
+                "student_reply": "tell me",
+                "move_type": "socratic",
+                "history": [
+                    {
+                        "role": "oracle",
+                        "content": "You could compare succession rules with the policy's intended integration.",
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["oracle_reply"].endswith("?")
+        assert body["current_probe_category"] == "creative"
+
+
+@pytest.mark.asyncio
+async def test_brainstorm_repairs_then_returns_a_student_follow_up(monkeypatch):
+    """The brainstorming tool repairs a malformed live response before surfacing it."""
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    attempts = 0
+
+    async def brainstorming_response(**_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            content = (
+                '{"oracle_reply":"Explore the tension between formal legal change and local authority.",'
+                '"helper_delegation":null,"interactive_actions":[]}'
+            )
+        else:
+            content = (
+                '{"oracle_reply":"You could compare formal legal change with continuing local authority, '
+                'or examine how succession rules tested the policy in practice. Which tension would you like to develop first?",'
+                '"helper_delegation":null,"interactive_actions":[]}'
+            )
+        return GuardedGeneration(
+            content=content,
+            metadata=GenerationMetadata(provider="test", model="test", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", brainstorming_response)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        headers = {"X-Fiosra-Session-Token": session["access_token"]}
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
+            headers=headers,
+            json={
+                "sentence": "The policy changed political authority.",
+                "student_reply": "/brainstorm",
+                "move_type": "socratic",
+            },
+        )
+
+    assert response.status_code == 200
+    assert attempts == 2
+    assert response.json()["oracle_reply"].endswith("?")
+
+
+@pytest.mark.asyncio
+async def test_reference_request_opens_assigned_materials_without_model_inference(monkeypatch):
+    """Informal reference requests must remain available when the live model is not."""
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
+            headers={"X-Fiosra-Session-Token": session["access_token"]},
+            json={
+                "sentence": "The policy changed political authority.",
+                "student_reply": "any references?",
+                "move_type": "socratic",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["current_probe_category"] == "source"
+    assert body["interactive_actions"][0]["action_type"] == "cite_source"
+    assert "open" in body["oracle_reply"].lower()
+
+
+@pytest.mark.asyncio
+async def test_generic_dialogue_cannot_create_canvas_sections(monkeypatch):
+    """Only an explicit learner structure request may stage a canvas modification."""
+    monkeypatch.setattr(settings, "FIOSRA_LLM_PROVIDER", "deterministic")
+
+    async def unsolicited_canvas_action(**_kwargs):
+        return GuardedGeneration(
+            content=(
+                '{"oracle_reply":"Hello. What part of the assignment would you like to explore?",'
+                '"helper_delegation":{"action":"scaffold_sections",'
+                '"section_titles":["First section","Second section"]},'
+                '"interactive_actions":[]}'
+            ),
+            metadata=GenerationMetadata(provider="test", model="test", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", unsolicited_canvas_action)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _assignment, session, _document = await create_document_session(client)
+        response = await client.post(
+            f"/learning-documents/sessions/{session['session_id']}/probes/dialectical-turn",
+            headers={"X-Fiosra-Session-Token": session["access_token"]},
+            json={
+                "sentence": "The policy changed political authority.",
+                "student_reply": "hi",
+                "move_type": "socratic",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["helper_action"] is None

@@ -13,12 +13,17 @@
     sessionAccessToken = '',
     onSync = async () => null,
     onSynced = () => null,
+    onStableDocument = async () => null,
+    proactiveProbes = [],
+    onProbeAction = async () => null,
     onOpenSources = () => null,
     onHeadingsChange = () => null,
     onBlocksChange = () => null,
     oraclePressure = 'socratic',
     onProbeResponse = async () => null,
     onChallengeIdea = async () => null,
+    onDrawerStateChange = () => null,
+    onPressureChange = () => null,
   } = $props();
 
   const blockTypes = {
@@ -38,15 +43,6 @@
     premature_closure: { label: 'Premature Closure', icon: '🔴', desc: 'Conclusion leap asserted without sufficient backing' },
   };
 
-  export const PROBE_CATEGORIES = {
-    challenge: { label: 'Challenge', icon: '⚡' },
-    why_ladder: { label: 'Why Ladder', icon: '🪜' },
-    assumptions: { label: 'Assumption', icon: '🛡️' },
-    source: { label: 'Source Evidence', icon: '📜' },
-    counterfactual: { label: 'Counterfactual', icon: '🔄' },
-    creative: { label: 'Creative Spin', icon: '💡' },
-  };
-
   // State
   let editorElement;
   let editor = null;
@@ -60,14 +56,18 @@
   let readingTimeMin = $derived(Math.max(1, Math.ceil(wordCount / 200)));
   let saveTimer;
   let classifyTimer;
+  let probeTimer;
   let loadedDocumentId = '';
 
   let documentHeadings = $state([]);
   let isEpistemicLens = $state(true); // Default ON for subtle continuous truth guidance
-  // Socratic Oracle Chat Drawer State (Side Panel pushed from right)
+  // Learner-controlled assistant drawer state.
   let activeSentence = $state(null);
   let chatMessages = $state([]);
   let chatInputText = $state('');
+  let showSlashTools = $state(false);
+  let selectedSlashToolIndex = $state(-1);
+  let activeSlashTool = $state('');
   let isOracleThinking = $state(false);
   let isOracleSatisfied = $state(false);
   let oracleSatisfactionReason = $state('');
@@ -75,6 +75,54 @@
   let epistemicProgress = $state(0.4);
   let activeMoveType = $state('challenge');
   let chatMessagesContainer = $state(null);
+  export function toggleSocraticDrawer() {
+    if (activeSentence) {
+      closeSentenceChat();
+    } else if (proactiveProbes.length) {
+      openProactiveProbe(proactiveProbes[0]);
+    } else {
+      openGeneralInquiry();
+    }
+  }
+
+  function openGeneralInquiry() {
+    const promptText = assignment?.published?.task?.prompt || assignment?.task?.prompt || 'This assignment';
+    activeSentence = {
+      text: promptText,
+      epistemic_type: 'reasoning',
+      surrounding_context: assignment?.purpose || '',
+      is_general_inquiry: true,
+    };
+    isOracleSatisfied = false;
+    oracleSatisfactionReason = '';
+    suggestedRevision = null;
+    epistemicProgress = 0.0;
+    activeMoveType = 'socratic';
+    chatInputText = '';
+    // Student initiates the conversation cleanly (no unprompted Oracle greeting)
+    chatMessages = [];
+    if (onDrawerStateChange) onDrawerStateChange(true);
+    triggerDecorationsUpdate();
+  }
+
+  function updateChatInput(event) {
+    chatInputText = event.currentTarget.value;
+    showSlashTools = !activeSlashTool && chatInputText.startsWith('/');
+    if (!showSlashTools) selectedSlashToolIndex = -1;
+  }
+
+  function selectSlashTool(tool) {
+    activeSlashTool = tool;
+    chatInputText = '';
+    showSlashTools = false;
+    selectedSlashToolIndex = -1;
+  }
+
+  function clearSlashTool() {
+    activeSlashTool = '';
+    showSlashTools = false;
+    selectedSlashToolIndex = -1;
+  }
 
   // Sentence-level epistemic registry: key = sentence text or fingerprint -> classification
   let sentenceMap = $state({});
@@ -362,11 +410,6 @@
         activeSentence.targeted_vulnerability = data.targeted_vulnerability;
         activeSentence.socratic_moves = data.socratic_moves || [];
         activeMoveType = moveType;
-
-        // If chat has only the initial probe, update it with the tailored probe
-        if (chatMessages.length <= 1) {
-          chatMessages = [{ role: 'oracle', content: data.oracle_probe, category: data.move_type || moveType }];
-        }
       }
       if (sentenceMap[sentenceText]) {
         sentenceMap[sentenceText].oracle_probe = data.oracle_probe;
@@ -383,16 +426,24 @@
   function scheduleLLMClassification() {
     clearTimeout(classifyTimer);
     classifyTimer = setTimeout(() => {
-      if (!editor) return;
-      editor.state.doc.descendants((node) => {
-        if (supportedTopLevelTypes.has(node.type.name)) {
-          const text = node.textContent.trim();
-          if (text.length > 25) {
-            requestLLMEpistemicClassification(text);
-          }
-        }
-      });
+      // Drafting remains local and uninterrupted. The deterministic labels can
+      // suggest an inquiry opportunity, but no model call or visible probe is
+      // created until a learner opens the Enquirer and asks for assistance.
+      triggerDecorationsUpdate();
     }, 1200);
+  }
+
+  function scheduleConceptProbeOffer(synced) {
+    clearTimeout(probeTimer);
+    const changedBlockIds = synced?.changed_block_ids || [];
+    if (!synced?.document_revision || changedBlockIds.length === 0) return;
+    // This quiet period means a question is offered after the learner pauses, not while they type.
+    probeTimer = setTimeout(() => {
+      onStableDocument({
+        document_revision: synced.document_revision,
+        changed_block_ids: changedBlockIds,
+      });
+    }, 5500);
   }
 
   function triggerDecorationsUpdate() {
@@ -407,24 +458,14 @@
     isOracleSatisfied = false;
     oracleSatisfactionReason = '';
     suggestedRevision = null;
-    epistemicProgress = 0.25;
+    epistemicProgress = 0.0;
     const initialCategory = item.targeted_vulnerability ? 'assumptions' : 'challenge';
     activeMoveType = initialCategory;
     chatInputText = '';
+    // Student initiates the conversation cleanly
+    chatMessages = [];
 
-    const initialProbe = item.oracle_probe || `What empirical evidence grounds your assertion that "${item.text.slice(0, 60)}..."?`;
-    chatMessages = [
-      {
-        role: 'oracle',
-        content: initialProbe,
-        category: initialCategory,
-      }
-    ];
-
-    if (!item.targeted_vulnerability) {
-      requestSentenceInquiry(item.text, initialCategory, item.epistemic_type || 'claim');
-    }
-
+    if (onDrawerStateChange) onDrawerStateChange(true);
     triggerDecorationsUpdate();
 
     // Smoothly scroll the sentence into view if needed
@@ -441,7 +482,36 @@
     chatInputText = '';
     isOracleSatisfied = false;
     suggestedRevision = null;
+    if (onDrawerStateChange) onDrawerStateChange(false);
     triggerDecorationsUpdate();
+  }
+
+  function openProactiveProbe(probe) {
+    if (!probe?.question) return;
+    activeSentence = {
+      text: probe.claim_text || 'Your saved claim',
+      epistemic_type: 'claim',
+      surrounding_context: '',
+      proactive_probe_id: probe.probe_id,
+      concept_label: probe.concept_label,
+    };
+    chatMessages = [{ role: 'oracle', content: probe.question, category: probe.focus_type }];
+    isOracleSatisfied = false;
+    suggestedRevision = null;
+    epistemicProgress = 0.0;
+    activeMoveType = probe.focus_type || 'challenge';
+    if (onDrawerStateChange) onDrawerStateChange(true);
+  }
+
+  async function deferActiveProbe() {
+    if (!activeSentence?.proactive_probe_id) return;
+    await onProbeAction(activeSentence.proactive_probe_id, 'defer');
+    closeSentenceChat();
+  }
+
+  export function openConceptProbe(probeId) {
+    const probe = proactiveProbes.find((item) => item.probe_id === probeId);
+    if (probe) openProactiveProbe(probe);
   }
 
 
@@ -810,6 +880,7 @@
 
   function updateEditorMetrics() {
     saveCurrentPageEdits();
+    pruneStaleSentenceClassifications();
     let totalWords = 0;
     const pageNumbers = Object.keys(pagesMap).map(Number);
     for (const p of pageNumbers) {
@@ -823,6 +894,26 @@
     wordCount = totalWords;
     extractHeadings();
     broadcastBlocks();
+  }
+
+  function pruneStaleSentenceClassifications() {
+    const liveSentences = new Set();
+    const sentencePattern = /[^.!?]+(?:[.!?]+["'”’]?|\s*$)/g;
+
+    for (const blocks of Object.values(pagesMap)) {
+      for (const block of blocks || []) {
+        const content = (block.plaintext || '').trim();
+        if (!content) continue;
+        for (const match of content.matchAll(sentencePattern)) {
+          const sentence = match[0].trim();
+          if (sentence.length >= 10) liveSentences.add(sentence);
+        }
+      }
+    }
+
+    for (const sentence of Object.keys(sentenceMap)) {
+      if (!liveSentences.has(sentence)) delete sentenceMap[sentence];
+    }
   }
 
   function scheduleSync() {
@@ -874,6 +965,7 @@
       syncBaseline(synced);
       isDirty = false;
       onSynced(synced);
+      scheduleConceptProbeOffer(synced);
     } catch (error) {
       saveError = error?.message || 'This document could not be saved.';
     } finally {
@@ -891,14 +983,23 @@
     if (mark === 'italic') editor.chain().focus().toggleItalic().run();
   }
 
-  // --- Socratic Oracle Chat Actions ---
-  async function sendStudentMessage() {
-    const text = chatInputText.trim();
+  // --- Learner-controlled assistant actions ---
+  async function sendStudentMessage(explicitText = null) {
+    const raw = typeof explicitText === 'string' ? explicitText : chatInputText;
+    const text = [activeSlashTool, raw.trim()].filter(Boolean).join(' ');
     if (!text || isOracleThinking || !activeSentence) return;
 
     chatInputText = '';
     chatMessages = [...chatMessages, { role: 'student', content: text }];
     isOracleThinking = true;
+
+    if (text.startsWith('/mode')) {
+      const modeArg = text.replace('/mode', '').trim().toLowerCase();
+      if (modeArg && ['socratic', 'adversarial', 'brainstorm', 'structural', 'hint', 'assumptions'].includes(modeArg)) {
+        oraclePressure = modeArg;
+        if (onPressureChange) onPressureChange(modeArg);
+      }
+    }
 
     // Scroll chat feed
     setTimeout(() => {
@@ -908,11 +1009,17 @@
     }, 50);
 
     try {
+      const validMoveTypes = new Set(['challenge', 'why_ladder', 'assumptions', 'source', 'counterfactual', 'creative', 'socratic']);
+      const safeMoveType = validMoveTypes.has(activeMoveType) ? activeMoveType : 'challenge';
+
       const headers = {
         'Content-Type': 'application/json',
         ...(sessionAccessToken ? { 'X-Fiosra-Session-Token': sessionAccessToken } : {}),
       };
-      const response = await fetch(`/learning-documents/sessions/${sessionId}/probes/dialectical-turn`, {
+      const url = sessionAccessToken 
+        ? `/learning-documents/sessions/${sessionId}/probes/dialectical-turn?access_token=${encodeURIComponent(sessionAccessToken)}`
+        : `/learning-documents/sessions/${sessionId}/probes/dialectical-turn`;
+      const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -921,7 +1028,7 @@
           history: chatMessages.slice(0, -1),
           student_reply: text,
           surrounding_context: activeSentence.surrounding_context || '',
-          move_type: activeMoveType,
+          move_type: safeMoveType,
           oracle_pressure: oraclePressure,
         }),
       });
@@ -930,7 +1037,25 @@
         const data = await response.json();
         const nextCategory = data.current_probe_category || activeMoveType;
         activeMoveType = nextCategory;
-        chatMessages = [...chatMessages, { role: 'oracle', content: data.oracle_reply, category: nextCategory }];
+        const interactiveActions = [...(data.interactive_actions || [])];
+        if (data.helper_action?.blocks?.length) {
+          interactiveActions.push({
+            action_type: 'apply_canvas_action',
+            label: data.helper_action.summary || 'Add this to the canvas',
+            icon: '＋',
+            payload: { helper_action: data.helper_action },
+          });
+        }
+        chatMessages = [
+          ...chatMessages,
+          {
+            role: 'oracle',
+            content: data.oracle_reply,
+            category: nextCategory,
+            interactive_actions: interactiveActions,
+            outline_options: data.outline_options || [],
+          }
+        ];
         isOracleSatisfied = Boolean(data.is_satisfied);
         oracleSatisfactionReason = data.satisfaction_reason || '';
         suggestedRevision = data.suggested_revision || null;
@@ -939,18 +1064,32 @@
           activeSentence.socratic_moves = data.socratic_moves;
         }
 
-        // Proactively execute delegated Canvas Scribe Helper action
-        if (data.helper_action) {
-          applyHelperCanvasAction(data.helper_action);
-        }
-
         // Notify parent workspace trace
         if (onProbeResponse) {
           onProbeResponse(activeSentence.text, text);
         }
+      } else {
+        chatMessages = [
+          ...chatMessages,
+          {
+            role: 'oracle',
+            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
+            category: 'socratic',
+            interactive_actions: []
+          }
+        ];
       }
     } catch (err) {
       console.error('Error in dialectical turn:', err);
+      chatMessages = [
+        ...chatMessages,
+          {
+            role: 'oracle',
+            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
+          category: 'socratic',
+          interactive_actions: []
+        }
+      ];
     } finally {
       isOracleThinking = false;
       setTimeout(() => {
@@ -961,7 +1100,127 @@
     }
   }
 
-  // --- Proactive Canvas Scribe Helper Execution (No Manual Student Clicks) ---
+  function handleInteractiveAction(action) {
+    if (!action || action.applied) return;
+    const actionType = action.action_type || action.action;
+    if (actionType === 'apply_canvas_action' && action.payload?.helper_action) {
+      applyHelperCanvasAction(action.payload.helper_action);
+    } else if (actionType === 'open_sources' || actionType === 'cite_source') {
+      onOpenSources();
+    } else if (actionType === 'scaffold_sections' || actionType === 'scaffold_section') {
+      const payload = action.payload || {};
+      const targetPage = currentPageIndex || 1;
+      const pageSecId = `page_${targetPage}`;
+      const title = payload.title || payload.section_title || 'New section';
+      const headingId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'b_' + Date.now();
+      const paraId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'p_' + Date.now();
+
+      const blocks = [
+        {
+          block_id: headingId,
+          block_type: 'heading',
+          section_id: pageSecId,
+          author_type: 'student',
+          content: {
+            type: 'heading',
+            attrs: {
+              level: 2,
+              blockId: headingId,
+              authorType: 'student',
+              sectionId: pageSecId,
+              pageNumber: targetPage,
+            },
+            content: [{ type: 'text', text: title }]
+          }
+        },
+        {
+          block_id: paraId,
+          block_type: 'paragraph',
+          section_id: pageSecId,
+          author_type: 'student',
+          content: {
+            type: 'paragraph',
+            attrs: {
+              blockId: paraId,
+              authorType: 'student',
+              sectionId: pageSecId,
+              pageNumber: targetPage,
+            },
+            ...(payload.writing_prompt
+              ? { content: [{ type: 'text', text: payload.writing_prompt }] }
+              : {}),
+          }
+        }
+      ];
+
+      applyHelperCanvasAction({
+        action: 'scaffold_sections',
+        target_page: targetPage,
+        blocks: blocks
+      });
+    } else if (actionType === 'explore_prompt') {
+      const prompt = action.payload?.prompt;
+      if (prompt) {
+        sendStudentMessage(prompt);
+      }
+    }
+    action.applied = true;
+    chatMessages = [...chatMessages];
+  }
+
+  function proposedSectionTitles(action) {
+    const blocks = action?.payload?.helper_action?.blocks;
+    if (!Array.isArray(blocks)) return [];
+    return blocks
+      .filter((block) => block?.block_type === 'heading')
+      .map((block) => block?.content?.content?.[0]?.text?.trim())
+      .filter(Boolean);
+  }
+
+  function applyOutlineOption(option) {
+    if (option?.applied) return;
+    const sectionTitles = Array.isArray(option?.section_titles) ? option.section_titles : [];
+    if (sectionTitles.length !== 3) return;
+    const targetPage = currentPageIndex || 1;
+    const sectionId = `page_${targetPage}`;
+    const blocks = sectionTitles.flatMap((title, index) => {
+      const timestamp = Date.now() + index;
+      const headingId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `heading_${timestamp}`;
+      const paragraphId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `paragraph_${timestamp}`;
+      return [
+        {
+          block_id: headingId,
+          block_type: 'heading',
+          section_id: sectionId,
+          author_type: 'student',
+          content: {
+            type: 'heading',
+            attrs: { level: 2, blockId: headingId, authorType: 'student', sectionId, pageNumber: targetPage },
+            content: [{ type: 'text', text: title }],
+          },
+        },
+        {
+          block_id: paragraphId,
+          block_type: 'paragraph',
+          section_id: sectionId,
+          author_type: 'student',
+          content: {
+            type: 'paragraph',
+            attrs: { blockId: paragraphId, authorType: 'student', sectionId, pageNumber: targetPage },
+          },
+        },
+      ];
+    });
+    applyHelperCanvasAction({
+      action: 'scaffold_sections',
+      target_page: targetPage,
+      blocks,
+    });
+    option.applied = true;
+    chatMessages = [...chatMessages];
+  }
+
+  // Canvas changes run only after the learner accepts an attached action.
   function applyHelperCanvasAction(helperAction) {
     if (!helperAction || !Array.isArray(helperAction.blocks) || helperAction.blocks.length === 0) return;
     saveCurrentPageEdits();
@@ -985,7 +1244,7 @@
         ...b,
         position: startPos + i,
         section_id: `page_${targetPage}`,
-        author_type: 'student',
+        author_type: 'student_edited_assistance',
         content: {
           ...b.content,
           attrs: {
@@ -1006,7 +1265,7 @@
 
       extractHeadings();
       broadcastBlocks();
-      scheduleLLMClassification();
+      isDirty = true;
       syncNow();
 
       // Highlight the first new section heading briefly
@@ -1049,7 +1308,7 @@
         ...b,
         position: insertIdx + i + 1,
         section_id: `page_${targetPage}`,
-        author_type: 'student',
+        author_type: 'student_edited_assistance',
         content: {
           ...b.content,
           attrs: {
@@ -1072,7 +1331,7 @@
 
       extractHeadings();
       broadcastBlocks();
-      scheduleLLMClassification();
+      isDirty = true;
       syncNow();
 
       // Highlight the new claim block
@@ -1218,6 +1477,7 @@
   onDestroy(() => {
     clearTimeout(saveTimer);
     clearTimeout(classifyTimer);
+    clearTimeout(probeTimer);
     editor?.destroy();
   });
 </script>
@@ -1534,74 +1794,130 @@
     </section>
   </main>
 
-  <!-- Socratic Oracle Dialectic Chat Drawer (Pushes Editor to Left) -->
+  <!-- Assistant drawer pushes the editor left. -->
   {#if activeSentence}
-    <aside class="socratic-chat-drawer" aria-label="Socratic Oracle Dialectic Panel">
-      <!-- Drawer Header -->
+    <aside class="socratic-chat-drawer" aria-label="Writing help">
       <div class="drawer-header">
         <div class="drawer-header-title">
-          <div class="oracle-status-indicator" class:is-satisfied={isOracleSatisfied}>
-            <span class="status-pulse-dot"></span>
-            <span class="oracle-name">Socratic Oracle</span>
-          </div>
-          {#if isOracleSatisfied}
-            <span class="status-pill satisfied">✓ Standard Met</span>
-          {:else}
-            <span class="status-pill probing">● Probing</span>
-          {/if}
+          <span class="oracle-name">Ask Fiosra</span>
         </div>
-        <button type="button" class="drawer-close-btn" onclick={closeSentenceChat} title="Close chat (Esc)">
+        <button type="button" class="drawer-close-btn" onclick={closeSentenceChat} title="Close drawer (Esc)">
           ✕
         </button>
       </div>
 
       <!-- Active Sentence Quote Card -->
-      <div class="drawer-quote-card {activeSentence.epistemic_type || 'claim'}">
-        <div class="quote-meta-row">
-          <span class="epistemic-badge {activeSentence.epistemic_type || 'claim'}">
-            <span>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.icon || '🔵'}</span>
-            <strong>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.label || 'Claim'}</strong>
-          </span>
-          {#if activeSentence.targeted_vulnerability}
-            <span class="vulnerability-tag">
-              ⚠️ {activeSentence.targeted_vulnerability}
+      {#if activeSentence.is_general_inquiry}
+          <div class="drawer-quote-card general-inquiry">
+          <details class="assignment-context">
+            <summary>Assignment brief</summary>
+            <blockquote class="sentence-text-quote general">
+              "{activeSentence.text}"
+            </blockquote>
+          </details>
+          </div>
+      {:else}
+        <div class="drawer-quote-card {activeSentence.epistemic_type || 'claim'}">
+          <div class="quote-meta-row">
+            <span class="epistemic-badge {activeSentence.epistemic_type || 'claim'}">
+              <span>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.icon || '🔵'}</span>
+              <strong>{EPISTEMIC_CONFIG[activeSentence.epistemic_type]?.label || 'Claim'}</strong>
             </span>
+            {#if activeSentence.targeted_vulnerability}
+              <span class="vulnerability-tag">
+                ⚠️ {activeSentence.targeted_vulnerability}
+              </span>
+            {/if}
+          </div>
+          {#if activeSentence.concept_label}
+            <p class="concept-context">Exploring: {activeSentence.concept_label}</p>
           {/if}
-        </div>
-        <blockquote class="sentence-text-quote">
-          "{activeSentence.text}"
-        </blockquote>
+          <blockquote class="sentence-text-quote">
+            "{activeSentence.text}"
+          </blockquote>
 
-        <!-- Minimalist Conversation Progress Indicator -->
-        <div class="conversation-progress-box">
-          <div class="progress-info-row">
-            <span class="progress-title">Conversation Progress</span>
-            <span class="progress-fraction">{Math.round(epistemicProgress * 100)}%</span>
-          </div>
-          <div class="progress-track-minimal">
-            <div 
-              class="progress-fill-minimal" 
-              style="width: {Math.max(10, Math.min(100, Math.round(epistemicProgress * 100)))}%"
-            ></div>
+          <!-- Minimalist Conversation Progress Indicator -->
+          <div class="conversation-progress-box">
+            <div class="progress-info-row">
+              <span class="progress-title">Conversation Progress</span>
+              <span class="progress-fraction">{Math.round(epistemicProgress * 100)}%</span>
+            </div>
+            <div class="progress-track-minimal">
+              <div 
+                class="progress-fill-minimal" 
+                style="width: {Math.max(10, Math.min(100, Math.round(epistemicProgress * 100)))}%"
+              ></div>
+            </div>
           </div>
         </div>
-      </div>
+      {/if}
 
       <!-- Multi-Turn Chat Feed -->
       <div class="chat-messages-stream" bind:this={chatMessagesContainer}>
+        {#if chatMessages.length === 0}
+          <div class="empty-inquiry-starter">
+            <p class="starter-subtitle">
+              Ask about a source, an idea, or how to organise your next step. Fiosra will not change your draft unless you choose an offered action.
+            </p>
+          </div>
+        {/if}
+
         {#each chatMessages as msg}
           <div class="chat-bubble-row {msg.role}">
             <div class="chat-bubble {msg.role}">
               <div class="bubble-meta-header">
-                <span class="bubble-author">{msg.role === 'oracle' ? 'Socratic Oracle' : 'Your Defense'}</span>
-                {#if msg.role === 'oracle' && msg.category && PROBE_CATEGORIES[msg.category]}
-                  <span class="probe-category-indicator">
-                    <span class="probe-category-icon">{PROBE_CATEGORIES[msg.category].icon}</span>
-                    <span class="probe-category-name">{PROBE_CATEGORIES[msg.category].label}</span>
-                  </span>
-                {/if}
+                <span class="bubble-author">{msg.role === 'oracle' ? 'Fiosra' : 'You'}</span>
               </div>
               <p class="bubble-text">{msg.content}</p>
+
+              {#if msg.role === 'oracle' && msg === chatMessages[0] && activeSentence.proactive_probe_id}
+                <button type="button" class="defer-probe-link" onclick={deferActiveProbe}>Continue drafting for now</button>
+              {/if}
+
+              {#if msg.role === 'oracle' && msg.outline_options && msg.outline_options.length > 0}
+                <div class="outline-options" aria-label="Suggested assignment structures">
+                  {#each msg.outline_options as option}
+                    <article class="outline-option">
+                      <strong>{option.title}</strong>
+                      <p>{option.reasoning_focus}</p>
+                      <ol>
+                        {#each option.section_titles as sectionTitle}
+                          <li>{sectionTitle}</li>
+                        {/each}
+                      </ol>
+                      <button type="button" onclick={() => applyOutlineOption(option)} disabled={option.applied}>
+                        {option.applied ? 'Added to canvas' : 'Use this structure'}
+                      </button>
+                    </article>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if msg.role === 'oracle' && msg.interactive_actions && msg.interactive_actions.length > 0}
+                <div class="interactive-actions-bar">
+                  {#each msg.interactive_actions as action}
+                    {#if action.action_type === 'apply_canvas_action' && proposedSectionTitles(action).length > 0}
+                      <div class="canvas-proposal-preview">
+                        <span>Proposed sections</span>
+                        <ol>
+                          {#each proposedSectionTitles(action) as sectionTitle}
+                            <li>{sectionTitle}</li>
+                          {/each}
+                        </ol>
+                      </div>
+                    {/if}
+                    <button
+                      type="button"
+                      class="bubble-action-btn"
+                      onclick={() => handleInteractiveAction(action)}
+                      disabled={action.applied}
+                    >
+                      <span class="action-btn-icon">{action.icon || '✦'}</span>
+                      <span class="action-btn-label">{action.applied ? 'Added to canvas' : action.label}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </div>
           </div>
         {/each}
@@ -1610,7 +1926,7 @@
           <div class="chat-bubble-row oracle">
             <div class="chat-bubble oracle thinking">
               <span class="thinking-spinner">◌</span>
-              <em>Oracle analyzing your reasoning…</em>
+              <em>Thinking…</em>
             </div>
           </div>
         {/if}
@@ -1636,32 +1952,83 @@
 
       <!-- Chat Input Footer -->
       <footer class="drawer-input-footer">
+        {#if showSlashTools}
+          <div class="slash-command-menu" role="listbox" aria-label="Writing help tools">
+            <button
+              type="button"
+              class="slash-menu-item"
+              class:selected={selectedSlashToolIndex === 0}
+              role="option"
+              aria-selected={selectedSlashToolIndex === 0}
+              onclick={() => selectSlashTool('/brainstorm')}
+            >
+              <span class="slash-menu-command">/brainstorm</span>
+              <span class="slash-menu-description">Explore analytical directions</span>
+            </button>
+          </div>
+        {/if}
         <div class="input-controls-row">
-          <textarea
-            bind:value={chatInputText}
-            onkeydown={(e) => {
+          <div class="composer-input-shell" class:has-active-tool={Boolean(activeSlashTool)}>
+            {#if activeSlashTool}
+              <span class="active-tool-capsule">
+                <span>{activeSlashTool}</span>
+                <button
+                  type="button"
+                  class="active-tool-close"
+                  onclick={clearSlashTool}
+                  aria-label="Remove {activeSlashTool} tool"
+                  title="Remove tool"
+                >
+                  ×
+                </button>
+              </span>
+            {/if}
+            <textarea
+              bind:value={chatInputText}
+              oninput={updateChatInput}
+              onkeydown={(e) => {
+              if (showSlashTools && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                e.preventDefault();
+                selectedSlashToolIndex = 0;
+                return;
+              }
+              if (showSlashTools && e.key === 'Enter' && selectedSlashToolIndex === 0) {
+                e.preventDefault();
+                selectSlashTool('/brainstorm');
+                return;
+              }
+              if (activeSlashTool && e.key === 'Backspace' && !chatInputText) {
+                e.preventDefault();
+                clearSlashTool();
+                return;
+              }
+              if (e.key === 'Escape') {
+                showSlashTools = false;
+                selectedSlashToolIndex = -1;
+                return;
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                showSlashTools = false;
                 sendStudentMessage();
               }
             }}
-            placeholder="Defend your premise, cite a source, or qualify your claim..."
-            rows="2"
-            class="drawer-textarea"
-            disabled={isOracleThinking}
-          ></textarea>
-          <button 
-            type="button" 
-            class="drawer-send-btn" 
-            onclick={sendStudentMessage}
-            disabled={isOracleThinking || chatInputText.trim().length === 0}
-            title="Send response (Enter)"
-          >
-            <span>Send ↵</span>
-          </button>
-        </div>
-        <div class="input-hints-row">
-          <small>Press <strong>Enter ↵</strong> to send • <strong>Shift+Enter</strong> for newline</small>
+              placeholder="Ask about a source, structure, or next step…"
+              rows="2"
+              class="drawer-textarea"
+              disabled={isOracleThinking}
+            ></textarea>
+            <button
+              type="button"
+              class="drawer-send-btn"
+              onclick={() => sendStudentMessage()}
+              disabled={isOracleThinking || (!activeSlashTool && chatInputText.trim().length === 0)}
+              aria-label="Send message"
+              title="Send message (Enter)"
+            >
+              <span aria-hidden="true">↑</span>
+            </button>
+          </div>
         </div>
       </footer>
     </aside>
@@ -2132,7 +2499,7 @@
 
   .notion-editor-container :global(.notion-minimal-prosemirror p.is-editor-empty:first-child::before) {
     color: var(--color-slate-subtle);
-    content: 'Start writing your response or thesis here...';
+    content: 'Start writing, or open the Enquirer to plan your next step.';
     float: left;
     height: 0;
     pointer-events: none;
@@ -2530,6 +2897,42 @@
     gap: 10px;
   }
 
+  .drawer-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .oracle-symbol {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--color-aurora, #0284c7);
+  }
+
+  .mode-badge-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px solid rgba(2, 132, 199, 0.22);
+    border-radius: 99px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-aurora, #0284c7);
+    cursor: pointer;
+    text-transform: capitalize;
+    transition: all 0.15s ease;
+  }
+  .mode-badge-btn:hover {
+    background: rgba(2, 132, 199, 0.18);
+    transform: translateY(-0.5px);
+  }
+  .mode-dot {
+    font-size: 8px;
+  }
+
   .oracle-status-indicator {
     display: flex;
     align-items: center;
@@ -2707,6 +3110,28 @@
     color: var(--color-heading, #1e293b);
   }
 
+  .concept-context {
+    color: var(--color-slate-muted, #94a3b8);
+    font-size: 11px;
+    margin: 0;
+  }
+
+  .defer-probe-link {
+    background: transparent;
+    border: 0;
+    color: var(--color-slate-muted, #94a3b8);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    margin-top: 8px;
+    padding: 0;
+  }
+
+  .defer-probe-link:hover {
+    color: var(--color-heading, #1e293b);
+    text-decoration: underline;
+  }
+
   .chat-bubble.student {
     background: rgba(37, 99, 235, 0.08);
     border: 1px solid rgba(37, 99, 235, 0.2);
@@ -2779,6 +3204,72 @@
   .bubble-text {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .interactive-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(124, 58, 237, 0.12);
+  }
+
+  .canvas-proposal-preview {
+    width: 100%;
+    color: var(--color-slate-light);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .canvas-proposal-preview > span {
+    color: var(--color-slate-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .canvas-proposal-preview ol {
+    margin: 5px 0 1px;
+    padding-left: 18px;
+  }
+
+  .bubble-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    background: #ffffff;
+    border: 1px solid rgba(124, 58, 237, 0.28);
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #6d28d9;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: all 0.15s ease;
+  }
+
+  .bubble-action-btn:hover {
+    background: #f5f3ff;
+    border-color: #7c3aed;
+    color: #5b21b6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(109, 40, 217, 0.12);
+  }
+
+  .bubble-action-btn:active {
+    transform: translateY(0);
+  }
+
+  .action-btn-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .action-btn-label {
+    letter-spacing: -0.01em;
   }
 
   .chat-bubble.thinking {
@@ -2858,9 +3349,62 @@
   }
 
   .input-controls-row {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
+    display: block;
+  }
+
+  .composer-input-shell {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+
+  .composer-input-shell .drawer-textarea {
+    width: 100%;
+    padding-right: 48px;
+  }
+
+  .composer-input-shell.has-active-tool .drawer-textarea {
+    padding-left: 104px;
+  }
+
+  .active-tool-capsule {
+    align-items: center;
+    background: rgba(124, 58, 237, 0.10);
+    border: 1px solid rgba(124, 58, 237, 0.24);
+    border-radius: 5px;
+    color: #6d28d9;
+    display: inline-flex;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    gap: 5px;
+    line-height: 1;
+    left: 7px;
+    padding: 7px 5px 7px 8px;
+    position: absolute;
+    top: 7px;
+    white-space: nowrap;
+    z-index: 1;
+  }
+
+  .active-tool-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 16px;
+    height: 16px;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 16px;
+  }
+
+  .active-tool-close:hover {
+    background: rgba(124, 58, 237, 0.15);
   }
 
   .drawer-textarea {
@@ -2885,20 +3429,29 @@
   }
 
   .drawer-send-btn {
-    background: #7c3aed;
-    border: 1px solid #6d28d9;
-    border-radius: 6px;
-    color: #fff;
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 8px 12px;
+    align-items: center;
+    background: var(--color-bone-surface, #f8fafc);
+    border: 0;
+    border-radius: 4px;
+    bottom: 7px;
+    color: var(--color-heading, #1e293b);
+    display: inline-flex;
+    font-size: 17px;
+    font-weight: 500;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: 7px;
+    width: 34px;
     cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    z-index: 2;
   }
 
   .drawer-send-btn:hover:not(:disabled) {
-    background: #6d28d9;
+    background: rgba(124, 58, 237, 0.10);
+    color: #6d28d9;
   }
 
   .drawer-send-btn:disabled {
@@ -2911,6 +3464,279 @@
     justify-content: flex-end;
     color: var(--color-slate-muted, #94a3b8);
     font-size: 10px;
+  }
+
+  /* Quick Epistemic Action Pills */
+  .quick-epistemic-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 0 6px;
+    scrollbar-width: none;
+  }
+  .quick-epistemic-pills::-webkit-scrollbar {
+    display: none;
+  }
+  .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-bone-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.1));
+    border-radius: 99px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-heading, #334155);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.14s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  .pill-btn:hover {
+    background: #f1f5f9;
+    border-color: #0284c7;
+    color: #0284c7;
+    transform: translateY(-0.5px);
+  }
+  .pill-icon {
+    font-size: 11px;
+  }
+
+  /* Floating Slash Command Menu */
+  .slash-command-menu {
+    position: relative;
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.12));
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+    margin-bottom: 6px;
+    overflow: hidden;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+  }
+  .slash-menu-header {
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-slate-muted, #94a3b8);
+    background: var(--color-bone-muted, #f8fafc);
+    border-bottom: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.06));
+  }
+  .slash-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+  }
+  .slash-menu-item:hover,
+  .slash-menu-item.selected {
+    background: rgba(124, 58, 237, 0.07);
+  }
+  .slash-menu-command {
+    color: var(--color-heading, #1e293b);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .slash-menu-description {
+    color: var(--color-slate-muted, #64748b);
+    font-size: 11px;
+  }
+  .slash-menu-item .item-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .slash-menu-item .item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .slash-menu-item .item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slash-menu-item .item-cmd {
+    font-size: 12px;
+    font-family: monospace;
+    color: #0284c7;
+  }
+  .slash-menu-item .item-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-heading, #1e293b);
+  }
+  .slash-menu-item .item-desc {
+    font-size: 10.5px;
+    color: var(--color-slate-muted, #64748b);
+  }
+  .item-param-hint {
+    font-size: 11px;
+    font-family: monospace;
+    color: #64748b;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+
+  /* Antigravity-Style Empty Inquiry Starter State */
+  .empty-inquiry-starter {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 12px;
+    animation: fadeIn 0.18s ease-out;
+  }
+  .starter-hero {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .starter-symbol {
+    font-size: 28px;
+    color: #0284c7;
+    line-height: 1;
+  }
+  .starter-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-heading, #0f172a);
+    margin: 0;
+  }
+  .starter-subtitle {
+    font-size: 12px;
+    color: var(--color-slate-muted, #64748b);
+    max-width: 320px;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .starter-suggestions-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .starter-suggestions-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+  }
+  .starter-suggestions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .starter-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--color-bone-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.09));
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+  .starter-card:hover {
+    background: #f8fafc;
+    border-color: #0284c7;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08);
+  }
+  .starter-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .starter-cmd-pill {
+    font-size: 11.5px;
+    font-family: monospace;
+    font-weight: 600;
+    color: #0284c7;
+  }
+  .starter-card-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(2, 132, 199, 0.08);
+    color: #0369a1;
+  }
+  .starter-card-desc {
+    font-size: 11px;
+    color: var(--color-slate-muted, #64748b);
+    line-height: 1.35;
+  }
+
+  .drawer-quote-card.general-inquiry {
+    background: var(--color-bone-surface, #f8fafc);
+    padding: 8px 16px;
+  }
+
+  .assignment-context summary {
+    color: var(--color-slate-muted, #64748b);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    list-style: none;
+  }
+
+  .assignment-context summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .assignment-context summary::before {
+    content: '›';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+
+  .assignment-context[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .assignment-context .sentence-text-quote {
+    margin-top: 9px;
+  }
+  .sentence-text-quote.general {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--color-heading, #1e293b);
+    line-height: 1.45;
+  }
+  .epistemic-badge.general {
+    background: rgba(2, 132, 199, 0.12);
+    color: #0284c7;
+  }
+  .vulnerability-tag.info {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
   }
 
   /* Active Sentence in Editor */

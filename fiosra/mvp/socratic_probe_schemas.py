@@ -51,6 +51,9 @@ class SocraticProbeCard(BaseModel):
     section_label: str = Field(min_length=1, max_length=120)
     focus_type: ProbeFocusType
     question: str = Field(min_length=1, max_length=260)
+    concept_id: str | None = None
+    concept_label: str | None = None
+    claim_text: str | None = Field(default=None, max_length=50_000)
     status: ProbeStatus
     evidence_state: EvidenceState = "unverified"
     offered_at: datetime
@@ -67,6 +70,7 @@ class ProbeEvaluationResponse(BaseModel):
     created: list[SocraticProbeCard] = Field(default_factory=list)
     pending: list[SocraticProbeCard] = Field(default_factory=list)
     evidence_summary: dict[str, int] = Field(default_factory=dict)
+    availability_notice: str | None = None
 
 
 class ProbeListResponse(BaseModel):
@@ -100,6 +104,8 @@ class ProbeTraceRecord(BaseModel):
     section_label: str
     focus_type: ProbeFocusType
     question: str
+    concept_id: str | None = None
+    concept_label: str | None = None
     status: ProbeStatus
     evidence_state: EvidenceState
     offered_at: datetime
@@ -140,7 +146,7 @@ class EpistemicClassifyResponse(BaseModel):
     sentences: list[SentenceClassification]
 
 
-SocraticMoveType = Literal["challenge", "why_ladder", "assumptions", "source", "counterfactual", "creative"]
+SocraticMoveType = Literal["challenge", "why_ladder", "assumptions", "source", "counterfactual", "creative", "socratic"]
 
 
 class SentenceInquireRequest(BaseModel):
@@ -203,6 +209,27 @@ class HelperCanvasAction(BaseModel):
     blocks: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class EpistemicToolAction(BaseModel):
+    """An interactive action attached to a Socratic response that the student can trigger with one click."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    label: str
+    action_type: Literal["scaffold_section", "insert_claim", "explore_prompt", "cite_source"]
+    icon: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class OutlineOption(BaseModel):
+    """One learner-selectable, answer-blind way to organize an assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=3, max_length=100)
+    section_titles: list[str] = Field(min_length=3, max_length=3)
+    reasoning_focus: str = Field(min_length=12, max_length=280)
+
+
 class DialecticalTurnResponse(BaseModel):
     """The Oracle's evaluation, follow-up probe or resolution synthesis, and satisfaction state."""
 
@@ -216,6 +243,5 @@ class DialecticalTurnResponse(BaseModel):
     epistemic_progress: float = Field(default=0.25, ge=0.0, le=1.0)
     socratic_moves: list[str] = Field(default_factory=list)
     helper_action: HelperCanvasAction | None = None
-
-
-
+    interactive_actions: list[EpistemicToolAction] = Field(default_factory=list)
+    outline_options: list[OutlineOption] = Field(default_factory=list)

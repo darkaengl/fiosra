@@ -55,6 +55,15 @@ class LearningDocumentService:
     }
     _MAX_BLOCK_PLAINTEXT = 50_000
     _MAX_BLOCK_JSON_BYTES = 100_000
+    _LEGACY_TEMPLATE_HEADINGS = frozenset(
+        {
+            "working claim",
+            "source observations",
+            "reasoning",
+            "alternative explanation",
+            "revision reflection",
+        }
+    )
 
     async def _get_authorized_context(
         self,
@@ -139,48 +148,35 @@ class LearningDocumentService:
             legacy_drafts = {
                 row["section_id"]: row for row in legacy_result.mappings().all()
             }
-            position = 1
-            for section in sorted(assignment.canvas_sections, key=lambda item: item.position):
-                heading_id = uuid.uuid4()
-                paragraph_id = uuid.uuid4()
-                legacy = legacy_drafts.get(section.section_id)
-                draft_text = legacy["text"] if legacy else ""
-                author_type = legacy["author_type"] if legacy and legacy["author_type"] else "student"
-                heading_content = self._node(
-                    heading_id,
-                    "heading",
-                    self._text_content(section.label),
-                    level=2,
-                    sectionId=section.section_id,
-                )
-                paragraph_content = self._node(
-                    paragraph_id,
-                    "paragraph",
-                    self._text_content(draft_text),
-                    sectionId=section.section_id,
-                )
-                for block_id, block_type, content, plaintext, section_id, block_author_type in (
-                    (heading_id, "heading", heading_content, section.label, section.section_id, "student"),
-                    (
+            # New work starts as an open canvas. Assignment-specific headings must
+            # emerge from learner-authored work or an explicitly accepted helper
+            # proposal; the old fixed canvas_sections are retained only to import
+            # legacy drafts safely.
+            legacy_rows = [row for _, row in sorted(legacy_drafts.items())]
+            if legacy_rows:
+                position = 1
+                for legacy in legacy_rows:
+                    paragraph_id = uuid.uuid4()
+                    draft_text = legacy["text"] or ""
+                    author_type = legacy["author_type"] or "student"
+                    section_id = legacy["section_id"] or "page_1"
+                    paragraph_content = self._node(
                         paragraph_id,
                         "paragraph",
-                        paragraph_content,
-                        draft_text,
-                        section.section_id,
-                        author_type,
-                    ),
-                ):
+                        self._text_content(draft_text),
+                        sectionId=section_id,
+                    )
                     await session.execute(
                         insert_block_sql,
                         {
-                            "block_id": str(block_id),
+                            "block_id": str(paragraph_id),
                             "document_id": str(document_id),
                             "section_id": section_id,
                             "position": position,
-                            "block_type": block_type,
-                            "content": json.dumps(content),
-                            "plaintext": plaintext,
-                            "author_type": block_author_type,
+                            "block_type": "paragraph",
+                            "content": json.dumps(paragraph_content),
+                            "plaintext": draft_text,
+                            "author_type": author_type,
                         },
                     )
                     position += 1
@@ -191,7 +187,7 @@ class LearningDocumentService:
             assignment_id=session_info["assignment_id"],
             question_id=session_info["current_question_id"],
             event_type="learning_document_initialized",
-            payload={"imported_canvas_sections": len(assignment.canvas_sections)},
+            payload={"imported_canvas_sections": len(legacy_rows)},
         )
         return document_id
 
@@ -290,6 +286,57 @@ class LearningDocumentService:
             blocks=blocks,
         )
 
+    @classmethod
+    def _is_untouched_legacy_template(cls, state: LearningDocumentState) -> bool:
+        """Recognize only the prior empty five-section starter, never learner prose."""
+        headings = [
+            block.plaintext.strip().casefold()
+            for block in state.blocks
+            if block.block_type == "heading"
+        ]
+        non_heading_text = [
+            block.plaintext.strip()
+            for block in state.blocks
+            if block.block_type != "heading" and block.plaintext.strip()
+        ]
+        return (
+            len(headings) == len(cls._LEGACY_TEMPLATE_HEADINGS)
+            and set(headings) == cls._LEGACY_TEMPLATE_HEADINGS
+            and not non_heading_text
+        )
+
+    async def _remove_untouched_legacy_template(
+        self,
+        state: LearningDocumentState,
+        session_info: dict[str, Any],
+    ) -> LearningDocumentState:
+        """Clear a purely mechanical starter so the learner begins on an open canvas."""
+        if not self._is_untouched_legacy_template(state):
+            return state
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("DELETE FROM learning_document_blocks WHERE document_id = CAST(:document_id AS UUID);"),
+                {"document_id": str(state.document_id)},
+            )
+            await session.execute(
+                text(
+                    "UPDATE learning_documents "
+                    "SET document_revision = document_revision + 1, updated_at = NOW() "
+                    "WHERE document_id = CAST(:document_id AS UUID);"
+                ),
+                {"document_id": str(state.document_id)},
+            )
+            await session.commit()
+        await event_store.log_event(
+            session_id=session_info["session_id"],
+            student_id=session_info["student_id"],
+            assignment_id=session_info["assignment_id"],
+            question_id=session_info["current_question_id"],
+            event_type="learning_document_legacy_template_removed",
+            payload={"document_id": str(state.document_id)},
+        )
+        return await self._state_for_document(state.document_id, session_info)
+
     async def get_state(
         self,
         session_id: UUID | str,
@@ -297,7 +344,8 @@ class LearningDocumentService:
     ) -> LearningDocumentState:
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
         document_id = await self._ensure_document(session_info, assignment)
-        return await self._state_for_document(document_id, session_info)
+        state = await self._state_for_document(document_id, session_info)
+        return await self._remove_untouched_legacy_template(state, session_info)
 
     async def sync_document(
         self,

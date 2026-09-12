@@ -21,11 +21,11 @@ class CanvasScribeHelper:
         section_titles: list[str],
         target_page: int = 1,
     ) -> HelperCanvasAction:
-        """Create H2 section headings and placeholder guidance for student-proposed structure."""
+        """Create a reviewable set of empty section blocks from a learner-approved structure."""
         blocks: list[dict[str, Any]] = []
         cleaned_titles = [t.strip() for t in section_titles if t.strip()]
         if not cleaned_titles:
-            cleaned_titles = ["Introduction & Working Claim", "Context & Evidence", "Analysis & Conclusion"]
+            raise ValueError("Canvas section proposals require at least one named section.")
 
         page_sec_id = f"page_{target_page}"
 
@@ -63,16 +63,10 @@ class CanvasScribeHelper:
                         "sectionId": page_sec_id,
                         "pageNumber": target_page,
                     },
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Articulate your core reasoning and evidence for {title.lower()}...",
-                        }
-                    ],
                 },
             })
 
-        summary = f"Created {len(cleaned_titles)} sections on Page {target_page}."
+        summary = f"Add {len(cleaned_titles)} proposed sections to Page {target_page}."
         return HelperCanvasAction(
             action="scaffold_sections",
             summary=summary,

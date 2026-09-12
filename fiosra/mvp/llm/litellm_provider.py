@@ -57,10 +57,14 @@ class LiteLLMProvider:
         except ImportError as exc:  # pragma: no cover - dependency is declared in pyproject
             raise LLMProviderError("LiteLLM is not installed.") from exc
 
-        timeout_seconds = request.timeout_seconds or (
-            settings.OLLAMA_TIMEOUT_SECONDS
-            if self.provider_name == "ollama"
-            else settings.OPENROUTER_TIMEOUT_SECONDS
+        timeout_by_provider = {
+            "ollama": settings.OLLAMA_TIMEOUT_SECONDS,
+            "openrouter": settings.OPENROUTER_TIMEOUT_SECONDS,
+            "openai": settings.OPENAI_TIMEOUT_SECONDS,
+        }
+        timeout_seconds = request.timeout_seconds or timeout_by_provider.get(
+            self.provider_name,
+            settings.OPENROUTER_TIMEOUT_SECONDS,
         )
         call_options: dict[str, Any] = {
             "model": self.model,
@@ -82,6 +86,7 @@ class LiteLLMProvider:
         if self.api_key:
             call_options["api_key"] = self.api_key
         if self.api_base:
+            call_options["api_base"] = self.api_base
             call_options["base_url"] = self.api_base
         # LiteLLM maps this OpenAI-compatible field to supported providers and preserves
         # privacy by using an opaque, per-session pseudonym supplied by the caller.

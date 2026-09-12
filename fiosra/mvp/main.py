@@ -50,6 +50,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(_text(
             "CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments (course_id);"
         ))
+        await conn.execute(_text(
+            "ALTER TABLE socratic_probes ADD COLUMN IF NOT EXISTS concept_id VARCHAR(96);"
+        ))
+        await conn.execute(_text(
+            "ALTER TABLE socratic_probes ADD COLUMN IF NOT EXISTS concept_label VARCHAR(160);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_socratic_probes_concept ON socratic_probes (concept_id);"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()
