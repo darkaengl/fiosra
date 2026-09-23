@@ -1,5 +1,5 @@
 <script>
-  import Router from 'svelte-spa-router';
+  import Router, { router } from 'svelte-spa-router';
   import { wrap } from 'svelte-spa-router/wrap';
   import './css/design-system.css';
   import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
@@ -38,6 +38,16 @@
     '*': Courses,
   };
 
+  let isStudentView = $derived(
+    Boolean(router.location && router.location.startsWith('/student'))
+  );
+
+  $effect(() => {
+    if (isStudentView && assistantOpen) {
+      assistantOpen = false;
+    }
+  });
+
   let isZenMode = $state(false);
 
   function syncZenMode() {
@@ -63,11 +73,11 @@
   {#if !isZenMode}
     <AppHeader />
   {/if}
-  <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
+  <div class:assistant-open={assistantOpen && !isZenMode && !isStudentView} class="app-body">
     <div class="route-viewport">
       <Router {routes} />
     </div>
-    {#if !isZenMode}
+    {#if !isZenMode && !isStudentView}
       <AIDesignAssistant bind:open={assistantOpen} />
     {/if}
   </div>

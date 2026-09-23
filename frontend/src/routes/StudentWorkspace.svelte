@@ -583,6 +583,12 @@
     courseId = params.get('course_id') || '';
     assignmentId = params.get('assignment_id') || '';
 
+    // If navigating to student workspace without a course, redirect to Courses & Enrollment portal
+    if (!courseId && !assignmentId) {
+      window.location.hash = '#/student/portal';
+      return;
+    }
+
     if (assignmentId) {
       const response = await fetch(`/assignments/${assignmentId}`);
       if (!response.ok) throw new Error(await responseError(response, 'The requested assignment could not be loaded.'));

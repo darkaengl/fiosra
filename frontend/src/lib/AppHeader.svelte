@@ -297,7 +297,7 @@
         type="button"
         role="radio"
         aria-checked={parsed.isStudentView ? "true" : "false"}
-        onclick={() => navigateTo(parsed.isStudentGlobal ? '/student/portal' : `/student${parsed.courseQuery}`)}
+        onclick={() => navigateTo(parsed.courseId && !parsed.isStudentGlobal ? `/student${parsed.courseQuery}` : '/student/portal')}
         class="role-radio-btn"
         class:active={parsed.isStudentView}
         title="Switch to Student Learning Workspace"

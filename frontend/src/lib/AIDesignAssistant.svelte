@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { router } from 'svelte-spa-router';
 
   let { open = $bindable(false) } = $props();
   let courses = $state([]);
@@ -7,6 +8,14 @@
   let moduleId = $state('');
   let mode = $state('assignment');
   let instruction = $state('');
+
+  let isStudent = $derived(Boolean(router.location && router.location.startsWith('/student')));
+
+  $effect(() => {
+    if (isStudent && open) {
+      open = false;
+    }
+  });
 
   let activeCourse = $derived(courses.find((course) => course.course_id === courseId) || null);
   let suggestedInstruction = $derived(
@@ -24,6 +33,7 @@
   }
 
   function openAssistant() {
+    if (isStudent) return;
     open = true;
     const contextualCourseId = courseFromHash();
     if (contextualCourseId) selectCourse(contextualCourseId);
@@ -68,7 +78,7 @@
   });
 </script>
 
-{#if open}
+{#if open && !isStudent}
   <aside class="assistant-panel" aria-label="AI Design Assistant">
     <header class="assistant-header"><div><span class="eyebrow">Fiosra design intelligence</span><h2>AI Design Assistant</h2><p>Set a direction once; the right workspace opens with the course and module context already attached.</p></div><button type="button" class="close" onclick={closeAssistant} aria-label="Close AI assistant">×</button></header>
     <div class="mode-tabs" role="tablist"><button type="button" class:active={mode === 'course'} onclick={() => (mode = 'course')}>Course design</button><button type="button" class:active={mode === 'assignment'} onclick={() => (mode = 'assignment')}>Assignment draft</button><button type="button" class:active={mode === 'graph'} onclick={() => (mode = 'graph')}>Concept graph</button></div>
