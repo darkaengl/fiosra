@@ -21,6 +21,7 @@ export const COHORT_STUDENTS = [
   { id: 'sofia_rodriguez', name: 'Sofia Rodriguez', initials: 'SR', trap: 'Superficial Arithmetic & Bloat' },
   { id: 'aisha_almansoor', name: 'Aisha Al-Mansoor', initials: 'AA', trap: 'Disjointed Mix Fallacy' },
   { id: 'lucas_bennett', name: 'Lucas Bennett', initials: 'LB', trap: 'Library Footfall & Mix' },
+  { id: 'clara_oswald', name: 'Clara Oswald', initials: 'CO', trap: 'Live Demo · Blank Canvas' },
 ];
 
 export function getStudentId() {

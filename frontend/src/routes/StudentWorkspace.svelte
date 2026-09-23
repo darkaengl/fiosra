@@ -149,6 +149,12 @@
       concept: "Overhead Structure & Downside Risk Hedging",
       capsule: "Model Fixed vs Variable Permit Sensitivity"
     },
+    clara_oswald: {
+      student: "I'm starting my initial analysis of Dara's Coffee Cart. What should I prioritize first?",
+      tutor: "Start by examining the 4Ps foundation: Product, Price, Place, and Promotion. Review the primary source exhibits on the left, then outline your core thesis on this fresh canvas.",
+      concept: "4Ps Foundations & Inquiry Scaffolding",
+      capsule: "Examine 4Ps Case Exhibits to Formulate Thesis"
+    },
   };
 
   function buildDefaultChatForStudent(sid) {
