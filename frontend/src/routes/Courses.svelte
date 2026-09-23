@@ -550,7 +550,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--color-obsidian);
+    background: var(--color-cloud-subtle, #F0EFEA);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-sm);
     padding: 6px 12px;
@@ -594,7 +594,7 @@
   }
 
   .filter-chip {
-    background: var(--color-obsidian);
+    background: var(--color-cloud-subtle, #F0EFEA);
     border: 1px solid var(--color-graphite-border);
     color: var(--color-slate-light);
     font-size: 12px;

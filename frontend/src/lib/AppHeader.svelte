@@ -74,12 +74,10 @@
     window.addEventListener('hashchange', syncStudentId);
     window.addEventListener('fiosra:student-changed', syncStudentId);
 
-    // Initialize theme from storage or system preference
+    // Initialize theme from storage (default: academic light parchment)
     const saved = localStorage.getItem('fiosra_theme');
     if (saved === 'dark' || saved === 'light') {
       applyTheme(saved);
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      applyTheme('dark');
     } else {
       applyTheme('light');
     }
@@ -177,12 +175,10 @@
     </a>
 
     <div class="context-indicator">
-      <span class="context-separator">/</span>
-      {#if parsed.isStudentView}
-        <span class="context-badge student">STUDENT</span>
-      {:else}
-        <span class="context-badge">EDUCATOR</span>
-      {/if}
+      <span class="space-badge">
+        <span class="space-dot"></span>
+        Your {parsed.isStudentView ? 'Learning Space' : 'Teaching Space'}
+      </span>
 
       {#if activeCourseLabel && !parsed.isGlobalView && !parsed.isStudentGlobal}
         <span class="context-separator">/</span>
@@ -295,16 +291,33 @@
       <span class="theme-icon dark-icon" class:active={currentTheme === 'dark'}>🌙</span>
     </button>
 
-    {#if parsed.isStudentView}
-      <a
-        href="#/courses"
-        class="role-switch-btn"
-        title="Switch to Educator View (Portfolio)"
-        onclick={(e) => { e.preventDefault(); navigateTo('/courses'); }}
+    <!-- Perspective Switcher (Student / Educator) -->
+    <div role="radiogroup" aria-label="Switch perspective" class="role-radiogroup">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={parsed.isStudentView ? "true" : "false"}
+        onclick={() => navigateTo(parsed.isStudentGlobal ? '/student/portal' : `/student${parsed.courseQuery}`)}
+        class="role-radio-btn"
+        class:active={parsed.isStudentView}
+        title="Switch to Student Learning Workspace"
       >
-        <span>Educator View</span>
-        <span class="switch-icon">↗</span>
-      </a>
+        Student
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={!parsed.isStudentView ? "true" : "false"}
+        onclick={() => navigateTo(parsed.courseId ? `/modules${parsed.courseQuery}` : '/courses')}
+        class="role-radio-btn"
+        class:active={!parsed.isStudentView}
+        title="Switch to Educator Teaching Workspace"
+      >
+        Educator
+      </button>
+    </div>
+
+    {#if parsed.isStudentView}
       <div class="student-switcher-chip" title="Active Student Session: {currentStudent.name} ({currentStudent.trap})">
         <div class="user-avatar student-avatar">{currentStudent.initials}</div>
         <div class="student-select-wrap">
@@ -324,16 +337,6 @@
         </div>
       </div>
     {:else}
-      <a
-        href="#/student/portal"
-        class="role-switch-btn"
-        title="Preview as Student"
-        onclick={(e) => { e.preventDefault(); navigateTo('/student/portal'); }}
-      >
-        <span>Student View</span>
-        <span class="switch-icon">↗</span>
-      </a>
-
       <div class="user-chip" title="Active Educator Session: Dr. Vance">
         <div class="user-avatar">DV</div>
         <span class="user-name">Dr. Vance</span>
@@ -405,6 +408,27 @@
     color: var(--color-slate-subtle);
     font-size: 13px;
     font-weight: 400;
+  }
+
+  .space-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-slate);
+    background: var(--color-cloud-subtle);
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+  }
+
+  .space-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-signal-green);
+    box-shadow: 0 0 5px rgba(95, 175, 122, 0.6);
   }
 
   .context-badge {
@@ -562,6 +586,41 @@
   }
 
 
+
+  .role-radiogroup {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-cloud);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .role-radio-btn {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    border: none;
+    background: transparent;
+    color: var(--color-slate);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.2;
+    font-family: inherit;
+  }
+
+  .role-radio-btn:hover {
+    color: var(--color-heading);
+  }
+
+  .role-radio-btn.active {
+    background: var(--surface);
+    color: var(--color-heading);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
 
   .role-switch-btn {
     display: inline-flex;

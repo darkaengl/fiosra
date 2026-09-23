@@ -2963,21 +2963,21 @@
 
   /* 🔵 Claims: Defensible assertions under test */
   .document-page.epistemic-active :global(.epistemic-sentence.claim) {
-    border-bottom: 2px solid rgba(59, 130, 246, 0.55);
+    border-bottom: 2px solid rgba(79, 107, 255, 0.55);
   }
   .document-page.epistemic-active :global(.epistemic-sentence.claim:hover) {
-    background: rgba(59, 130, 246, 0.1);
-    border-bottom-color: #3b82f6;
+    background: rgba(79, 107, 255, 0.1);
+    border-bottom-color: var(--color-horizon-blue, #4F6BFF);
   }
 
   /* 🟢 Grounded Evidence: Primary source data / citations */
   .document-page.epistemic-active :global(.epistemic-sentence.evidence) {
-    border-bottom: 2px solid rgba(16, 185, 129, 0.65);
-    background: rgba(16, 185, 129, 0.06);
+    border-bottom: 2px solid rgba(95, 175, 122, 0.65);
+    background: rgba(95, 175, 122, 0.08);
   }
   .document-page.epistemic-active :global(.epistemic-sentence.evidence:hover) {
-    background: rgba(16, 185, 129, 0.12);
-    border-bottom-color: #10b981;
+    background: rgba(95, 175, 122, 0.15);
+    border-bottom-color: var(--color-signal-green, #5FAF7A);
   }
 
   /* 🟣 Causal Reasoning: Warrants & connective mechanisms */
@@ -2986,26 +2986,26 @@
   }
   .document-page.epistemic-active :global(.epistemic-sentence.reasoning:hover) {
     background: rgba(139, 92, 246, 0.1);
-    border-bottom-color: #8b5cf6;
+    border-bottom-color: var(--color-aurora, #8b5cf6);
   }
 
   /* 🟡 Assumptions: Presuppositions taken for granted */
   .document-page.epistemic-active :global(.epistemic-sentence.assumption) {
-    border-bottom: 2px solid rgba(245, 158, 11, 0.65);
-    background: rgba(245, 158, 11, 0.05);
+    border-bottom: 2px solid rgba(216, 154, 58, 0.65);
+    background: rgba(216, 154, 58, 0.08);
   }
   .document-page.epistemic-active :global(.epistemic-sentence.assumption:hover) {
-    background: rgba(245, 158, 11, 0.12);
-    border-bottom-color: #f59e0b;
+    background: rgba(216, 154, 58, 0.16);
+    border-bottom-color: var(--color-amber, #D89A3A);
   }
 
   /* 🔴 Premature Closures: Unsupported conclusion leaps */
   .document-page.epistemic-active :global(.epistemic-sentence.premature_closure) {
-    border-bottom: 2px dashed #ef4444;
-    background: rgba(239, 68, 68, 0.07);
+    border-bottom: 2px dashed var(--color-rose, #B74C4C);
+    background: rgba(183, 76, 76, 0.08);
   }
   .document-page.epistemic-active :global(.epistemic-sentence.premature_closure:hover) {
-    background: rgba(239, 68, 68, 0.14);
+    background: rgba(183, 76, 76, 0.16);
   }
 
   :global(.sentence-pulse-highlight) {

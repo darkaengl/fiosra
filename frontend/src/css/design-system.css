@@ -29,70 +29,78 @@
   --m-color-deep-red: #B74C4C;
   --m-color-deep-red-soft: #FCEFEF;
 
-  /* Foundations: Academic Parchment & Clean White */
-  --color-obsidian: #f8f8f5;
+  /* Foundations: Manus Academic Bone & Clean White */
+  --surface: #ffffff;
+  --border: #DDDCD5;
+  --brand-obsidian: #111315;
+  --color-obsidian: #F6F5F1;
   --color-graphite: #ffffff;
   --color-graphite-card: #ffffff;
-  --color-graphite-border: #e2e4dc;
-  --color-graphite-hover: #f1f2ed;
+  --color-graphite-border: #DDDCD5;
+  --color-graphite-hover: #F0EFEA;
   
-  --color-bone: #191c21;
+  --color-bone: #F6F5F1;
   --color-bone-surface: #ffffff;
-  --color-bone-muted: #f4f5f0;
-  --color-bone-border: #e2e4dc;
+  --color-bone-muted: #F0EFEA;
+  --color-bone-border: #DDDCD5;
+  --color-cloud: #E9E8E3;
+  --color-cloud-subtle: #F0EFEA;
   
-  --color-slate-subtle: #8a909d;
-  --color-slate-muted: #646a78;
-  --color-slate-light: #474d5a;
-  --color-slate-bright: #191c21;
-  --color-heading: #121418;
+  --color-slate: #6D7378;
+  --color-slate-subtle: #8A9096;
+  --color-slate-muted: #6D7378;
+  --color-slate-light: #6D7378;
+  --color-slate-bright: #111315;
+  --color-heading: #111315;
 
-  /* Accents: Rich Amber Ochre */
-  --color-horizon-blue: #d97706;
-  --color-horizon-bright: #b45309;
-  --color-horizon-glow: rgba(217, 119, 6, 0.12);
+  /* Accents: Signature Horizon Blue (#4F6BFF) */
+  --color-horizon-blue: #4F6BFF;
+  --color-horizon-bright: #3D5AFE;
+  --color-horizon-glow: rgba(79, 107, 255, 0.15);
+  --color-horizon-blue-soft: #EBF0FF;
   
-  /* Socratic Focus: Sky Cobalt */
-  --color-aurora: #0284c7;
-  --color-aurora-bright: #0369a1;
-  --color-aurora-glow: rgba(2, 132, 199, 0.12);
+  /* Socratic Focus: Aurora Purple (#7B61FF) */
+  --color-aurora: #7B61FF;
+  --color-aurora-bright: #6949FF;
+  --color-aurora-glow: rgba(123, 97, 255, 0.15);
+  --color-aurora-soft: #F1EDFF;
 
-  /* Grounded / Verified: Forest Sage */
-  --color-signal-green: #059669;
-  --color-signal-green-dark: #047857;
-  --color-signal-green-bg: #ecfdf5;
-  --color-signal-green-text: #065f46;
+  /* Grounded / Verified: Signal Green (#5FAF7A) */
+  --color-signal-green: #5FAF7A;
+  --color-signal-green-dark: #4A9664;
+  --color-signal-green-bg: #EBF7F0;
+  --color-signal-green-text: #2D6340;
 
-  /* Amber & Warnings */
-  --color-amber: #d97706;
-  --color-amber-dark: #b45309;
-  --color-amber-bg: #fef3c7;
-  --color-amber-text: #92400e;
+  /* Amber & Warnings (#D89A3A) */
+  --color-amber: #D89A3A;
+  --color-amber-dark: #C08325;
+  --color-amber-bg: #FDF6EC;
+  --color-amber-text: #8C5B14;
 
-  /* Misconceptions & Alerts: Terracotta Crimson */
-  --color-rose: #dc2626;
-  --color-rose-dark: #b91c1c;
-  --color-rose-bg: #fef2f2;
-  --color-rose-text: #991b1b;
+  /* Misconceptions & Alerts: Deep Red (#B74C4C) */
+  --color-rose: #B74C4C;
+  --color-rose-dark: #9F3838;
+  --color-rose-bg: #FCEFEF;
+  --color-rose-text: #822727;
 
   /* Theme-specific UI Tokens */
-  --header-bg: rgba(248, 248, 245, 0.92);
-  --header-border: #e2e4dc;
+  --header-bg: rgba(246, 245, 241, 0.88);
+  --header-border: #DDDCD5;
   --pill-bg: rgba(0, 0, 0, 0.04);
-  --pill-border: rgba(0, 0, 0, 0.08);
-  --pill-hover: rgba(0, 0, 0, 0.07);
-  --pill-active-bg: rgba(217, 119, 6, 0.14);
-  --pill-active-border: rgba(217, 119, 6, 0.35);
-  --pill-active-color: #92400e;
+  --pill-border: #DDDCD5;
+  --pill-hover: rgba(0, 0, 0, 0.06);
+  --pill-active-bg: #EBF0FF;
+  --pill-active-border: rgba(79, 107, 255, 0.35);
+  --pill-active-color: #4F6BFF;
   --user-chip-bg: #ffffff;
-  --user-chip-border: #e2e4dc;
+  --user-chip-border: #DDDCD5;
   --role-btn-bg: #ffffff;
-  --role-btn-border: #d5d8ce;
-  --role-btn-hover: #f1f2ed;
-  --modal-overlay-bg: rgba(25, 28, 33, 0.6);
+  --role-btn-border: #DDDCD5;
+  --role-btn-hover: #F0EFEA;
+  --modal-overlay-bg: rgba(17, 19, 21, 0.6);
   --input-bg: #ffffff;
-  --input-border: #d5d8ce;
-  --input-focus-border: #d97706;
+  --input-border: #DDDCD5;
+  --input-focus-border: #4F6BFF;
 
   /* Typography */
   --font-brand: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -113,17 +121,22 @@
 
 [data-theme="dark"] {
   /* Foundations: Deep Warm Charcoal & Academic Slate */
-  --color-obsidian: #121418;
+  --surface: #181b20;
+  --border: #2a2f38;
+  --color-obsidian: #f0efea;
   --color-graphite: #181b20;
   --color-graphite-card: #1e2229;
   --color-graphite-border: #2a2f38;
   --color-graphite-hover: #262b34;
   
-  --color-bone: #fafaf7;
-  --color-bone-surface: #ffffff;
-  --color-bone-muted: #f4f4ee;
-  --color-bone-border: #e6e6dc;
+  --color-bone: #121418;
+  --color-bone-surface: #181b20;
+  --color-bone-muted: #1e2229;
+  --color-bone-border: #2a2f38;
+  --color-cloud: #1e2229;
+  --color-cloud-subtle: #23272b;
   
+  --color-slate: #9ea3ae;
   --color-slate-subtle: #525866;
   --color-slate-muted: #717784;
   --color-slate-light: #9ea3ae;
@@ -190,11 +203,16 @@
 
 body {
   font-family: var(--font-ui);
-  background-color: var(--color-obsidian);
-  color: var(--color-slate-bright);
+  background-color: var(--color-bone);
+  color: var(--color-heading);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+[data-theme="dark"] body {
+  background-color: var(--color-obsidian);
+  color: var(--color-slate-bright);
 }
 
 /* Header */

@@ -77,8 +77,8 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    background-color: var(--color-obsidian);
-    color: var(--color-slate-bright);
+    background-color: var(--color-bone);
+    color: var(--color-heading);
     font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
   }
