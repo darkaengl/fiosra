@@ -42,7 +42,8 @@ services:
       start_period: 30s
     volumes:
       - ./fiosra:/app/fiosra
-      - ./frontend/dist:/app/frontend/dist
+      # Mount host frontend/dist only if doing live host builds; otherwise allow container's internal build to serve:
+      # - ./frontend/dist:/app/frontend/dist
       - ./storage:/app/storage
 
   postgres:
