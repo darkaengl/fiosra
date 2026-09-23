@@ -2821,7 +2821,7 @@
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     width: 100%;
     max-width: 100%;
-    min-height: clamp(650px, 85vh, 960px);
+    min-height: max(297mm, 1050px);
     height: auto;
     flex-shrink: 0;
     padding: var(--canvas-padding, clamp(48px, 6vw, 72px) clamp(36px, 5vw, 64px) clamp(24px, 3.5vw, 40px));
@@ -2858,8 +2858,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 32px;
-    padding-top: 14px;
+    margin-top: auto;
+    padding-top: 20px;
     border-top: 1px solid var(--color-graphite-border, #e2e4dc);
     font-size: 11px;
     color: var(--color-slate-muted, #94a3b8);
