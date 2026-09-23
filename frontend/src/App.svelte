@@ -5,6 +5,7 @@
   import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
   import AppHeader from './lib/AppHeader.svelte';
 
+  import Home from './routes/Home.svelte';
   import Modules from './routes/Modules.svelte';
   import Courses from './routes/Courses.svelte';
   import CourseStudio from './routes/CourseStudio.svelte';
@@ -19,7 +20,7 @@
   let assistantOpen = $state(false);
 
   const routes = {
-    '/': Courses,
+    '/': Home,
     '/portfolio': Courses,
     '/courses': Courses,
     '/modules': Modules,
@@ -38,12 +39,16 @@
     '*': Courses,
   };
 
+  let isLanding = $derived(
+    router.location === '/' || router.location === ''
+  );
+
   let isStudentView = $derived(
     Boolean(router.location && router.location.startsWith('/student'))
   );
 
   $effect(() => {
-    if (isStudentView && assistantOpen) {
+    if ((isStudentView || isLanding) && assistantOpen) {
       assistantOpen = false;
     }
   });
@@ -69,15 +74,15 @@
   });
 </script>
 
-<div class="app-root" class:zen-mode={isZenMode}>
-  {#if !isZenMode}
+<div class="app-root" class:zen-mode={isZenMode} class:landing-mode={isLanding}>
+  {#if !isZenMode && !isLanding}
     <AppHeader />
   {/if}
-  <div class:assistant-open={assistantOpen && !isZenMode && !isStudentView} class="app-body">
-    <div class="route-viewport">
+  <div class:assistant-open={assistantOpen && !isZenMode && !isStudentView && !isLanding} class="app-body">
+    <div class="route-viewport" class:landing-viewport={isLanding}>
       <Router {routes} />
     </div>
-    {#if !isZenMode && !isStudentView}
+    {#if !isZenMode && !isStudentView && !isLanding}
       <AIDesignAssistant bind:open={assistantOpen} />
     {/if}
   </div>
