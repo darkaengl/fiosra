@@ -4,6 +4,7 @@
     enrolledCount = 0,
     courseId = '',
     onAddModule,
+    onViewRoster,
   } = $props();
 
   let designerHref = $derived(
@@ -28,7 +29,13 @@
       <span class="meta-sep">•</span>
       <span style="color: var(--color-horizon-bright);">COURSE WORKSPACE</span>
       <span class="meta-sep">•</span>
-      <span>{enrolledCount} ENROLLED STUDENTS</span>
+      {#if onViewRoster}
+        <button type="button" class="enrolled-badge-btn" onclick={onViewRoster} title="Click to view 10 enrolled students in Cohort Roster">
+          👥 {enrolledCount} ENROLLED STUDENTS ↗
+        </button>
+      {:else}
+        <span>{enrolledCount} ENROLLED STUDENTS</span>
+      {/if}
     </div>
 
     <h1 class="course-h1">{course?.title || 'Course Workspace'}</h1>
@@ -127,6 +134,25 @@
     font-size: 11.5px;
     font-weight: 600;
     color: var(--color-slate-light);
+  }
+
+  .enrolled-badge-btn {
+    background: rgba(45, 212, 191, 0.12);
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    color: var(--color-teal);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+  }
+
+  .enrolled-badge-btn:hover {
+    background: rgba(45, 212, 191, 0.22);
+    border-color: var(--color-teal);
+    transform: translateY(-1px);
   }
 
   .meta-tag {

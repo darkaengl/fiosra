@@ -56,7 +56,7 @@
         </div>
       </div>
       <div class="drawer-header-right">
-        <span class="rung-pill">Rung {currentRung} / 3</span>
+        <span class="rung-pill">Inquiry Level {currentRung} / 3</span>
         <button
           type="button"
           class="btn-close-drawer"
@@ -91,7 +91,7 @@
               <div class="msg-author">
                 <span>🤖 Fiosra Socratic Tutor</span>
                 {#if turn.hint_rung > 0}
-                  <span class="hint-tag">Scaffolding Rung {turn.hint_rung}</span>
+                  <span class="hint-tag">Scaffolding Level {turn.hint_rung}</span>
                 {/if}
               </div>
               <div class="msg-content">{turn.text}</div>

@@ -8,16 +8,18 @@
     onEvaluateStudentAssignment,
   } = $props();
 
-  let filter = $state('all'); // 'all' | 'submitted' | 'struggling' | 'in_progress'
+  let filter = $state('all'); // 'all' | 'completed' | 'submitted' | 'struggling' | 'in_progress'
 
   let filteredStudents = $derived.by(() => {
-    if (filter === 'submitted') return students.filter((s) => s.status === 'submitted' || s.completed_assignments > 0);
+    if (filter === 'completed') return students.filter((s) => s.status === 'completed' || s.completed_assignments > 0);
+    if (filter === 'submitted') return students.filter((s) => s.status === 'submitted');
     if (filter === 'struggling') return students.filter((s) => s.active_struggle);
-    if (filter === 'in_progress') return students.filter((s) => s.status !== 'submitted' && !s.active_struggle);
+    if (filter === 'in_progress') return students.filter((s) => s.status !== 'submitted' && s.status !== 'completed' && !s.active_struggle);
     return students;
   });
 
-  let submittedCount = $derived(students.filter((s) => s.status === 'submitted' || s.completed_assignments > 0).length);
+  let completedCount = $derived(students.filter((s) => s.status === 'completed' || s.completed_assignments > 0).length);
+  let submittedCount = $derived(students.filter((s) => s.status === 'submitted').length);
   let strugglingCount = $derived(students.filter((s) => s.active_struggle).length);
 </script>
 
@@ -35,11 +37,21 @@
       <button
         type="button"
         class="filter-pill"
-        class:active={filter === 'submitted'}
-        onclick={() => filter = 'submitted'}
+        class:active={filter === 'completed'}
+        onclick={() => filter = 'completed'}
       >
-        Submitted ({submittedCount})
+        Completed ({completedCount})
       </button>
+      {#if submittedCount > 0}
+        <button
+          type="button"
+          class="filter-pill"
+          class:active={filter === 'submitted'}
+          onclick={() => filter = 'submitted'}
+        >
+          Submitted ({submittedCount})
+        </button>
+      {/if}
       <button
         type="button"
         class="filter-pill"
@@ -54,7 +66,7 @@
         class:active={filter === 'in_progress'}
         onclick={() => filter = 'in_progress'}
       >
-        In Progress ({students.length - submittedCount - strugglingCount})
+        In Progress ({Math.max(0, students.length - completedCount - submittedCount - strugglingCount)})
       </button>
     </div>
   </div>
@@ -109,7 +121,22 @@
                 {/if}
               </td>
               <td>
-                {#if stu.status === 'submitted' || stu.completed_assignments > 0}
+                {#if stu.status === 'completed' || (stu.completed_assignments > 0 && stu.status !== 'submitted')}
+                  {#if stu.assignment_id}
+                    <button
+                      type="button"
+                      class="status-badge badge-completed clickable"
+                      title="Inspect {stu.student_id}'s completed reasoning trace"
+                      onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title, stu.student_id, stu.latest_session_id)}
+                    >
+                      ✓ Completed ↗
+                    </button>
+                  {:else}
+                    <span class="status-badge badge-completed">
+                      ✓ Completed
+                    </span>
+                  {/if}
+                {:else if stu.status === 'submitted'}
                   {#if stu.assignment_id}
                     <button
                       type="button"
@@ -355,10 +382,17 @@
     white-space: nowrap;
   }
 
+  .badge-completed {
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #059669;
+    font-weight: 700;
+  }
+
   .badge-submitted {
-    background: rgba(16, 185, 129, 0.12);
-    border: 1px solid rgba(16, 185, 129, 0.28);
-    color: #6ee7b7;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    color: #2563eb;
   }
 
   .status-badge.clickable {

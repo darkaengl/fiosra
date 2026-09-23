@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { push } from 'svelte-spa-router';
+  import { COHORT_STUDENTS, getStudentId, setStudentId } from './session.js';
 
   let {
     courseTitle = 'Course Workspace',
@@ -9,6 +10,33 @@
   let currentHash = $state(typeof window !== 'undefined' ? window.location.hash || '#/' : '#/');
   let courses = $state([]);
   let currentTheme = $state('light');
+  let activeStudentId = $state(typeof window !== 'undefined' ? getStudentId() : 'julian_hayes');
+
+  let currentStudent = $derived(
+    COHORT_STUDENTS.find((s) => s.id === activeStudentId) || COHORT_STUDENTS[0]
+  );
+
+  function syncStudentId() {
+    activeStudentId = getStudentId();
+  }
+
+  function handleStudentSelect(e) {
+    const newId = e.target.value;
+    activeStudentId = newId;
+    setStudentId(newId);
+
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    const path = qIndex >= 0 ? hash.slice(0, qIndex) : hash;
+    const search = qIndex >= 0 ? hash.slice(qIndex + 1) : '';
+    const sp = new URLSearchParams(search);
+    sp.set('student_id', newId);
+    const newHash = `${path}?${sp.toString()}`;
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
+    }
+    window.dispatchEvent(new CustomEvent('fiosra:student-changed', { detail: { studentId: newId } }));
+  }
 
   function handleHashChange() {
     currentHash = window.location.hash || '#/';
@@ -43,6 +71,8 @@
 
   onMount(async () => {
     window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', syncStudentId);
+    window.addEventListener('fiosra:student-changed', syncStudentId);
 
     // Initialize theme from storage or system preference
     const saved = localStorage.getItem('fiosra_theme');
@@ -68,6 +98,8 @@
   onDestroy(() => {
     if (typeof window !== 'undefined') {
       window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', syncStudentId);
+      window.removeEventListener('fiosra:student-changed', syncStudentId);
     }
   });
 
@@ -138,10 +170,10 @@
     <a
       href={parsed.logoHref}
       title={parsed.logoTitle}
-      class="brand-logo"
+      class="brand-logo-link"
       onclick={(e) => { e.preventDefault(); navigateTo(parsed.logoHref); }}
     >
-      FIOSRA
+      <img src="/fiosra-lockup.png" alt="Fiosra · Learning in Motion" class="brand-logo-img" />
     </a>
 
     <div class="context-indicator">
@@ -273,9 +305,23 @@
         <span>Educator View</span>
         <span class="switch-icon">↗</span>
       </a>
-      <div class="user-chip" title="Active Student Session: Julian Hayes">
-        <div class="user-avatar student-avatar">JH</div>
-        <span class="user-name">Julian Hayes</span>
+      <div class="student-switcher-chip" title="Active Student Session: {currentStudent.name} ({currentStudent.trap})">
+        <div class="user-avatar student-avatar">{currentStudent.initials}</div>
+        <div class="student-select-wrap">
+          <label for="student-header-select" class="sr-only">Switch Student</label>
+          <select
+            id="student-header-select"
+            class="student-header-select"
+            value={activeStudentId}
+            onchange={handleStudentSelect}
+            title="Choose a student in cohort to view their reasoning workspace"
+          >
+            {#each COHORT_STUDENTS as st}
+              <option value={st.id}>{st.name} ({st.trap})</option>
+            {/each}
+          </select>
+          <span class="student-select-arrow">▾</span>
+        </div>
       </div>
     {:else}
       <a
@@ -324,22 +370,29 @@
     overflow: hidden;
   }
 
-  .brand-logo {
-    font-family: var(--font-brand);
-    font-weight: 800;
-    font-size: 18px;
-    letter-spacing: -0.3px;
-    color: var(--color-heading);
+  .brand-logo-link {
+    display: inline-flex;
+    align-items: center;
     text-decoration: none;
-    background: linear-gradient(135deg, var(--color-heading) 45%, var(--color-horizon-bright));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
     cursor: pointer;
     transition: opacity 0.15s ease;
   }
 
-  .brand-logo:hover {
+  .brand-logo-link:hover {
     opacity: 0.88;
+  }
+
+  .brand-logo-img {
+    height: 30px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+    display: block;
+  }
+
+  :global([data-theme="dark"]) .brand-logo-img {
+    filter: brightness(0) invert(1);
+    opacity: 0.95;
   }
 
   .context-indicator {
@@ -545,6 +598,75 @@
     border: 1px solid var(--user-chip-border);
     border-radius: var(--radius-full);
     cursor: default;
+  }
+
+  .student-switcher-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 8px 2px 3px;
+    background: var(--user-chip-bg);
+    border: 1px solid rgba(45, 212, 191, 0.4);
+    border-radius: var(--radius-full);
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .student-switcher-chip:hover {
+    border-color: var(--color-teal);
+    background: rgba(45, 212, 191, 0.08);
+  }
+
+  .student-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+  }
+
+  .student-header-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--color-heading);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding-right: 14px;
+    outline: none;
+    max-width: 170px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .student-header-select option {
+    background: var(--color-graphite-card, #1e293b);
+    color: var(--color-heading, #f8fafc);
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .student-select-arrow {
+    position: absolute;
+    right: 0;
+    pointer-events: none;
+    font-size: 9px;
+    color: var(--color-slate-light);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 
   .user-avatar {

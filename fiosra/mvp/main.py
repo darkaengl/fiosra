@@ -1,9 +1,10 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -197,7 +198,16 @@ for router_instance in [
 # Mount Static UI Frontend (Svelte production build)
 DIST_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if DIST_DIR.exists():
-    app.mount("/ui", StaticFiles(directory=str(DIST_DIR), html=True), name="ui")
+    class NoCacheStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: Any) -> Response:
+            response = await super().get_response(path, scope)
+            if path.endswith(".html") or path == "" or path == "index.html":
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+            return response
+
+    app.mount("/ui", NoCacheStaticFiles(directory=str(DIST_DIR), html=True), name="ui")
 
 
 @app.get("/", include_in_schema=False)

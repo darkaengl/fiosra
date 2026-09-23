@@ -7,6 +7,28 @@
 
 :root,
 [data-theme="light"] {
+  /* Official Fiosra Brand Core Palette (PR #97) */
+  --m-color-bone: #F6F5F1;
+  --m-color-cloud: #E9E8E3;
+  --m-color-cloud-subtle: #F0EFEA;
+  --m-color-slate: #6D7378;
+  --m-color-slate-light: #8A9096;
+  --m-color-obsidian: #111315;
+  --m-color-graphite: #23272B;
+  --m-color-graphite-soft: #32373C;
+
+  /* Official Brand Accents */
+  --m-color-horizon-blue: #4F6BFF;
+  --m-color-horizon-blue-soft: #EBF0FF;
+  --m-color-aurora: #7B61FF;
+  --m-color-aurora-soft: #F1EDFF;
+  --m-color-signal-green: #5FAF7A;
+  --m-color-signal-green-soft: #EBF7F0;
+  --m-color-amber: #D89A3A;
+  --m-color-amber-soft: #FDF6EC;
+  --m-color-deep-red: #B74C4C;
+  --m-color-deep-red-soft: #FCEFEF;
+
   /* Foundations: Academic Parchment & Clean White */
   --color-obsidian: #f8f8f5;
   --color-graphite: #ffffff;

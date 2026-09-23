@@ -60,7 +60,7 @@ async def get_review_queue(
     # When filtering by assignment, return all active and submitted student sessions
     # unless a specific status filter is supplied.
     # When querying globally without assignment_id, default to 'submitted' for grading queue.
-    effective_status = status if status is not None else (None if assignment_id else "submitted")
+    effective_status = status
 
     sql = text("""
         SELECT s.session_id, s.student_id, s.assignment_id, s.status, s.last_activity_at, a.title
@@ -71,7 +71,11 @@ async def get_review_queue(
           AND (CAST(:course_id AS UUID) IS NULL OR m.course_id = CAST(:course_id AS UUID))
           AND (CAST(:assignment_id AS UUID) IS NULL OR s.assignment_id = CAST(:assignment_id AS UUID))
         ORDER BY 
-            CASE WHEN s.status = 'submitted' THEN 0 ELSE 1 END,
+            CASE 
+                WHEN s.status = 'completed' THEN 0
+                WHEN s.status = 'submitted' THEN 1 
+                ELSE 2 
+            END,
             s.last_activity_at DESC;
     """)
     async with AsyncSessionLocal() as session:

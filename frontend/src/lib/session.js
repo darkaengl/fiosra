@@ -10,13 +10,39 @@ export function routeParams() {
   return merged;
 }
 
+export const COHORT_STUDENTS = [
+  { id: 'julian_hayes', name: 'Julian Hayes', initials: 'JH', trap: 'Library Footfall Trap' },
+  { id: 'elena_rostova', name: 'Elena Rostova', initials: 'ER', trap: 'Menu Bloat Trap' },
+  { id: 'marcus_chen', name: 'Marcus Chen', initials: 'MC', trap: 'Superficial Arithmetic' },
+  { id: 'priya_patel', name: 'Priya Patel', initials: 'PP', trap: 'Disjointed Mix Fallacy' },
+  { id: 'david_kim', name: 'David Kim', initials: 'DK', trap: 'Library Footfall + Arithmetic' },
+  { id: 'maya_lin', name: 'Maya Lin', initials: 'ML', trap: 'Menu Bloat + Disjointed Mix' },
+  { id: 'liam_oconnor', name: 'Liam O\'Connor', initials: 'LO', trap: 'Library Footfall Trap' },
+  { id: 'sofia_rodriguez', name: 'Sofia Rodriguez', initials: 'SR', trap: 'Superficial Arithmetic & Bloat' },
+  { id: 'aisha_almansoor', name: 'Aisha Al-Mansoor', initials: 'AA', trap: 'Disjointed Mix Fallacy' },
+  { id: 'lucas_bennett', name: 'Lucas Bennett', initials: 'LB', trap: 'Library Footfall & Mix' },
+];
+
 export function getStudentId() {
   const storageKey = 'fiosra.student-id';
+  const params = routeParams();
+  const fromParam = params.get('student_id');
+  if (fromParam) {
+    localStorage.setItem(storageKey, fromParam);
+    return fromParam;
+  }
   const existing = localStorage.getItem(storageKey);
-  if (existing) return existing;
-  const studentId = `student_${crypto.randomUUID().slice(0, 8)}`;
+  if (existing && COHORT_STUDENTS.some((s) => s.id === existing)) {
+    return existing;
+  }
+  const defaultStudent = 'julian_hayes';
+  localStorage.setItem(storageKey, defaultStudent);
+  return defaultStudent;
+}
+
+export function setStudentId(studentId) {
+  const storageKey = 'fiosra.student-id';
   localStorage.setItem(storageKey, studentId);
-  return studentId;
 }
 
 export function sessionStorageKey(assignmentId, studentId) {

@@ -12,6 +12,7 @@
     routeParams,
     sessionAccessTokenStorageKey,
     sessionStorageKey,
+    COHORT_STUDENTS,
   } from '../lib/session.js';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
 
@@ -86,16 +87,165 @@
     window.addEventListener('pointerup', onPointerUp);
   }
 
-  // Socratic Consultation Chat Threads
-  let chatSessions = $state([
-    {
-      id: 'chat_init',
-      title: 'Consultation 1',
-      startedAt: new Date().toISOString(),
-      turns: [],
+  // Pre-configured Socratic Consultation Threads for Cohort Learners
+  const DEFAULT_CONSULTATIONS = {
+    julian_hayes: {
+      student: "Should Dara locate right outside the library main doors? Footfall is over 1,200 students per hour, so volume will be guaranteed.",
+      tutor: "Consider the operational reality of library traffic: students entering are rushing to quiet study spaces or have 5-minute passing periods. What percentage of that footfall actually has the dwell time to purchase handcrafted pour-overs, and what does the case exhibit say about campus administration permits near library steps?",
+      concept: "Place & Operational Footfall Quality",
+      capsule: "Examine Footfall Dwell Time & Permits"
+    },
+    elena_rostova: {
+      student: "To maximize revenue, Dara should offer 14 flavored syrups, smoothies, matcha lattes, and fresh pastries alongside espresso.",
+      tutor: "Examine Dara's operational bottleneck: a single-group espresso cart with one operator. What happens to customer queue wait times when preparing a 5-step blended smoothie versus pulling an espresso? How does inventory spoilage on 14 perishables affect unit net contribution?",
+      concept: "Product Depth & Throughput Constraints",
+      capsule: "Analyze Prep Bottlenecks & Spoilage"
+    },
+    marcus_chen: {
+      student: "The cart needs to hit 400 cups daily at $2.25 to make the $600 weekly campus licensing fee manageable.",
+      tutor: "Let's check the throughput physics: in an 8-hour operating window, 400 cups requires preparing, brewing, and transacting a cup every 72 seconds without pause. Is that sustainable for a solo barista, or should Dara adjust Price to capture higher margin on lower, sustainable volume?",
+      concept: "Price Margin vs Unit Volume Physics",
+      capsule: "Calculate Realistic Peak Limits"
+    },
+    priya_patel: {
+      student: "I've settled on premium fair-trade beans and a luxury artisan brand identity, priced at $2.00 per 16oz cup with flyers posted around freshman dorms.",
+      tutor: "Look closely at the alignment across the 4Ps: if Product is luxury artisan, does a bargain-basement $2.00 Price signal quality or cheapness? And do paper flyers in dorms reach graduate researchers and faculty with higher willingness-to-pay?",
+      concept: "4Ps Interlocking Consistency",
+      capsule: "Audit Premium Signaling Across All 4Ps"
+    },
+    david_kim: {
+      student: "I calculated $3,000 monthly profit by placing at the library plaza and selling 250 iced drinks daily.",
+      tutor: "Have you factored in weather seasonality and the semester break schedule? During winter exams and rain, outdoor library plaza footfall drops 65%. How does your financial model absorb fixed cart amortization during slow months?",
+      concept: "Place Weather Vulnerability & Fixed Costs",
+      capsule: "Stress-Test Model for Rain Volume"
+    },
+    maya_lin: {
+      student: "Can we sell cold brew kegs and light roast single origins while keeping the menu under 5 core items?",
+      tutor: "A focused 5-item menu drastically reduces preparation time and waste! How does offering batch-tapped cold brew solve the morning rush peak bottleneck compared to custom steam-wand drinks?",
+      concept: "Product Streamlining & Service Velocity",
+      capsule: "Evaluate Tapped Batch vs Manual Steam Yield"
+    },
+    liam_oconnor: {
+      student: "Everyone says the engineering quad has fewer students than the library, but engineering students spend longer hours on campus.",
+      tutor: "Excellent observation. Look at the survey data in Exhibit 2: engineering and STEM graduate students have 3.2x higher afternoon repeat purchase rates and prioritize specialty roast caffeine over budget drip coffee. How does this reframe the Place decision?",
+      concept: "Place Targeting & Repeat Frequency",
+      capsule: "Review Exhibit 2 Afternoon Repeat Purchase Data"
+    },
+    sofia_rodriguez: {
+      student: "If Dara offers pre-ordered digital pickup via a mobile app, can we eliminate queue friction completely?",
+      tutor: "Mobile pickup streamlines ordering, but think about cart space: where do finished drinks sit without getting cold while waiting for pickup on a 4-foot outdoor cart? How can Promotion communicate specific pickup windows?",
+      concept: "Promotion & Cart Staging Capacity",
+      capsule: "Assess Physical Counter Space for Orders"
+    },
+    aisha_almansoor: {
+      student: "I want to align Price and Place by setting up next to the graduate business school at a $4.75 price point.",
+      tutor: "Notice how well that aligns: high discretionary budget, appreciation for single-origin sourcing, and willingness to pay premium prices. What promotional strategy best matches this demographic without seeming intrusive?",
+      concept: "Target Market Alignment & Margin Capture",
+      capsule: "Design Targeted B-School Promotional Channel"
+    },
+    lucas_bennett: {
+      student: "Should Dara negotiate a revenue-share permit with the Student Center instead of paying a fixed $600 weekly fee?",
+      tutor: "A revenue-share fee converts fixed overhead into variable costs, protecting Dara against rainy days and exam breaks. How does this lower break-even risk and allow more flexible pricing?",
+      concept: "Overhead Structure & Downside Risk Hedging",
+      capsule: "Model Fixed vs Variable Permit Sensitivity"
+    },
+  };
+
+  function buildDefaultChatForStudent(sid) {
+    const thread = DEFAULT_CONSULTATIONS[sid] || {
+      student: "Can you help me evaluate the 4Ps trade-offs in my marketing plan?",
+      tutor: "Look closely at how each P interacts with the others. If Product is positioned as premium handcrafted coffee, how does that constrain your choices for Price, Place, and Promotion?",
+      concept: "4Ps Strategic Synthesis",
+      capsule: "Check Coherence of the 4Ps"
+    };
+
+    return [
+      {
+        id: `chat_${sid || 'init'}_1`,
+        title: thread.concept.slice(0, 24) + '…',
+        startedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+        turns: [
+          {
+            role: 'student',
+            text: thread.student,
+          },
+          {
+            role: 'tutor',
+            text: thread.tutor,
+            thoughts: {
+              pedagogical_goal: `Challenge student assumptions regarding ${thread.concept}`,
+              identified_misconception: thread.concept,
+            },
+            hint_rung: 1,
+            is_adversarial: false,
+            action_capsules: [],
+            prompt_launchers: [
+              {
+                title: thread.capsule,
+                prompt: `Can you help me test my assumptions about ${thread.concept.toLowerCase()}?`,
+              }
+            ],
+          }
+        ],
+      }
+    ];
+  }
+
+  function getChatStorageKey(aid, sid) {
+    return `fiosra_chat_${aid || 'daras'}_${sid || 'default'}`;
+  }
+
+  function saveCurrentChatSessions() {
+    if (studentId && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(getChatStorageKey(assignmentId, studentId), JSON.stringify(chatSessions));
+      } catch (e) {
+        console.warn('Failed to save chat sessions to localStorage:', e);
+      }
     }
-  ]);
-  let activeChatSessionId = $state('chat_init');
+  }
+
+  function loadChatSessionsForStudent(aid, sid) {
+    if (typeof localStorage === 'undefined') return;
+    const key = getChatStorageKey(aid, sid);
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Filter out transient connection error messages and empty action capsules
+          const sanitized = parsed.map((cs) => ({
+            ...cs,
+            turns: (cs.turns || [])
+              .filter(
+                (t) => !(t.role === 'tutor' && typeof t.text === 'string' && t.text.includes('Socratic Tutor is currently unavailable'))
+              )
+              .map((t) => ({
+                ...t,
+                action_capsules: (t.action_capsules || []).filter(
+                  (c) => Boolean((c.suggested_student_text || c.text_payload)?.trim())
+                ),
+              })),
+          })).filter((cs) => cs.turns.length > 0);
+
+          if (sanitized.length > 0) {
+            chatSessions = sanitized;
+            activeChatSessionId = chatSessions[0]?.id || `chat_${sid}_1`;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse stored chat sessions:', e);
+      }
+    }
+    chatSessions = buildDefaultChatForStudent(sid);
+    activeChatSessionId = chatSessions[0]?.id || `chat_${sid}_1`;
+    saveCurrentChatSessions();
+  }
+
+  // Socratic Consultation Chat Threads
+  let chatSessions = $state(buildDefaultChatForStudent(typeof window !== 'undefined' ? getStudentId() : 'julian_hayes'));
+  let activeChatSessionId = $state(chatSessions[0]?.id || 'chat_init');
 
   let currentChatSession = $derived(
     chatSessions.find((cs) => cs.id === activeChatSessionId) || chatSessions[0]
@@ -112,11 +262,13 @@
     };
     chatSessions = [newSession, ...chatSessions];
     activeChatSessionId = newSession.id;
+    saveCurrentChatSessions();
   }
 
   function handleSwitchChatSession(id) {
     if (chatSessions.some((cs) => cs.id === id)) {
       activeChatSessionId = id;
+      saveCurrentChatSessions();
     }
   }
 
@@ -369,7 +521,24 @@
   }
 
   async function loadDocument() {
-    const response = await fetch(`/learning-documents/sessions/${sessionId}`, { headers: sessionHeaders() });
+    let response = await fetch(`/learning-documents/sessions/${sessionId}`, { headers: sessionHeaders() });
+    if ((response.status === 401 || response.status === 403) && studentId && sessionId) {
+      try {
+        const recRes = await fetch(`/events/session/${sessionId}/reconnect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: studentId }),
+        });
+        if (recRes.ok) {
+          const recData = await recRes.json();
+          sessionAccessToken = recData.access_token;
+          localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
+          response = await fetch(`/learning-documents/sessions/${sessionId}`, { headers: sessionHeaders() });
+        }
+      } catch (err) {
+        console.warn('Reconnect error in loadDocument:', err);
+      }
+    }
     if (!response.ok) throw new Error(await responseError(response, 'Your long-form document could not be restored.'));
     learningDocument = await response.json();
     sessionStatus = learningDocument.status;
@@ -479,6 +648,16 @@
     if (!assignment) return;
 
     studentId = getStudentId();
+    loadChatSessionsForStudent(assignmentId, studentId);
+    sessionId = '';
+    sessionAccessToken = '';
+    sessionStatus = '';
+    submittedRevision = null;
+    submittedAt = '';
+    learningDocument = null;
+    probes = [];
+    sessionEvents = [];
+
     const key = sessionStorageKey(assignmentId, studentId);
     const persistedSessionId = localStorage.getItem(key);
     const persistedAccessToken = persistedSessionId
@@ -491,7 +670,7 @@
       });
       if (existing.ok) {
         const session = (await existing.json()).session;
-        if (['active', 'submitted'].includes(session.status) && session.assignment_id === assignmentId) {
+        if (['active', 'submitted', 'completed'].includes(session.status) && session.assignment_id === assignmentId) {
           sessionId = persistedSessionId;
           sessionAccessToken = persistedAccessToken;
           sessionStatus = session.status;
@@ -502,6 +681,36 @@
         }
       } else {
         localStorage.removeItem(key);
+      }
+    }
+
+    if (!sessionId) {
+      try {
+        const listRes = await fetch(`/events/sessions?student_id=${encodeURIComponent(studentId)}&assignment_id=${encodeURIComponent(assignmentId)}`);
+        if (listRes.ok) {
+          const sData = await listRes.json();
+          const existingList = sData.sessions || [];
+          if (existingList.length > 0) {
+            const targetSess = existingList[existingList.length - 1];
+            const recRes = await fetch(`/events/session/${targetSess.session_id}/reconnect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ student_id: studentId }),
+            });
+            if (recRes.ok) {
+              const recData = await recRes.json();
+              sessionId = recData.session_id;
+              sessionAccessToken = recData.access_token;
+              sessionStatus = recData.status;
+              submittedRevision = targetSess.submitted_document_revision ?? null;
+              submittedAt = targetSess.submitted_at || '';
+              localStorage.setItem(key, sessionId);
+              localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not reconnect to existing student session:', e);
       }
     }
 
@@ -853,10 +1062,11 @@
         const snippet = studentInput.slice(0, 30).trim();
         if (snippet) chatSessions[sessionIdx].title = snippet.length >= 28 ? `${snippet}…` : snippet;
       }
+      saveCurrentChatSessions();
     }
     try {
       const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
-      const qId = assignment?.question_id || 'q1';
+      const qId = learningDocument?.question_id || assignment?.question_id || 'q1';
       const res = await fetch('/dialogue/message', {
         method: 'POST',
         headers: sessionHeaders(),
@@ -905,6 +1115,7 @@
         ];
       }
     } finally {
+      saveCurrentChatSessions();
       isMacroBusy = false;
     }
   }
@@ -1180,10 +1391,29 @@
     toggleZenFullscreen();
   }
 
+  async function handleStudentChanged(e) {
+    const newStudentId = e?.detail?.studentId || getStudentId();
+    if (newStudentId !== studentId) {
+      saveCurrentChatSessions();
+      studentId = newStudentId;
+      loadChatSessionsForStudent(assignmentId, newStudentId);
+      isLoading = true;
+      try {
+        await loadAssignment();
+      } catch (err) {
+        error = err.message || 'Could not load student workspace';
+      } finally {
+        isLoading = false;
+      }
+    }
+  }
+
   onMount(async () => {
     document.addEventListener('fullscreenchange', handleNativeFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleNativeFullscreenChange);
     window.addEventListener('fiosra:toggle-zen', handleToggleZenEvent);
+    window.addEventListener('fiosra:student-changed', handleStudentChanged);
+    window.addEventListener('hashchange', handleStudentChanged);
     try {
       await loadAssignment();
     } catch (err) {
@@ -1194,7 +1424,10 @@
   });
 
   onDestroy(() => {
+    saveCurrentChatSessions();
     window.removeEventListener('fiosra:toggle-zen', handleToggleZenEvent);
+    window.removeEventListener('fiosra:student-changed', handleStudentChanged);
+    window.removeEventListener('hashchange', handleStudentChanged);
     if (typeof document !== 'undefined') {
       document.removeEventListener('fullscreenchange', handleNativeFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleNativeFullscreenChange);

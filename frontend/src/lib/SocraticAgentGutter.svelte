@@ -153,10 +153,12 @@
     {#if turns.length === 0}
       <div class="agent-scholastic-empty">
         <div class="empty-scholastic-header">
-          <div class="empty-avatar">🏛️</div>
-          <h4 class="empty-title">Socratic Seminar Consultation</h4>
+          <div class="empty-avatar">
+            <img src="/fiosra-symbol.png" alt="Fiosra" class="companion-symbol-img" />
+          </div>
+          <h4 class="empty-title">Thinking Companion</h4>
           <p class="empty-desc">
-            Test competing hypotheses, unpack implicit premises, and formulate grounded causal warrants with your Socratic tutor.
+            Grounded in your writing. Explore uncertainty, test competing assumptions, and formulate defensible positions with your dialectic tutor.
           </p>
         </div>
       </div>
@@ -173,11 +175,14 @@
             <div class="msg-bubble tutor-msg" class:deflected={turn.is_adversarial}>
               <div class="tutor-header-row">
                 <div class="tutor-badge">
-                  <span class="tutor-avatar">🏛️</span>
-                  <span class="author-name">Socratic Tutor</span>
+                  <div class="tutor-avatar">
+                    <img src="/fiosra-symbol.png" alt="" class="companion-badge-img" />
+                  </div>
+                  <span class="author-name">Thinking Companion</span>
+                  <span class="companion-grounded-tag">Grounded</span>
                 </div>
                 {#if turn.hint_rung > 0}
-                  <span class="hint-tag">💡 Rung {turn.hint_rung}</span>
+                  <span class="hint-tag">💡 Level {turn.hint_rung} Inquiry</span>
                 {/if}
               </div>
 
@@ -185,24 +190,27 @@
 
               <!-- Action Capsules: Quiet, student-owned transfer affordances -->
               {#if turn.action_capsules && turn.action_capsules.length > 0}
-                <div class="action-capsules-wrap">
-                  {#each turn.action_capsules as capsule}
-                    <div class="action-capsule-slip">
-                      <div class="capsule-lead">
-                        <span class="capsule-icon">✍️</span>
-                        <span class="capsule-quote">“{capsule.suggested_student_text || capsule.text_payload || ''}”</span>
+                {@const validCapsules = turn.action_capsules.filter((c) => Boolean((c.suggested_student_text || c.text_payload)?.trim()))}
+                {#if validCapsules.length > 0}
+                  <div class="action-capsules-wrap">
+                    {#each validCapsules as capsule}
+                      <div class="action-capsule-slip">
+                        <div class="capsule-lead">
+                          <span class="capsule-icon">✍️</span>
+                          <span class="capsule-quote">“{capsule.suggested_student_text || capsule.text_payload}”</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn-capsule-transfer"
+                          onclick={() => onCommitCapsule(capsule)}
+                          title="Transfer your formulated insight directly into the Canvas draft"
+                        >
+                          {capsule.label || 'Transfer to Paragraph ↗'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        class="btn-capsule-transfer"
-                        onclick={() => onCommitCapsule(capsule)}
-                        title="Transfer your formulated insight directly into the Canvas draft"
-                      >
-                        {capsule.label || 'Transfer to Paragraph ↗'}
-                      </button>
-                    </div>
-                  {/each}
-                </div>
+                    {/each}
+                  </div>
+                {/if}
               {/if}
 
               <!-- Suggested Inquiries: Sleek interactive prompt chips -->
@@ -739,6 +747,35 @@
     flex-shrink: 0;
   }
 
+  .companion-symbol-img {
+    height: 26px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .companion-badge-img {
+    height: 14px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .companion-grounded-tag {
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--m-color-horizon-blue, #4F6BFF);
+    background: var(--m-color-horizon-blue-soft, #EBF0FF);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 2px;
+  }
+
+  :global([data-theme="dark"]) .companion-grounded-tag {
+    background: rgba(79, 107, 255, 0.2);
+    color: #93a8ff;
+  }
+
   .author-name {
     font-size: 0.78rem;
     font-weight: 700;
@@ -785,8 +822,9 @@
   }
 
   .action-capsule-slip {
-    background: rgba(217, 119, 6, 0.05);
-    border: 1px solid rgba(217, 119, 6, 0.24);
+    background: var(--color-graphite-card, #f8fafc);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-left: 3px solid var(--color-teal, #0d9488);
     border-radius: 8px;
     padding: 8px 10px;
     display: flex;
@@ -795,8 +833,9 @@
   }
 
   :global([data-theme="dark"]) .action-capsule-slip {
-    background: rgba(217, 119, 6, 0.09);
-    border-color: rgba(217, 119, 6, 0.3);
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(148, 163, 184, 0.15);
+    border-left-color: var(--color-teal, #2dd4bf);
   }
 
   .capsule-lead {
@@ -823,7 +862,7 @@
 
   .btn-capsule-transfer {
     align-self: flex-end;
-    background: #d97706;
+    background: var(--color-teal, #0d9488);
     border: none;
     border-radius: 5px;
     padding: 3px 9px;
@@ -835,7 +874,7 @@
   }
 
   .btn-capsule-transfer:hover {
-    background: #b45309;
+    background: #0f766e;
   }
 
   /* Discussion Starters / Suggested Inquiries */

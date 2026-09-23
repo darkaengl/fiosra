@@ -77,6 +77,20 @@
 
   let documentHeadings = $state([]);
   let isEpistemicLens = $state(true); // Default ON for subtle continuous truth guidance
+  let canvasWidthMode = $state(
+    (typeof localStorage !== 'undefined' && localStorage.getItem('fiosra_canvas_width_mode')) || 'wide'
+  );
+
+  function setCanvasWidthMode(mode) {
+    canvasWidthMode = mode;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('fiosra_canvas_width_mode', mode);
+      } catch {
+        // Ignore localStorage quota/security errors
+      }
+    }
+  }
   // Learner-controlled assistant drawer state.
   let activeSentence = $state(null);
   let chatMessages = $state([]);
@@ -1790,7 +1804,7 @@
   <!-- Main Canvas Pane (Pushes to left when chat drawer is open) -->
   <main class="editor-main-pane">
     <section 
-      class="minimal-notion-shell canvas-max" 
+      class="minimal-notion-shell width-{canvasWidthMode}" 
       aria-label="Paginated A4 Socratic Canvas"
     >
       <!-- Minimalist Top Navigation & Status -->
@@ -1907,6 +1921,20 @@
         </div>
 
         <div class="toolbar-right">
+          <!-- Canvas Width Dropdown (Narrow / Wide / Max) -->
+          <div class="canvas-width-picker">
+            <select
+              class="canvas-width-select"
+              value={canvasWidthMode}
+              onchange={(e) => setCanvasWidthMode(e.currentTarget.value)}
+              title="Canvas Width Mode"
+              aria-label="Canvas Width Mode"
+            >
+              <option value="narrow">Narrow</option>
+              <option value="wide">Wide</option>
+              <option value="max">Max</option>
+            </select>
+          </div>
 
           <!-- Zen 3-Box Focus Mode Toggle (Icon only) -->
           <button
@@ -2301,12 +2329,73 @@
     margin: 0 auto 0;
     padding-bottom: 0;
     width: 100%;
-    max-width: 100%;
+    max-width: 860px;
     --canvas-font-size: 17.5px;
     --canvas-padding: clamp(40px, 4.5vw, 60px) clamp(36px, 4vw, 56px) clamp(20px, 2.5vw, 30px);
     display: flex;
     flex-direction: column;
     gap: 0;
+    flex-shrink: 0;
+    min-height: min-content;
+    height: auto;
+    transition: max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .minimal-notion-shell.width-narrow {
+    max-width: 680px;
+  }
+
+  .minimal-notion-shell.width-wide {
+    max-width: 860px;
+  }
+
+  .minimal-notion-shell.width-max {
+    max-width: 1140px;
+  }
+
+  .canvas-width-picker {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .canvas-width-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--color-graphite, #ffffff);
+    border: 1px solid var(--color-graphite-border, #e2e4dc);
+    border-radius: var(--radius-xs, 4px);
+    color: var(--color-heading, #334155);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    height: 24px;
+    line-height: 22px;
+    padding: 0 18px 0 7px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 5px center;
+    background-size: 8px 8px;
+    transition: all 0.15s ease;
+  }
+
+  .canvas-width-select:hover {
+    border-color: var(--color-aurora, #0284c7);
+    color: var(--color-heading, #0f172a);
+  }
+
+  .canvas-width-select:focus {
+    outline: none;
+    border-color: var(--color-aurora, #0284c7);
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+  }
+
+  :global([data-theme="dark"]) .canvas-width-select {
+    background-color: var(--color-graphite-card, #1e293b);
+    border-color: var(--color-graphite-border, #334155);
+    color: var(--color-slate-bright, #e2e8f0);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   }
 
   .btn-zen-canvas-toggle {
@@ -2657,7 +2746,7 @@
     color: #78350f;
   }
 
-  /* Pristine Document Page (Strict A4 Aspect Ratio 210 / 297 with Zero Bottom Margin) */
+  /* Pristine Document Page (Responsive Paper Sheet with Auto Height and Minimum Vertical Stature) */
   .document-page {
     position: relative;
     background: var(--color-bone-surface, #ffffff);
@@ -2666,13 +2755,15 @@
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     width: 100%;
     max-width: 100%;
-    aspect-ratio: 210 / 297;
-    padding: var(--canvas-padding, clamp(48px, 6vw, 72px) clamp(36px, 5vw, 64px) clamp(20px, 3vw, 32px));
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    min-height: clamp(650px, 85vh, 960px);
+    height: auto;
+    flex-shrink: 0;
+    padding: var(--canvas-padding, clamp(48px, 6vw, 72px) clamp(36px, 5vw, 64px) clamp(24px, 3.5vw, 40px));
+    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    margin-bottom: 0 !important;
+    margin-bottom: 40px;
   }
 
   .document-page-header {
@@ -2701,12 +2792,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: auto;
+    margin-top: 32px;
     padding-top: 14px;
     border-top: 1px solid var(--color-graphite-border, #e2e4dc);
     font-size: 11px;
     color: var(--color-slate-muted, #94a3b8);
     user-select: none;
+    flex-shrink: 0;
   }
 
   .page-footer-stats {
@@ -2799,10 +2891,10 @@
   }
 
   .notion-editor-container {
-    flex: 1;
+    flex: 1 0 auto;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    height: auto;
   }
 
   .notion-editor-container :global(.notion-minimal-prosemirror) {
@@ -2810,8 +2902,8 @@
     font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     font-size: var(--canvas-font-size, 16.5px);
     line-height: 1.8;
-    flex: 1;
-    min-height: 100%;
+    flex: 1 0 auto;
+    height: auto;
     outline: none;
     transition: font-size 0.2s ease;
   }
@@ -3200,7 +3292,8 @@
     overflow-y: auto;
     display: flex;
     justify-content: center;
-    padding: 16px 20px 0;
+    align-items: flex-start;
+    padding: 16px 20px 48px;
     transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   }
 

@@ -88,7 +88,8 @@ async def create_session(request: CreateSessionRequest) -> dict[str, str]:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Student sessions can be started only for a published assignment.",
             )
-        if request.current_question_id != assignment.question_id:
+        valid_initial_qids = {assignment.question_id, "q1", str(request.assignment_id)}
+        if request.current_question_id not in valid_initial_qids:
             raise HTTPException(
                 status_code=409,
                 detail="The requested question does not match the published assignment.",
@@ -115,12 +116,20 @@ async def log_session_event(
 ) -> dict[str, Any]:
     """Append an allow-listed learner reflection only to its authorized active session."""
     session_info = await get_authorized_session(request.session_id, session_token)
-    if session_info["status"] != "active":
-        raise HTTPException(status_code=409, detail="Submitted or completed sessions cannot accept new events.")
+    if session_info["status"] == "submitted":
+        raise HTTPException(status_code=409, detail="Submitted sessions cannot accept new events.")
     if request.student_id != session_info["student_id"]:
         raise HTTPException(status_code=403, detail="Student identity does not match the authorized session.")
-    if request.question_id != session_info["current_question_id"]:
-        raise HTTPException(status_code=409, detail="Question context does not match the active session.")
+    valid_qids = {str(session_info.get("current_question_id") or "q1").lower(), "q1"}
+    if session_info.get("assignment_id"):
+        valid_qids.add(str(session_info["assignment_id"]).lower())
+    if request.question_id and request.question_id.lower() not in valid_qids:
+        if session_info.get("assignment_id"):
+            asg = await assignment_generator.get_public_assignment(session_info["assignment_id"])
+            if asg and getattr(asg, "question_id", None):
+                valid_qids.add(str(asg.question_id).lower())
+        if request.question_id.lower() not in valid_qids:
+            raise HTTPException(status_code=409, detail="Question context does not match the active session.")
     if request.assignment_id and str(request.assignment_id) != str(session_info.get("assignment_id")):
         raise HTTPException(status_code=409, detail="Assignment context does not match the active session.")
     event_id = await event_store.log_event(

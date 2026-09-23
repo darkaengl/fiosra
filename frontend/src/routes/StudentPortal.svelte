@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { getStudentId } from '../lib/session.js';
+  import InstitutionalFooter from '../lib/InstitutionalFooter.svelte';
 
   let enrolledCourses = $state([]);
   let availableCourses = $state([]);
@@ -123,19 +124,11 @@
 
     <!-- Top Greeting Header -->
     <header class="greeting-banner">
-      <div class="greeting-left">
-        <h1 class="greeting-name">Welcome back, Julian</h1>
-        <p class="greeting-sub">
-          {#if isLoading}
-            Loading your Fall 2026 courses &amp; milestones...
-          {:else}
-            You are enrolled in {enrolledCourses.length} course{enrolledCourses.length === 1 ? '' : 's'} for Fall 2026.
-            {#if enrolledCourses.length > 0 && getFirstAssignment(enrolledCourses[0])}
-              Next milestone due: <strong>{getFirstAssignment(enrolledCourses[0]).title}</strong>.
-            {:else}
-              Browse available courses in the academic catalog below.
-            {/if}
-          {/if}
+      <div class="welcome-block">
+        <span class="welcome-eyebrow">YOUR LEARNING SPACE</span>
+        <h1 class="portal-heading">Student Courses &amp; Milestone Roadmap</h1>
+        <p class="portal-subheading">
+          A calmer place to develop judgement. Work from authentic assignment context, explore uncertainty in your own words, and return to writing without losing the thread of your thinking.
         </p>
       </div>
 
@@ -404,6 +397,7 @@
     </section>
 
   </main>
+  <InstitutionalFooter variant="application" />
 </div>
 
 <style>

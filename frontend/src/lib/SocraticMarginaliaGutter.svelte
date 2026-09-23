@@ -176,7 +176,7 @@
             {/if}
 
             {#if probe.scaffolding_rung !== undefined && probe.scaffolding_rung > 0}
-              <span class="scholastic-rung-tag">Rung {probe.scaffolding_rung}</span>
+              <span class="scholastic-rung-tag">Level {probe.scaffolding_rung} Inquiry</span>
             {/if}
 
             {#if isTargeted}

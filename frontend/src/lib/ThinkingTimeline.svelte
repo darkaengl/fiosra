@@ -32,6 +32,7 @@
     if (kind === 'pivot' || kind === 'draft_revised') return 'Assumption testing';
     if (kind === 'evidence') return 'Evidence grounding';
     if (kind === 'synthesis') return 'Synthesis';
+    if (kind === 'completed' || kind.includes('complete')) return 'Completion';
     if (kind === 'submitted' || kind.includes('submit')) return 'Submission';
     if (kind === 'assignment_opened') return 'Framing';
     if (kind.includes('source')) return 'Exploration';
@@ -49,6 +50,7 @@
     if (kind === 'pivot' || kind === 'draft_revised') return 'ASSUMPTION TESTING';
     if (kind === 'evidence') return 'EVIDENCE GROUNDING';
     if (kind === 'synthesis') return 'SYNTHESIS';
+    if (kind === 'completed' || kind.includes('complete')) return 'COMPLETED DRAFT';
     if (kind === 'submitted' || kind.includes('submit')) return 'FINAL SUBMISSION';
     if (kind === 'assignment_opened') return 'INITIALIZATION';
     if (kind.includes('source')) return 'SOURCE INQUIRY';
@@ -90,7 +92,7 @@
             <div
               class="spine-node-dot"
               class:is-pivot={isPivot}
-              class:is-submitted={node.kind === 'submitted'}
+              class:is-submitted={node.kind === 'submitted' || node.kind === 'completed'}
             >
               <div class="dot-inner-core"></div>
             </div>

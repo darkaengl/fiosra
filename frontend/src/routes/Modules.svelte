@@ -34,6 +34,10 @@
       const qIndex = hash.indexOf('?');
       const urlParams = qIndex >= 0 ? new URLSearchParams(hash.slice(qIndex + 1)) : new URLSearchParams(window.location.search);
       let courseId = urlParams.get('course_id');
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'roster' || tabParam === 'students') {
+        activeTab = 'roster';
+      }
 
       if (!courseId) {
         const listRes = await fetch('/courses');
@@ -159,6 +163,7 @@
       courseId={currentCourseId}
       enrolledCount={rosterData.total_enrolled || rosterData.students?.length || 0}
       onAddModule={() => (isAddModuleOpen = true)}
+      onViewRoster={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
     />
 
     <div class="view-switcher">

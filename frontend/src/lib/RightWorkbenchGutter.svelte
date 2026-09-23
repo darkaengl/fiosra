@@ -153,7 +153,7 @@
           <span class="tab-icon">🤖</span>
           <span class="tab-label">Agent</span>
           {#if currentRung > 0}
-            <span class="tab-pill-rung">Rung {currentRung}</span>
+            <span class="tab-pill-rung">Level {currentRung}</span>
           {/if}
         </button>
 

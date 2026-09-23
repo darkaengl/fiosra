@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { push } from 'svelte-spa-router';
   import Modal from '../lib/Modal.svelte';
+  import InstitutionalFooter from '../lib/InstitutionalFooter.svelte';
 
   let courses = $state([]);
   let isLoading = $state(true);
@@ -132,7 +133,7 @@
         <span class="term-pill">Fall 2026 Semester</span>
       </h1>
       <p class="page-subtitle">
-        Manage sovereign course workspaces, bind foundational syllabi into Neo4j knowledge graphs, and sequence verified reasoning units.
+        See the development behind the final work. Manage sovereign course workspaces, bind foundational syllabi into Neo4j knowledge graphs, and sequence verified reasoning units.
       </p>
     </div>
     <div class="header-actions">
@@ -354,6 +355,8 @@
     {/if}
   </div>
 </main>
+
+<InstitutionalFooter variant="application" />
 
 <!-- Create Course Modal -->
 <Modal isOpen={showCreateCourse} title="🏛️ Create New Course Workspace" onClose={() => (showCreateCourse = false)}>

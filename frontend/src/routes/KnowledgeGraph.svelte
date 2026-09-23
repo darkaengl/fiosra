@@ -110,6 +110,14 @@
     return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('module_id') || '';
   }
 
+  function formatProbeTier(rung) {
+    const r = Number(rung);
+    if (r === 0) return 'Orienting Inquiry';
+    if (r === 1) return 'Critical Challenge';
+    if (r === 2) return 'Strategic Framework';
+    return `Inquiry Level ${r + 1}`;
+  }
+
   async function loadCourseGraph(courseId = selectedCourseId) {
     if (!courseId) return;
     loading = true;
@@ -451,7 +459,7 @@
                   {#each linkedProbes as probe}
                     <div class="probe-card">
                       <div class="probe-header">
-                        <span class="rung-badge">Rung {probe.rung}</span>
+                        <span class="rung-badge">{formatProbeTier(probe.rung)}</span>
                         {#if probe.rationale}
                           <span class="probe-rationale">{probe.rationale}</span>
                         {/if}
@@ -467,7 +475,7 @@
 
           {:else if selectedConcept.concept_type === 'socratic_probe'}
             <!-- Socratic Diagnostic Probe View -->
-            <h2 class="drawer-title">Rung {selectedConcept.rung ?? 0} Probe</h2>
+            <h2 class="drawer-title">{formatProbeTier(selectedConcept.rung ?? 0)} Probe</h2>
             <span class="level-pill probe-pill">Diagnostic Inquiry</span>
 
             <div class="probe-box">

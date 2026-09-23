@@ -69,8 +69,9 @@
 
   let filteredQueue = $derived.by(() => {
     let q = queue;
-    if (filterStatus === 'submitted') q = q.filter((item) => item.status === 'submitted');
-    else if (filterStatus === 'active') q = q.filter((item) => item.status !== 'submitted');
+    if (filterStatus === 'completed') q = q.filter((item) => item.status === 'completed');
+    else if (filterStatus === 'submitted') q = q.filter((item) => item.status === 'submitted');
+    else if (filterStatus === 'active') q = q.filter((item) => item.status !== 'submitted' && item.status !== 'completed');
     if (searchQuery.trim()) {
       const term = searchQuery.trim().toLowerCase();
       q = q.filter((item) => item.student_id.toLowerCase().includes(term));
@@ -78,8 +79,9 @@
     return q;
   });
 
+  let completedCount = $derived(queue.filter((item) => item.status === 'completed').length);
   let submittedCount = $derived(queue.filter((item) => item.status === 'submitted').length);
-  let activeCount = $derived(queue.filter((item) => item.status !== 'submitted').length);
+  let activeCount = $derived(queue.filter((item) => item.status !== 'submitted' && item.status !== 'completed').length);
 
   async function loadQueue() {
     error = '';
@@ -232,15 +234,25 @@
               <button
                 type="button"
                 class="filter-pill"
-                class:active={filterStatus === 'submitted'}
-                onclick={() => filterStatus = 'submitted'}
-              >Submitted ({submittedCount})</button>
-              <button
-                type="button"
-                class="filter-pill"
-                class:active={filterStatus === 'active'}
-                onclick={() => filterStatus = 'active'}
-              >In Progress ({activeCount})</button>
+                class:active={filterStatus === 'completed'}
+                onclick={() => filterStatus = 'completed'}
+              >Completed ({completedCount})</button>
+              {#if submittedCount > 0}
+                <button
+                  type="button"
+                  class="filter-pill"
+                  class:active={filterStatus === 'submitted'}
+                  onclick={() => filterStatus = 'submitted'}
+                >Submitted ({submittedCount})</button>
+              {/if}
+              {#if activeCount > 0}
+                <button
+                  type="button"
+                  class="filter-pill"
+                  class:active={filterStatus === 'active'}
+                  onclick={() => filterStatus = 'active'}
+                >In Progress ({activeCount})</button>
+              {/if}
             </div>
           </div>
 

@@ -479,7 +479,11 @@ class CourseService:
             WHERE m.course_id = :course_id
             GROUP BY s.student_id
             ORDER BY 
-                CASE WHEN (array_agg(s.status ORDER BY s.last_activity_at DESC NULLS LAST))[1] = 'submitted' THEN 0 ELSE 1 END,
+                CASE 
+                    WHEN (array_agg(s.status ORDER BY s.last_activity_at DESC NULLS LAST))[1] = 'completed' THEN 0
+                    WHEN (array_agg(s.status ORDER BY s.last_activity_at DESC NULLS LAST))[1] = 'submitted' THEN 1 
+                    ELSE 2 
+                END,
                 COUNT(DISTINCT s.session_id) DESC,
                 s.student_id ASC;
         """)
