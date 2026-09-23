@@ -17,7 +17,59 @@
   let searchQuery = $state('');
 
   // Accordion and tabs state
-  let openSections = $state({ reasoning: true, work: false, rubric: false });
+  let openSections = $state({ reasoning: true, traps: true, work: false, rubric: false });
+
+  // ---- Misconception review ---------------------------------------------
+  // Keyed by session so switching students does not show another student's
+  // findings while a scan is still running.
+  let scanBySession = $state({});
+  let scanningSession = $state('');
+  let scanError = $state('');
+  let draftOpenFor = $state('');
+  let draftBody = $state('');
+  let draftSubject = $state('');
+
+  let scan = $derived(selected ? scanBySession[selected.session_id] || null : null);
+  let isScanning = $derived(Boolean(selected) && scanningSession === selected.session_id);
+
+  async function runMisconceptionScan() {
+    if (!selected || isScanning) return;
+    const sessionId = selected.session_id;
+    scanningSession = sessionId;
+    scanError = '';
+    try {
+      const response = await fetch(`/interventions/scan/${sessionId}`);
+      if (!response.ok) throw new Error(await responseError(response, 'The submission could not be analysed.'));
+      scanBySession = { ...scanBySession, [sessionId]: await response.json() };
+    } catch (err) {
+      scanError = err.message || 'The submission could not be analysed.';
+    } finally {
+      scanningSession = '';
+    }
+  }
+
+  function openDraft(finding) {
+    draftOpenFor = finding.misconception_id;
+    draftSubject = finding.suggested_message?.subject || '';
+    draftBody = finding.suggested_message?.body || '';
+  }
+
+  // No mail transport exists in this application, and inventing one silently
+  // would be worse than being explicit: the educator sends from their own
+  // client, so the draft is handed to them rather than dispatched.
+  function openInMailClient() {
+    const url = `mailto:?subject=${encodeURIComponent(draftSubject)}&body=${encodeURIComponent(draftBody)}`;
+    window.open(url, '_blank');
+  }
+
+  async function copyDraft() {
+    try {
+      await navigator.clipboard.writeText(`Subject: ${draftSubject}\n\n${draftBody}`);
+    } catch (err) {
+      // Clipboard can be blocked; the textarea is right there to select from.
+      console.warn('Clipboard unavailable', err);
+    }
+  }
   let activeWorkTab = $state('sections'); // 'sections' | 'pdf'
 
   function toggleSection(key) {
@@ -517,6 +569,88 @@
                         {/each}
                       </div>
                     {/if}
+                  {/if}
+                </div>
+              {/if}
+            </section>
+
+            <!-- Accordion: Misconception Review -->
+            <section class="accordion-section">
+              <div class="accordion-trigger" role="button" tabindex="0" onclick={() => toggleSection('traps')} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleSection('traps'); }}>
+                <span class="accordion-chevron" class:open={openSections.traps}>▶</span>
+                <span class="accordion-icon">🪤</span>
+                <span class="accordion-title">Misconception Review</span>
+                <span class="accordion-count">
+                  {scan ? `${(scan.findings || []).length} found` : 'Not yet analysed'}
+                </span>
+              </div>
+              {#if openSections.traps}
+                <div class="accordion-body">
+                  {#if !scan}
+                    <p class="trap-intro">
+                      Reads the submitted text against the cognitive traps authored for this course and
+                      reports the ones it can evidence in the student's own words.
+                    </p>
+                    <button class="trap-scan-btn" onclick={runMisconceptionScan} disabled={isScanning}>
+                      {isScanning ? 'Reading the submission…' : 'Analyse this submission'}
+                    </button>
+                    {#if isScanning}
+                      <p class="trap-note">This runs the configured language model over the essay and can take up to a minute.</p>
+                    {/if}
+                  {:else if (scan.findings || []).length === 0}
+                    <p class="trap-clear">No trap could be evidenced in this submission.</p>
+                    <p class="trap-note">{scan.note}</p>
+                    <button class="trap-rescan" onclick={runMisconceptionScan} disabled={isScanning}>Analyse again</button>
+                  {:else}
+                    {#each scan.findings as finding}
+                      <article class="trap-card">
+                        <header class="trap-head">
+                          <strong>{finding.name}</strong>
+                          <span class="trap-method" class:weak={finding.detection !== 'llm_verified'}>
+                            {finding.detection === 'llm_verified' ? 'Evidenced' : 'Candidate'}
+                          </span>
+                        </header>
+                        <p class="trap-rule">{finding.flawed_rule}</p>
+                        {#if finding.evidence_quote}
+                          <blockquote class="trap-quote">{finding.evidence_quote}</blockquote>
+                          <p class="trap-why">{finding.why}</p>
+                        {/if}
+                        {#if finding.remediation_hint}
+                          <p class="trap-refer"><span class="trap-refer-label">Refer to</span> {finding.remediation_hint}</p>
+                        {/if}
+                        <div class="trap-actions">
+                          <button class="trap-draft-btn" onclick={() => openDraft(finding)}>Draft a note to the student</button>
+                          {#if finding.concept_id}
+                            <a class="trap-graph-link" href={`/#/knowledge-graph?course_id=${courseId}`} target="_blank" rel="noopener">
+                              See {finding.concept_label || 'the concept'} on the graph ↗
+                            </a>
+                          {/if}
+                        </div>
+
+                        {#if draftOpenFor === finding.misconception_id}
+                          <div class="trap-draft">
+                            <label class="trap-draft-label" for="draft-subject">Subject</label>
+                            <input id="draft-subject" class="trap-draft-subject" bind:value={draftSubject} />
+                            <label class="trap-draft-label" for="draft-body">Message</label>
+                            <textarea id="draft-body" class="trap-draft-body" rows="11" bind:value={draftBody}></textarea>
+                            <p class="trap-note">
+                              This points the student at the reading and asks one question. It does not tell them
+                              what is wrong, which is theirs to work out. Edit freely before sending.
+                            </p>
+                            <div class="trap-draft-actions">
+                              <button class="trap-send" onclick={openInMailClient}>Open in mail client</button>
+                              <button class="trap-copy" onclick={copyDraft}>Copy</button>
+                              <button class="trap-cancel" onclick={() => (draftOpenFor = '')}>Close</button>
+                            </div>
+                          </div>
+                        {/if}
+                      </article>
+                    {/each}
+                    <p class="trap-note">{scan.note}</p>
+                    <button class="trap-rescan" onclick={runMisconceptionScan} disabled={isScanning}>Analyse again</button>
+                  {/if}
+                  {#if scanError}
+                    <p class="trap-error">{scanError}</p>
                   {/if}
                 </div>
               {/if}
@@ -1405,6 +1539,53 @@
     font-size: 11.5px;
     margin: 6px 0 4px;
   }
+
+  .trap-intro { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; opacity: 0.85; }
+  .trap-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; opacity: 0.7; }
+  .trap-error { margin: 10px 0 0; font-size: 13px; color: #B74C4C; }
+  .trap-clear { margin: 0; font-size: 14px; font-weight: 600; }
+  .trap-scan-btn, .trap-rescan, .trap-draft-btn, .trap-send, .trap-copy, .trap-cancel {
+    font: inherit; font-size: 13px; cursor: pointer; border-radius: 7px;
+    padding: 7px 14px; border: 1px solid rgba(148, 163, 184, 0.5);
+    background: transparent; color: inherit;
+  }
+  .trap-scan-btn, .trap-send { background: #0B4A4F; border-color: #0B4A4F; color: #fff; font-weight: 500; }
+  .trap-scan-btn:disabled, .trap-rescan:disabled { opacity: 0.55; cursor: default; }
+  .trap-rescan { margin-top: 12px; }
+
+  .trap-card {
+    border: 1px solid rgba(148, 163, 184, 0.35); border-left: 3px solid #D89A3A;
+    border-radius: 9px; padding: 14px 16px; margin-bottom: 12px;
+  }
+  .trap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .trap-head strong { font-size: 15px; }
+  .trap-method {
+    margin-left: auto; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; background: rgba(216, 154, 58, 0.18); color: #8C6212;
+  }
+  .trap-method.weak { background: rgba(148, 163, 184, 0.2); color: #6D7378; }
+  .trap-rule { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; opacity: 0.85; }
+  .trap-quote {
+    margin: 0 0 6px; padding: 9px 13px; border-left: 3px solid rgba(148, 163, 184, 0.55);
+    background: rgba(148, 163, 184, 0.09); font-size: 14px; line-height: 1.55; font-style: italic;
+  }
+  .trap-why { margin: 0 0 10px; font-size: 12.5px; opacity: 0.75; }
+  .trap-refer { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+  .trap-refer-label {
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    opacity: 0.6; margin-right: 6px;
+  }
+  .trap-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .trap-graph-link { font-size: 12.5px; color: #0B4A4F; text-decoration: none; border-bottom: 1px solid currentColor; }
+
+  .trap-draft { margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(148, 163, 184, 0.45); }
+  .trap-draft-label { display: block; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; margin-bottom: 4px; }
+  .trap-draft-subject, .trap-draft-body {
+    width: 100%; font: inherit; font-size: 13.5px; line-height: 1.55; margin-bottom: 12px;
+    padding: 9px 11px; border-radius: 7px; border: 1px solid rgba(148, 163, 184, 0.5);
+    background: rgba(148, 163, 184, 0.07); color: inherit; resize: vertical;
+  }
+  .trap-draft-actions { display: flex; gap: 8px; }
 
   .criterion-quote {
     color: var(--color-slate-bright);

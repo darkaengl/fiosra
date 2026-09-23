@@ -20,6 +20,7 @@ from fiosra.mvp.evidence_dossier.router import router as evidence_router
 from fiosra.mvp.knowledge_router import router as knowledge_router
 from fiosra.mvp.learning_canvas_router import router as learning_canvas_router
 from fiosra.mvp.learning_document_router import router as learning_document_router
+from fiosra.mvp.misconception_scan import router as intervention_router
 from fiosra.mvp.neo4j_client import neo4j_client
 from fiosra.mvp.socratic_probe_router import router as socratic_probe_router
 
@@ -183,6 +184,7 @@ for router_instance in [
     events_router,
     learning_canvas_router,
     learning_document_router,
+    intervention_router,
     socratic_probe_router,
     dialogue_router,
     evidence_router,
