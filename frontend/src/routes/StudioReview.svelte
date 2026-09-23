@@ -17,13 +17,73 @@
   let filterStatus = $state('all'); // 'all' | 'completed' | 'submitted' | 'active'
   let searchQuery = $state('');
 
-  // UI state for the 3-column canvas workspace
+  // UI state for the 3-panel workspace
   let isRosterCollapsed = $state(false);
   let activeEvalTab = $state('rubric'); // 'rubric' | 'traps' | 'reasoning'
-  let activeWorkTab = $state('sections'); // 'sections' | 'pdf'
   let activeReviewTimelineTab = $state('reasoning'); // 'reasoning' | 'activity'
   let expandedReasoningNode = $state(-1);
   let expandedActivityNode = $state(-1);
+
+  // Draggable sidebar widths (matching StudentWorkspace margin sliders)
+  let rosterWidth = $state(
+    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_eval_roster_width'))) || 260
+  );
+  let workbenchWidth = $state(
+    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_eval_workbench_width'))) || 380
+  );
+  let isResizingLeft = $state(false);
+  let isResizingRight = $state(false);
+
+  function startResizeLeft(e) {
+    e.preventDefault();
+    isResizingLeft = true;
+    const startX = e.clientX;
+    const startWidth = rosterWidth;
+
+    function onPointerMove(moveEvent) {
+      const deltaX = moveEvent.clientX - startX;
+      const maxAllowed = Math.max(200, Math.min(460, window.innerWidth - workbenchWidth - 360));
+      rosterWidth = Math.round(Math.max(180, Math.min(maxAllowed, startWidth + deltaX)));
+    }
+
+    function onPointerUp() {
+      isResizingLeft = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      try {
+        localStorage.setItem('fiosra_eval_roster_width', String(rosterWidth));
+      } catch {}
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
+
+  function startResizeRight(e) {
+    e.preventDefault();
+    isResizingRight = true;
+    const startX = e.clientX;
+    const startWidth = workbenchWidth;
+
+    function onPointerMove(moveEvent) {
+      const deltaX = startX - moveEvent.clientX;
+      const leftColWidth = isRosterCollapsed ? 42 : rosterWidth;
+      const maxAllowed = Math.max(300, Math.min(560, window.innerWidth - leftColWidth - 360));
+      workbenchWidth = Math.round(Math.max(280, Math.min(maxAllowed, startWidth + deltaX)));
+    }
+
+    function onPointerUp() {
+      isResizingRight = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      try {
+        localStorage.setItem('fiosra_eval_workbench_width', String(workbenchWidth));
+      } catch {}
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
 
   // ---- Misconception review ---------------------------------------------
   let scanBySession = $state({});
@@ -102,7 +162,6 @@
   let trace = $state([]);
   let reasoningNodes = $state([]);
   let activityNodes = $state([]);
-  let canvasData = $state(null);
   let grade = $state('');
   let feedback = $state('');
   let teacherId = $state('educator_workspace');
@@ -145,32 +204,6 @@
     }
   }
 
-  // Student deliverables
-  let displaySections = $derived.by(() => {
-    if (canvasData?.sections?.length) {
-      return canvasData.sections.map((s) => {
-        const draft = canvasData.drafts?.find((d) => d.section_id === s.section_id);
-        return {
-          section_id: s.section_id,
-          title: s.title || s.section_id.replaceAll('_', ' '),
-          prompt: s.prompt,
-          text: draft?.text || '',
-          revision: draft?.revision || 1,
-          source_references: draft?.source_references || [],
-        };
-      });
-    }
-    return dossier?.canvas_sections || [];
-  });
-
-  let totalDeliverableWords = $derived.by(() => {
-    if (!displaySections.length) return 0;
-    return displaySections.reduce((acc, sec) => {
-      if (!sec.text) return acc;
-      return acc + sec.text.trim().split(/\s+/).filter(Boolean).length;
-    }, 0);
-  });
-
   let totalRubricCriteria = $derived.by(() => {
     if (!dossier?.per_question_evidence) return 0;
     return dossier.per_question_evidence.reduce((sum, q) => sum + Object.keys(q.rubric_evidence || {}).length, 0);
@@ -212,18 +245,16 @@
     trace = [];
     reasoningNodes = [];
     activityNodes = [];
-    canvasData = null;
     feedback = '';
     grade = item.suggested_grade && item.suggested_grade !== 'Pending' ? item.suggested_grade : '';
     error = '';
     draftOpenFor = '';
 
-    const [dossierResponse, traceResponse, reasoningRes, activityRes, canvasRes] = await Promise.all([
+    const [dossierResponse, traceResponse, reasoningRes, activityRes] = await Promise.all([
       fetch(`/evidence/dossier/${item.session_id}`),
       fetch(`/evidence/trace/${item.session_id}`),
       fetch(`/evidence/trace/${item.session_id}/reasoning`),
       fetch(`/evidence/trace/${item.session_id}/activity`),
-      fetch(`/canvas/sessions/${item.session_id}`),
     ]);
     if (!dossierResponse.ok) {
       error = await responseError(dossierResponse, 'The evidence dossier could not be loaded.');
@@ -233,7 +264,6 @@
     if (traceResponse.ok) trace = (await traceResponse.json()).trace_nodes || [];
     if (reasoningRes.ok) reasoningNodes = (await reasoningRes.json()).nodes || [];
     if (activityRes.ok) activityNodes = (await activityRes.json()).nodes || [];
-    if (canvasRes.ok) canvasData = await canvasRes.json();
   }
 
   async function finalise() {
@@ -278,9 +308,9 @@
   });
 </script>
 
-<div class="canvas-review-root">
+<div class="canvas-review-root" class:is-resizing={isResizingLeft || isResizingRight}>
   {#if !assignmentId}
-    <!-- Compact Standalone Mode Bar -->
+    <!-- Compact Standalone Mode Top Bar -->
     <header class="standalone-top-bar">
       <div class="standalone-title">
         <span class="eyebrow">Educator Workspace</span>
@@ -303,20 +333,20 @@
     </section>
   {:else}
     <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- 3-COLUMN CANVAS WORKSPACE (Left Roster | Center Hero | Right Gutter) -->
+    <!-- 3-PANEL CANVAS WORKSPACE (Draggable Left | Center PDF | Draggable Right) -->
     <!-- ═══════════════════════════════════════════════════════════ -->
-    <div class="canvas-3col-workspace" class:roster-collapsed={isRosterCollapsed}>
+    <div class="canvas-eval-body">
 
       <!-- ── 1. LEFT SIDEBAR: Student Roster ─────────────────────── -->
       {#if !isRosterCollapsed}
-        <aside class="canvas-roster-sidebar">
+        <aside class="canvas-roster-sidebar" style:width={`${rosterWidth}px`}>
           <div class="roster-top-bar">
             <span class="roster-top-title">Roster ({filteredQueue.length})</span>
             <button
               type="button"
               class="btn-collapse-sidebar"
               onclick={() => (isRosterCollapsed = true)}
-              title="Collapse student roster to maximize document reading width"
+              title="Collapse student roster to maximize PDF viewing width"
             >
               ⇤
             </button>
@@ -396,6 +426,16 @@
             ↻ Refresh Roster
           </button>
         </aside>
+
+        <!-- Left Resize Handle -->
+        <div
+          class="resize-handle left-handle"
+          onpointerdown={startResizeLeft}
+          class:active={isResizingLeft}
+          title="Drag to resize student roster"
+        >
+          <div class="resize-handle-bar"></div>
+        </div>
       {:else}
         <!-- Collapsed Roster Rail (42px) -->
         <aside class="canvas-roster-rail" onclick={() => (isRosterCollapsed = false)} title="Click to expand student roster">
@@ -406,19 +446,19 @@
         </aside>
       {/if}
 
-      <!-- ── 2. CENTER STAGE: Student Deliverable Canvas (HERO) ──── -->
-      <main class="canvas-document-hero">
+      <!-- ── 2. CENTER STAGE: Dedicated PDF Viewer (HERO) ────────── -->
+      <main class="canvas-pdf-hero">
         {#if !selected}
           <div class="hero-empty-state">
             <span class="empty-hero-icon">📋</span>
             <h3>No Student Selected</h3>
-            <p>Select a student from the roster on the left to review their submission deliverable.</p>
+            <p>Select a student from the roster on the left to review their official submission PDF.</p>
           </div>
         {:else if !dossier}
           <div class="loading small"><div class="spinner"></div><span>Opening evaluation dossier…</span></div>
         {:else}
-          <!-- Compact Hero Control Bar -->
-          <header class="document-hero-toolbar">
+          <!-- Slim Control Toolbar -->
+          <header class="pdf-hero-toolbar">
             <div class="hero-student-meta">
               <span class="hero-avatar">{selected.student_id.slice(0, 2).toUpperCase()}</span>
               <div class="hero-student-text">
@@ -440,6 +480,7 @@
                   </span>
                 </div>
                 <div class="hero-timestamp-row">
+                  {selected.assignment_title ? `${selected.assignment_title} • ` : ''}
                   {selected.status === 'submitted' ? 'Submitted' : selected.status === 'completed' ? 'Finalized' : 'Active'}: {formatDate(selected.submitted_at)}
                 </div>
               </div>
@@ -470,139 +511,55 @@
               </button>
             </div>
 
-            <!-- View Switcher & PDF Download -->
-            <div class="hero-toolbar-actions">
-              <div class="view-toggle-group">
-                <button
-                  type="button"
-                  class="btn-view-toggle"
-                  class:active={activeWorkTab === 'sections'}
-                  onclick={() => (activeWorkTab = 'sections')}
-                  title="View written canvas sections"
-                >
-                  📝 Canvas
-                </button>
-                <button
-                  type="button"
-                  class="btn-view-toggle"
-                  class:active={activeWorkTab === 'pdf'}
-                  onclick={() => (activeWorkTab = 'pdf')}
-                  title="Render student's submitted assignment as a PDF document"
-                >
-                  📄 PDF
-                </button>
-              </div>
-
+            <!-- PDF Utilities -->
+            <div class="pdf-toolbar-actions">
               <a
-                class="btn-download-pdf-compact"
+                class="btn-pdf-ghost"
+                href={`/evidence/dossier/${selected.session_id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open PDF in new browser tab"
+              >
+                Open in Tab ↗
+              </a>
+              <a
+                class="btn-pdf-download"
                 href={`/evidence/dossier/${selected.session_id}/pdf`}
                 download
                 title="Download official PDF submission"
               >
-                ⬇ PDF
+                ⬇ Download PDF
               </a>
             </div>
           </header>
 
-          <!-- Document Center Stage Scroll Viewport -->
-          <div class="document-center-viewport">
-            {#if activeWorkTab === 'pdf'}
-              <!-- Rendered PDF Viewer Mode -->
-              <div class="pdf-document-container">
-                <div class="pdf-container-toolbar">
-                  <span class="pdf-badge">Official PDF Submission Document</span>
-                  <a
-                    class="btn-open-tab"
-                    href={`/evidence/dossier/${selected.session_id}/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open in Tab ↗
-                  </a>
-                </div>
-                <div class="pdf-embed-box">
-                  {#key selected.session_id}
-                    <PdfViewer
-                      url={`/evidence/dossier/${selected.session_id}/pdf`}
-                      title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
-                    />
-                  {/key}
-                </div>
-              </div>
-            {:else}
-              <!-- Continuous Academic Paper Sheet Mode -->
-              <article class="academic-paper-sheet">
-                <header class="sheet-title-header">
-                  <h1 class="sheet-main-heading">{selected.assignment_title || 'Assignment Submission Deliverables'}</h1>
-                  <div class="sheet-meta-line">
-                    <span>Author: <strong>{selected.student_id}</strong></span>
-                    <span class="sheet-dot">&bull;</span>
-                    <span>{displaySections.length} {displaySections.length === 1 ? 'Section' : 'Sections'}</span>
-                    {#if totalDeliverableWords > 0}
-                      <span class="sheet-dot">&bull;</span>
-                      <span>~{totalDeliverableWords} words</span>
-                    {/if}
-                  </div>
-                </header>
-
-                {#if displaySections.length === 0}
-                  <div class="paper-empty-notice">
-                    No authored text was recorded for this submission.
-                  </div>
-                {:else}
-                  <div class="paper-sections-flow">
-                    {#each displaySections as sec, sIdx (sec.section_id)}
-                      <section class="paper-section-block">
-                        <div class="section-heading-bar">
-                          <div class="section-title-wrap">
-                            <span class="section-idx-badge">{sIdx + 1}</span>
-                            <h2 class="section-title-text">{sec.title || sec.section_id.replaceAll('_', ' ')}</h2>
-                          </div>
-                          {#if sec.revision}
-                            <span class="revision-pill">Rev {sec.revision}</span>
-                          {/if}
-                        </div>
-
-                        {#if sec.prompt}
-                          <blockquote class="paper-prompt-callout">
-                            <span class="prompt-eyebrow">Guiding Prompt</span>
-                            <p>{sec.prompt}</p>
-                          </blockquote>
-                        {/if}
-
-                        {#if sec.text}
-                          <div class="paper-body-text">{sec.text}</div>
-                        {:else}
-                          <div class="paper-body-empty">No text provided for this section.</div>
-                        {/if}
-
-                        {#if sec.source_references?.length}
-                          <div class="paper-sources-footer">
-                            <span class="sources-eyebrow">Cited Grounding Sources:</span>
-                            <div class="sources-tags-row">
-                              {#each sec.source_references as src}
-                                <span class="paper-source-chip">
-                                  📖 {src.document_title || 'Reference'}{src.page_number ? ` (p. ${src.page_number})` : ''}
-                                </span>
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
-                      </section>
-                    {/each}
-                  </div>
-                {/if}
-              </article>
-            {/if}
+          <!-- Full-Height Continuous PDF Document Container -->
+          <div class="pdf-fullheight-viewport">
+            {#key selected.session_id}
+              <PdfViewer
+                url={`/evidence/dossier/${selected.session_id}/pdf`}
+                title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
+              />
+            {/key}
           </div>
         {/if}
       </main>
 
-      <!-- ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ────────── -->
+      <!-- Right Resize Handle -->
       {#if selected && dossier}
-        <aside class="canvas-workbench-gutter">
+        <div
+          class="resize-handle right-handle"
+          onpointerdown={startResizeRight}
+          class:active={isResizingRight}
+          title="Drag to resize evaluator workbench"
+        >
+          <div class="resize-handle-bar"></div>
+        </div>
 
-          <!-- Sticky Pinned Grade Finalization Bar -->
+        <!-- ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ──────── -->
+        <aside class="canvas-workbench-gutter" style:width={`${workbenchWidth}px`}>
+
+          <!-- Pinned Sovereign Grade Finalization Bar -->
           <div class="gutter-finalization-bar">
             {#if selected.status === 'submitted'}
               <div class="gutter-grade-form">
@@ -959,16 +916,21 @@
     box-sizing: border-box;
   }
 
+  .canvas-review-root.is-resizing {
+    user-select: none;
+    cursor: col-resize;
+  }
+
   /* Compact Top Bar for Standalone Mode */
   .standalone-top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 18px;
+    padding: 6px 18px;
     background: #ffffff;
     border-bottom: 1px solid var(--color-graphite-border);
     flex-shrink: 0;
-    height: 42px;
+    height: 40px;
     box-sizing: border-box;
   }
 
@@ -979,7 +941,7 @@
   }
 
   .standalone-title .eyebrow {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
@@ -987,14 +949,14 @@
   }
 
   .standalone-title h2 {
-    font-size: 14px;
+    font-size: 13.5px;
     font-family: var(--font-brand, serif);
     color: var(--color-heading);
     margin: 0;
   }
 
   .standalone-meta {
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--color-slate-muted);
     display: flex;
     align-items: center;
@@ -1003,25 +965,53 @@
 
   .standalone-meta strong {
     color: var(--color-horizon-bright, #d97706);
-    font-size: 13px;
+    font-size: 12.5px;
   }
 
   /* ================================================================
-     3-COLUMN CANVAS WORKSPACE GRID
-     [LEFT ROSTER: 260px] [CENTER HERO: 1fr] [RIGHT WORKBENCH: 380px]
+     3-PANEL FLEX LAYOUT (Left Roster | Center PDF | Right Workbench)
      ================================================================ */
-  .canvas-3col-workspace {
-    display: grid;
-    grid-template-columns: 260px minmax(0, 1fr) 380px;
+  .canvas-eval-body {
+    display: flex;
     flex: 1;
-    height: calc(100% - 42px);
     min-height: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     background: var(--color-bone, #f6f5f1);
   }
 
-  .canvas-3col-workspace.roster-collapsed {
-    grid-template-columns: 42px minmax(0, 1fr) 380px;
+  /* ── Resize Handles (Matching StudentWorkspace) ──────────────── */
+  .resize-handle {
+    width: 6px;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+    transition: background 0.15s ease;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .resize-handle:hover,
+  .resize-handle.active {
+    background: rgba(79, 107, 255, 0.25);
+  }
+
+  .resize-handle-bar {
+    width: 2px;
+    height: 32px;
+    background: var(--color-graphite-border);
+    border-radius: 999px;
+    transition: all 0.15s ease;
+  }
+
+  .resize-handle:hover .resize-handle-bar,
+  .resize-handle.active .resize-handle-bar {
+    background: var(--color-horizon-blue, #4f6bff);
+    height: 48px;
   }
 
   /* ── 1. LEFT SIDEBAR: Student Roster ─────────────────────────── */
@@ -1031,7 +1021,9 @@
     background: #ffffff;
     border-right: 1px solid var(--color-graphite-border);
     height: 100%;
+    min-height: 0;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
   .roster-top-bar {
@@ -1072,6 +1064,8 @@
 
   /* Collapsed Rail */
   .canvas-roster-rail {
+    width: 42px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1293,28 +1287,29 @@
     background: var(--color-graphite-hover, #eee);
   }
 
-  /* ── 2. CENTER STAGE: Student Deliverables Canvas (HERO) ─────── */
-  .canvas-document-hero {
+  /* ── 2. CENTER STAGE: Dedicated PDF Viewer (HERO) ────────────── */
+  .canvas-pdf-hero {
     display: flex;
     flex-direction: column;
-    background: var(--color-bone, #f6f5f1);
-    border-right: 1px solid var(--color-graphite-border);
+    flex: 1;
+    min-width: 0;
     height: 100%;
     min-height: 0;
+    background: var(--color-bone, #f6f5f1);
     overflow: hidden;
   }
 
   /* Compact Hero Toolbar */
-  .document-hero-toolbar {
+  .pdf-hero-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 8px 18px;
+    padding: 6px 18px;
     background: #ffffff;
     border-bottom: 1px solid var(--color-graphite-border);
     flex-shrink: 0;
-    height: 48px;
+    height: 44px;
     box-sizing: border-box;
   }
 
@@ -1326,14 +1321,14 @@
   }
 
   .hero-avatar {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: linear-gradient(135deg, #4f6bff, #3b82f6);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     color: #fff;
     flex-shrink: 0;
@@ -1352,7 +1347,7 @@
   }
 
   .hero-student-name {
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 700;
     font-family: var(--font-brand, serif);
     color: var(--color-heading);
@@ -1362,8 +1357,11 @@
   }
 
   .hero-timestamp-row {
-    font-size: 10px;
+    font-size: 9.5px;
     color: var(--color-slate-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .status-chip {
@@ -1406,7 +1404,7 @@
     font-weight: 600;
     color: var(--color-slate-light);
     cursor: pointer;
-    padding: 3px 6px;
+    padding: 2px 6px;
     border-radius: 4px;
     transition: all 0.12s;
   }
@@ -1429,49 +1427,38 @@
     white-space: nowrap;
   }
 
-  /* Hero Actions */
-  .hero-toolbar-actions {
+  /* PDF Actions */
+  .pdf-toolbar-actions {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
   }
 
-  .view-toggle-group {
-    display: flex;
-    background: var(--color-bone, #f6f5f1);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
-    padding: 2px;
-  }
-
-  .btn-view-toggle {
-    background: transparent;
-    border: none;
-    padding: 3px 8px;
+  .btn-pdf-ghost {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
     font-size: 10.5px;
     font-weight: 600;
+    color: #2563eb;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
     border-radius: 4px;
-    cursor: pointer;
-    color: var(--color-slate-muted);
+    text-decoration: none;
     transition: all 0.12s;
   }
 
-  .btn-view-toggle:hover {
-    color: var(--color-heading);
+  .btn-pdf-ghost:hover {
+    background: #dbeafe;
   }
 
-  .btn-view-toggle.active {
-    background: #4f6bff;
-    color: #ffffff;
-  }
-
-  .btn-download-pdf-compact {
+  .btn-pdf-download {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
-    border-radius: var(--radius-sm, 6px);
+    padding: 4px 9px;
+    border-radius: 4px;
     font-size: 10.5px;
     font-weight: 600;
     color: #1d4ed8;
@@ -1481,246 +1468,21 @@
     transition: all 0.12s;
   }
 
-  .btn-download-pdf-compact:hover {
+  .btn-pdf-download:hover {
     background: #dbeafe;
   }
 
-  /* Document Scroll Viewport */
-  .document-center-viewport {
+  /* Full-Height Continuous PDF Document Viewport (Matches Student Workspace) */
+  .pdf-fullheight-viewport {
     flex: 1;
-    overflow-y: auto;
-    padding: 24px 28px 80px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  /* The Academic Paper Sheet (Center Stage Hero) */
-  .academic-paper-sheet {
-    background: #ffffff;
+    min-height: 0;
     width: 100%;
-    max-width: 820px;
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md, 8px);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
-    padding: 32px 38px 48px;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .sheet-title-header {
-    border-bottom: 2px solid var(--color-bone, #f6f5f1);
-    padding-bottom: 14px;
-  }
-
-  .sheet-main-heading {
-    font-family: var(--font-brand, "Newsreader", serif);
-    font-size: 21px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0 0 6px;
-    line-height: 1.3;
-  }
-
-  .sheet-meta-line {
-    font-size: 11.5px;
-    color: var(--color-slate-muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .sheet-dot {
-    color: var(--color-graphite-border);
-  }
-
-  .paper-sections-flow {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-  }
-
-  .paper-section-block {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--color-bone, #f6f5f1);
-  }
-
-  .paper-section-block:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  .section-heading-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .section-title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .section-idx-badge {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--color-bone, #f6f5f1);
-    border: 1px solid var(--color-graphite-border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-slate-light);
-  }
-
-  .section-title-text {
-    font-family: var(--font-brand, serif);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0;
-    text-transform: capitalize;
-  }
-
-  .revision-pill {
-    font-size: 9.5px;
-    color: var(--color-slate-muted);
-    background: rgba(0, 0, 0, 0.04);
-    padding: 1px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--color-graphite-border);
-  }
-
-  .paper-prompt-callout {
-    background: #fdfbf7;
-    border-left: 3px solid #d97706;
-    padding: 8px 12px;
-    border-radius: 0 4px 4px 0;
-    margin: 0;
-  }
-
-  .prompt-eyebrow {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: #b45309;
-    display: block;
-    margin-bottom: 2px;
-  }
-
-  .paper-prompt-callout p {
-    margin: 0;
-    font-size: 12px;
-    color: var(--color-slate-light);
-    font-style: italic;
-    line-height: 1.45;
-  }
-
-  .paper-body-text {
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: #1e293b;
-    white-space: pre-wrap;
-    background: #fafaf8;
-    border: 1px solid #eeebe2;
-    border-radius: 4px;
-    padding: 14px 16px;
-  }
-
-  .paper-body-empty {
-    font-size: 12px;
-    color: var(--color-slate-muted);
-    font-style: italic;
-    padding: 8px 0;
-  }
-
-  .paper-sources-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-top: 4px;
-  }
-
-  .sources-eyebrow {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    color: var(--color-slate-muted);
-  }
-
-  .sources-tags-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .paper-source-chip {
-    font-size: 10px;
-    color: #0369a1;
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
-    padding: 2px 7px;
-    border-radius: 4px;
-  }
-
-  .paper-empty-notice {
-    text-align: center;
-    color: var(--color-slate-muted);
-    padding: 48px 16px;
-    font-style: italic;
-    font-size: 13px;
-  }
-
-  /* PDF Reader in Center Stage */
-  .pdf-document-container {
-    width: 100%;
-    max-width: 860px;
-    background: #ffffff;
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md, 8px);
-    overflow: hidden;
-  }
-
-  .pdf-container-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 14px;
-    background: #f8fafc;
-    border-bottom: 1px solid var(--color-graphite-border);
-  }
-
-  .pdf-badge {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--color-heading);
-  }
-
-  .btn-open-tab {
-    font-size: 11px;
-    font-weight: 600;
-    color: #2563eb;
-    text-decoration: none;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-  }
-
-  .pdf-embed-box {
-    height: 720px;
-    min-height: 520px;
-    background: #0f172a;
+    height: 100%;
     position: relative;
+    background: var(--color-obsidian, #f8f8f5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Empty Hero */
@@ -1736,8 +1498,8 @@
   }
 
   .empty-hero-icon { font-size: 40px; margin-bottom: 8px; }
-  .hero-empty-state h3 { font-size: 16px; color: var(--color-heading); margin: 0 0 6px; }
-  .hero-empty-state p { max-width: 360px; font-size: 12.5px; margin: 0; line-height: 1.5; }
+  .hero-empty-state h3 { font-size: 15px; color: var(--color-heading); margin: 0 0 6px; }
+  .hero-empty-state p { max-width: 360px; font-size: 12px; margin: 0; line-height: 1.5; }
 
   /* ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ────────────── */
   .canvas-workbench-gutter {
@@ -1747,6 +1509,8 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    flex-shrink: 0;
+    border-left: 1px solid var(--color-graphite-border);
   }
 
   /* Pinned Finalization Bar */
@@ -2436,31 +2200,5 @@
     background: #fef2f2;
     border: 1px solid rgba(220, 38, 38, 0.25);
     color: #991b1b;
-  }
-
-  /* ── Responsive adjustments ─────────────────────────────────── */
-  @media (max-width: 1200px) {
-    .canvas-3col-workspace {
-      grid-template-columns: 240px minmax(0, 1fr) 340px;
-    }
-  }
-
-  @media (max-width: 960px) {
-    .canvas-3col-workspace {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto auto;
-      overflow-y: auto;
-    }
-
-    .canvas-roster-sidebar {
-      height: 200px;
-      border-right: none;
-      border-bottom: 1px solid var(--color-graphite-border);
-    }
-
-    .canvas-document-hero {
-      border-right: none;
-      border-bottom: 1px solid var(--color-graphite-border);
-    }
   }
 </style>
