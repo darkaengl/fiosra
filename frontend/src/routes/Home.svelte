@@ -23,17 +23,22 @@
 
       <nav class="landing-nav" aria-label="Homepage navigation">
         <a href="#how-it-works" class="nav-link">How it works</a>
-        <a href="#for-learning" class="nav-link">For learning</a>
-        <a href="#for-educators" class="nav-link">For educators</a>
+        <a href="#/courses" class="nav-link">Educator View</a>
+        <a href="#/student/home" class="nav-link">Student View</a>
       </nav>
 
-      <a href="#/student/home" class="btn-header-cta">
-        <span class="btn-text-full">Explore the experience</span>
-        <span class="btn-text-short">Explore</span>
-        <svg class="icon-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-        </svg>
-      </a>
+      <div class="header-cta-group">
+        <a href="#/courses" class="btn-header-secondary">
+          Educator Studio
+        </a>
+        <a href="#/student/home" class="btn-header-cta">
+          <span class="btn-text-full">Explore the experience</span>
+          <span class="btn-text-short">Explore</span>
+          <svg class="icon-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+          </svg>
+        </a>
+      </div>
     </div>
   </header>
 
@@ -52,6 +57,12 @@
             Fiosra is a structured learning environment for context-rich work, considered exploration, meaningful development and clearer understanding.
           </p>
           <div class="hero-actions">
+            <a href="#/courses" class="btn-hero-educator">
+              Explore an educator journey
+              <svg class="icon-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+              </svg>
+            </a>
             <a href="#/student/home" class="btn-hero-primary">
               Explore a student journey
               <svg class="icon-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -330,6 +341,31 @@
     color: var(--m-color-obsidian, #111315);
   }
 
+  .header-cta-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn-header-secondary {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--border, #DDDCD5);
+    color: var(--m-color-obsidian, #111315);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn-header-secondary:hover {
+    background: #ffffff;
+    border-color: #C9D7FF;
+  }
+
   .btn-header-cta {
     display: inline-flex;
     align-items: center;
@@ -412,6 +448,31 @@
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+  }
+
+  .btn-hero-educator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1.5px solid var(--m-color-horizon-blue, #4F6BFF);
+    color: var(--m-color-obsidian, #111315);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+    box-shadow: 0 1px 3px rgba(79, 107, 255, 0.12);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+
+  .btn-hero-educator:hover {
+    background: var(--m-color-horizon-blue-soft, #EBF0FF);
+    border-color: #3857E8;
+  }
+
+  .btn-hero-educator:active {
+    transform: scale(0.98);
   }
 
   .btn-hero-primary {
