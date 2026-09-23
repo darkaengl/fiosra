@@ -154,7 +154,7 @@
       <div class="agent-scholastic-empty">
         <div class="empty-scholastic-header">
           <div class="empty-avatar">
-            <img src="/fiosra-symbol.png" alt="Fiosra" class="companion-symbol-img" />
+            <img src="./fiosra-symbol.png" alt="Fiosra" class="companion-symbol-img" />
           </div>
           <h4 class="empty-title">Thinking Companion</h4>
           <p class="empty-desc">
@@ -176,7 +176,7 @@
               <div class="tutor-header-row">
                 <div class="tutor-badge">
                   <div class="tutor-avatar">
-                    <img src="/fiosra-symbol.png" alt="" class="companion-badge-img" />
+                    <img src="./fiosra-symbol.png" alt="" class="companion-badge-img" />
                   </div>
                   <span class="author-name">Thinking Companion</span>
                   <span class="companion-grounded-tag">Grounded</span>

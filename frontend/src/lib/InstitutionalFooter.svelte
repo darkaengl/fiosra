@@ -1,8 +1,8 @@
 <script>
   let { variant = "application" } = $props();
 
-  const FIOSRA_LOCKUP_URL = "/fiosra-lockup.png";
-  const ATU_LOGO_URL = "/atu-logo.png";
+  const FIOSRA_LOCKUP_URL = "./fiosra-lockup.png";
+  const ATU_LOGO_URL = "./atu-logo.png";
 
   let isPublic = $derived(variant === "public");
 </script>

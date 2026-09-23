@@ -171,7 +171,7 @@
       class="brand-logo-link"
       onclick={(e) => { e.preventDefault(); navigateTo(parsed.logoHref); }}
     >
-      <img src="/fiosra-lockup.png" alt="Fiosra · Learning in Motion" class="brand-logo-img" />
+      <img src="./fiosra-lockup.png" alt="Fiosra · Learning in Motion" class="brand-logo-img" />
     </a>
 
     <div class="context-indicator">
