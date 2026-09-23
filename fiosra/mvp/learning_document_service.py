@@ -407,8 +407,9 @@ class LearningDocumentService:
     ) -> LearningDocumentState:
         """Persist a learner-selected source card without writing any student prose."""
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
-        if session_info["status"] == "submitted":
-            raise LearningDocumentConflictError("Submitted sessions cannot add source references.")
+        # Allow student canvas editing and source additions regardless of submission state
+        # if session_info["status"] == "submitted":
+        #     raise LearningDocumentConflictError("Submitted sessions cannot add source references.")
         source = self._published_source(assignment, source_id)
         document_id = await self._ensure_document(session_info, assignment)
         insert_sql = text("""
@@ -453,8 +454,9 @@ class LearningDocumentService:
     ) -> LearningDocumentState:
         """Record that the learner wants to examine a source beside one draft block."""
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
-        if session_info["status"] == "submitted":
-            raise LearningDocumentConflictError("Submitted sessions cannot change source links.")
+        # Allow student canvas editing and source linking regardless of submission state
+        # if session_info["status"] == "submitted":
+        #     raise LearningDocumentConflictError("Submitted sessions cannot change source links.")
         self._published_source(assignment, source_id)
         document_id = await self._ensure_document(session_info, assignment)
         reference_sql = text("""
@@ -560,8 +562,9 @@ class LearningDocumentService:
         request: SyncLearningDocumentRequest,
     ) -> SyncLearningDocumentResponse:
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
-        if session_info["status"] == "submitted":
-            raise LearningDocumentConflictError("Submitted sessions cannot be changed.")
+        # Allow student canvas editing and document sync regardless of submission state
+        # if session_info["status"] == "submitted":
+        #     raise LearningDocumentConflictError("Submitted sessions cannot be changed.")
         document_id = await self._ensure_document(session_info, assignment)
         if not request.upserts and not request.deleted_block_ids:
             state = await self._state_for_document(document_id, session_info)

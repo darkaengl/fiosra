@@ -39,6 +39,18 @@
     onSubmitMilestone = async () => null,
   } = $props();
 
+  let isCanvasUnlocked = $state(false);
+  let hasUserToggledLock = $state(false);
+
+  let isLocked = $derived(
+    hasUserToggledLock ? !isCanvasUnlocked : disabled
+  );
+
+  function toggleCanvasLock() {
+    hasUserToggledLock = true;
+    isCanvasUnlocked = isLocked;
+  }
+
   const blockTypes = {
     heading: 'heading',
     paragraph: 'paragraph',
@@ -305,7 +317,7 @@
   }
 
   function addNewBlankPage() {
-    if (disabled) return;
+    if (isLocked) return;
     saveCurrentPageEdits();
     const nextP = totalPages + 1;
     const newHeadingId = crypto.randomUUID();
@@ -343,7 +355,7 @@
   }
 
   function deletePage(pageToDelete) {
-    if (disabled || totalPages <= 1) return;
+    if (isLocked || totalPages <= 1) return;
     saveCurrentPageEdits();
     const newMap = {};
     let newIdx = 1;
@@ -1102,7 +1114,7 @@
   }
 
   function scheduleSync() {
-    if (disabled || !editor) return;
+    if (isLocked || !editor) return;
     isDirty = true;
     saveError = '';
     updateEditorMetrics();
@@ -1113,7 +1125,7 @@
 
   export async function syncNow() {
     clearTimeout(saveTimer);
-    if (!editor || disabled || isSaving || !isDirty) return;
+    if (!editor || isLocked || isSaving || !isDirty) return;
     const blocks = currentBlocks();
     const next = Object.fromEntries(blocks.map((block) => [block.block_id, blockSignature(block)]));
     const changedBlocks = blocks.filter((block) => baseline[block.block_id] !== next[block.block_id]);
@@ -1172,7 +1184,7 @@
   }
 
   function toggleMark(mark) {
-    if (!editor || disabled) return;
+    if (!editor || isLocked) return;
     if (mark === 'bold') editor.chain().focus().toggleBold().run();
     if (mark === 'italic') editor.chain().focus().toggleItalic().run();
   }
@@ -1655,7 +1667,7 @@
   onMount(() => {
     editor = new Editor({
       element: editorElement,
-      editable: !disabled,
+      editable: !isLocked,
       extensions: [
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
@@ -1717,7 +1729,7 @@
   });
 
   $effect(() => {
-    const shouldBeEditable = !disabled;
+    const shouldBeEditable = !isLocked;
     if (editor && editor.isEditable !== shouldBeEditable) {
       untrack(() => {
         editor.setEditable(shouldBeEditable);
@@ -1828,7 +1840,7 @@
             class="tool-btn" 
             class:active={editorState.editor?.isActive('paragraph')} 
             onclick={() => setBlock('paragraph')} 
-            disabled={disabled}
+            disabled={isLocked}
           >
             Text
           </button>
@@ -1837,7 +1849,7 @@
             class="tool-btn" 
             class:active={editorState.editor?.isActive('heading', { level: 1 })} 
             onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 1 }).run()} 
-            disabled={disabled}
+            disabled={isLocked}
           >
             H1
           </button>
@@ -1846,7 +1858,7 @@
             class="tool-btn" 
             class:active={editorState.editor?.isActive('heading', { level: 2 })} 
             onclick={() => editorState.editor?.chain().focus().toggleHeading({ level: 2 }).run()} 
-            disabled={disabled}
+            disabled={isLocked}
           >
             H2
           </button>
@@ -1855,7 +1867,7 @@
             class="tool-btn font-bold" 
             class:active={editorState.editor?.isActive('bold')} 
             onclick={() => toggleMark('bold')} 
-            disabled={disabled}
+            disabled={isLocked}
           >
             B
           </button>
@@ -1864,18 +1876,26 @@
             class="tool-btn font-italic" 
             class:active={editorState.editor?.isActive('italic')} 
             onclick={() => toggleMark('italic')} 
-            disabled={disabled}
+            disabled={isLocked}
           >
             I
           </button>
           <button 
             type="button" 
-            class="tool-btn" 
-            class:active={editorState.editor?.isActive('blockquote')} 
-            onclick={() => editorState.editor?.chain().focus().toggleBlockquote().run()} 
-            disabled={disabled}
+            class="tool-btn lock-toggle-btn" 
+            class:unlocked={!isLocked}
+            class:locked={isLocked}
+            onclick={toggleCanvasLock}
+            title={isLocked ? "Canvas is locked (click to unlock and edit)" : "Canvas is unlocked (click to lock)"}
+            aria-label={isLocked ? "Unlock canvas for editing" : "Lock canvas"}
           >
-            “Quote”
+            {#if isLocked}
+              <span class="lock-icon">🔒</span>
+              <span class="lock-label">Locked</span>
+            {:else}
+              <span class="lock-icon">🔓</span>
+              <span class="lock-label">Editing</span>
+            {/if}
           </button>
         </div>
 
@@ -2023,7 +2043,7 @@
               <span>•</span>
               <span>{documentHeadings.length} {documentHeadings.length === 1 ? 'section' : 'sections'}</span>
             {/if}
-            {#if !disabled}
+            {#if !isLocked}
               <span>•</span>
               <button type="button" class="page-footer-add-btn" onclick={addNewBlankPage} title="Add a new page">＋ Add page</button>
             {/if}
@@ -2060,7 +2080,7 @@
               >
                 ›
               </button>
-              {#if totalPages > 1 && !disabled}
+              {#if totalPages > 1 && !isLocked}
                 <button 
                   type="button" 
                   class="page-delete-mini-btn" 
@@ -2470,6 +2490,52 @@
     padding: 4px 8px;
     cursor: pointer;
     transition: all 0.12s ease;
+  }
+
+  .tool-btn.lock-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--radius-xs, 4px);
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+
+  .tool-btn.lock-toggle-btn.locked {
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+
+  .tool-btn.lock-toggle-btn.locked:hover {
+    background: #fde68a;
+    color: #78350f;
+  }
+
+  .tool-btn.lock-toggle-btn.unlocked {
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+
+  .tool-btn.lock-toggle-btn.unlocked:hover {
+    background: #bbf7d0;
+    color: #14532d;
+  }
+
+  :global([data-theme="dark"]) .tool-btn.lock-toggle-btn.locked {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fbbf24;
+  }
+
+  :global([data-theme="dark"]) .tool-btn.lock-toggle-btn.unlocked {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #4ade80;
   }
 
   .tool-btn:hover:not(:disabled) {
