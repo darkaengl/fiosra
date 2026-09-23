@@ -144,7 +144,7 @@
   });
 </script>
 
-<main class="modules-main">
+<main class="modules-main" class:eval-fullscreen-mode={!!activeEvaluationAssignment}>
   {#if isLoading}
     <div class="loading-state">
       <div class="loading-spinner"></div>
@@ -158,48 +158,52 @@
       <a href="/#/courses" class="btn btn-primary">Go to Course Portfolio</a>
     </div>
   {:else}
-    <CourseBanner
-      course={currentCourse}
-      courseId={currentCourseId}
-      enrolledCount={rosterData.total_enrolled || rosterData.students?.length || 0}
-      onAddModule={() => (isAddModuleOpen = true)}
-      onViewRoster={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
-    />
+    {#if !activeEvaluationAssignment}
+      <CourseBanner
+        course={currentCourse}
+        courseId={currentCourseId}
+        enrolledCount={rosterData.total_enrolled || rosterData.students?.length || 0}
+        onAddModule={() => (isAddModuleOpen = true)}
+        onViewRoster={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
+      />
 
-    <div class="view-switcher">
-      <button
-        type="button"
-        class="view-tab-btn {activeTab === 'modules' && !activeEvaluationAssignment ? 'active' : ''}"
-        onclick={() => { activeTab = 'modules'; activeEvaluationAssignment = null; }}
-      >
-        <span>🗺️</span> Curriculum Architecture &amp; Sequencer ({currentCourse.modules?.length || 0} Units)
-      </button>
-      <button
-        type="button"
-        class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}"
-        onclick={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
-      >
-        <span>👥</span> Students &amp; Cohort Roster ({rosterData.total_enrolled || rosterData.students?.length || 0})
-      </button>
-      <a href="#/knowledge-graph?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Curriculum Concept Graph">
-        <span>◌</span> Curriculum Concept Graph ↗
-      </a>
-    </div>
+      <div class="view-switcher">
+        <button
+          type="button"
+          class="view-tab-btn {activeTab === 'modules' ? 'active' : ''}"
+          onclick={() => { activeTab = 'modules'; }}
+        >
+          <span>🗺️</span> Curriculum Architecture &amp; Sequencer ({currentCourse.modules?.length || 0} Units)
+        </button>
+        <button
+          type="button"
+          class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}"
+          onclick={() => { activeTab = 'roster'; }}
+        >
+          <span>👥</span> Students &amp; Cohort Roster ({rosterData.total_enrolled || rosterData.students?.length || 0})
+        </button>
+        <a href="#/knowledge-graph?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Curriculum Concept Graph">
+          <span>◌</span> Curriculum Concept Graph ↗
+        </a>
+      </div>
+    {/if}
 
     {#if activeTab === 'modules'}
       {#if activeEvaluationAssignment}
         <div class="assignment-eval-wrapper">
-          <div class="assignment-eval-header">
+          <div class="assignment-eval-topbar">
             <button
               type="button"
-              class="btn btn-secondary btn-sm"
+              class="btn-eval-back"
               onclick={() => (activeEvaluationAssignment = null)}
+              title="Return to Curriculum Architecture"
             >
               ← Back to Curriculum Architecture
             </button>
-            <div class="assignment-eval-meta">
-              <span class="assignment-eval-tag">Assignment Evaluation Context</span>
-              <h2 class="assignment-eval-heading">{activeEvaluationAssignment.title || 'Assignment Submissions &amp; Evaluation'}</h2>
+            <div class="eval-topbar-breadcrumb">
+              <span class="eval-course-code">{currentCourse.course_code || 'Course'}</span>
+              <span class="eval-separator">/</span>
+              <span class="eval-assignment-name">{activeEvaluationAssignment.title || 'Assignment Evaluation'}</span>
             </div>
           </div>
           <StudioReview
@@ -278,41 +282,86 @@
   .view-tab-btn.active { background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); color: var(--color-horizon-bright); }
   .modules-container { display: flex; flex-direction: column; gap: 18px; }
 
+  .modules-main.eval-fullscreen-mode {
+    padding: 0;
+    max-width: 100%;
+    margin: 0;
+    gap: 0;
+    height: calc(100vh - 58px);
+    overflow: hidden;
+  }
+
   .assignment-eval-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    animation: fadeIn 0.2s ease;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    animation: fadeIn 0.15s ease;
   }
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-  .assignment-eval-header {
+
+  .assignment-eval-topbar {
     display: flex;
     align-items: center;
-    gap: 18px;
-    padding: 12px 18px;
-    background: var(--color-graphite);
+    gap: 14px;
+    padding: 6px 18px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-graphite-border);
+    flex-shrink: 0;
+    height: 40px;
+    box-sizing: border-box;
+  }
+
+  .btn-eval-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-bone, #f6f5f1);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-  }
-  .assignment-eval-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .assignment-eval-tag {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-horizon-bright);
-  }
-  .assignment-eval-heading {
-    margin: 0;
-    font-size: 16px;
+    color: var(--color-slate-light);
+    font-size: 11.5px;
     font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm, 6px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: var(--font-ui);
+  }
+
+  .btn-eval-back:hover {
+    background: var(--color-graphite-hover, #eee);
     color: var(--color-heading);
+    border-color: var(--color-slate-muted);
+  }
+
+  .eval-topbar-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--color-slate-muted);
+    min-width: 0;
+  }
+
+  .eval-course-code {
+    font-weight: 700;
+    color: var(--color-heading);
+    letter-spacing: 0.3px;
+  }
+
+  .eval-separator {
+    color: var(--color-graphite-border);
+  }
+
+  .eval-assignment-name {
+    font-weight: 600;
+    color: var(--color-slate-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>

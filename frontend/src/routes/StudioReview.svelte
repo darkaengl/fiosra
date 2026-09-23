@@ -9,6 +9,7 @@
     assignmentId: propAssignmentId = '',
     targetStudentId = '',
     targetSessionId = '',
+    onBack = null,
   } = $props();
 
   let courseId = $state(propCourseId || '');
@@ -16,7 +17,7 @@
   let filterStatus = $state('all'); // 'all' | 'completed' | 'submitted' | 'active'
   let searchQuery = $state('');
 
-  // UI state for the educator workspace
+  // UI state for the 3-column canvas workspace
   let isRosterCollapsed = $state(false);
   let activeEvalTab = $state('rubric'); // 'rubric' | 'traps' | 'reasoning'
   let activeWorkTab = $state('sections'); // 'sections' | 'pdf'
@@ -126,7 +127,7 @@
   let submittedCount = $derived(queue.filter((item) => item.status === 'submitted').length);
   let activeCount = $derived(queue.filter((item) => item.status !== 'submitted' && item.status !== 'completed').length);
 
-  // Quick-Flipper index navigation
+  // Cohort Quick-Flipper index
   let currentStudentIndex = $derived.by(() => {
     if (!selected || !filteredQueue.length) return -1;
     return filteredQueue.findIndex((item) => item.session_id === selected.session_id);
@@ -144,7 +145,7 @@
     }
   }
 
-  // Derived student work deliverables
+  // Student deliverables
   let displaySections = $derived.by(() => {
     if (canvasData?.sections?.length) {
       return canvasData.sections.map((s) => {
@@ -252,7 +253,7 @@
         }),
       });
       if (!response.ok) throw new Error(await responseError(response, 'The final grade could not be recorded.'));
-      notice = `Grade ${grade.trim()} finalized for ${selected.student_id}. Session is sealed in event log.`;
+      notice = `Grade ${grade.trim()} finalized for ${selected.student_id}. Session sealed.`;
       selected = null;
       dossier = null;
       await loadQueue();
@@ -277,17 +278,16 @@
   });
 </script>
 
-<main class="review-main" class:embedded-container={!!assignmentId}>
+<div class="canvas-review-root">
   {#if !assignmentId}
-    <!-- Standalone Mode Header -->
-    <header class="review-header">
-      <div>
-        <div class="eyebrow">Educator Workspace</div>
-        <h1>Evaluation Window</h1>
-        <p>Review submitted assignments, examine student intellectual progression, and exercise sovereign grade authority.</p>
+    <!-- Compact Standalone Mode Bar -->
+    <header class="standalone-top-bar">
+      <div class="standalone-title">
+        <span class="eyebrow">Educator Workspace</span>
+        <h2>Evaluation Window</h2>
       </div>
-      <div class="queue-count">
-        <span>Submissions In Queue</span>
+      <div class="standalone-meta">
+        <span>Submissions In Queue:</span>
         <strong>{queue.length}</strong>
       </div>
     </header>
@@ -299,36 +299,37 @@
     <section class="load-error" role="alert">
       <strong>The evaluation queue could not be loaded.</strong>
       <p>{error}</p>
-      <button class="btn btn-secondary" onclick={loadQueue}>Try again</button>
+      <button class="btn btn-secondary btn-sm" onclick={loadQueue}>Try again</button>
     </section>
   {:else}
-    <div class="review-layout" class:roster-hidden={isRosterCollapsed}>
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- 3-COLUMN CANVAS WORKSPACE (Left Roster | Center Hero | Right Gutter) -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="canvas-3col-workspace" class:roster-collapsed={isRosterCollapsed}>
 
-      <!-- ═══════════════════════════════════════════════════════════ -->
-      <!-- COLLAPSIBLE ROSTER SIDEBAR                                 -->
-      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- ── 1. LEFT SIDEBAR: Student Roster ─────────────────────── -->
       {#if !isRosterCollapsed}
-        <aside class="roster-sidebar">
+        <aside class="canvas-roster-sidebar">
           <div class="roster-top-bar">
-            <span class="roster-top-title">Student Roster ({filteredQueue.length})</span>
+            <span class="roster-top-title">Roster ({filteredQueue.length})</span>
             <button
               type="button"
               class="btn-collapse-sidebar"
               onclick={() => (isRosterCollapsed = true)}
-              title="Collapse student roster to maximize evaluation width"
+              title="Collapse student roster to maximize document reading width"
             >
               ⇤
             </button>
           </div>
 
-          <div class="roster-header">
+          <div class="roster-search-bar">
             <input
               type="text"
-              class="roster-search"
-              placeholder="Search student or task…"
+              class="roster-search-input"
+              placeholder="Filter students…"
               bind:value={searchQuery}
             />
-            <div class="roster-filters">
+            <div class="roster-filter-pills">
               <button
                 type="button"
                 class="filter-pill"
@@ -340,7 +341,7 @@
                 class="filter-pill"
                 class:active={filterStatus === 'completed'}
                 onclick={() => (filterStatus = 'completed')}
-              >Finalized ({completedCount})</button>
+              >Final ({completedCount})</button>
               {#if submittedCount > 0}
                 <button
                   type="button"
@@ -360,135 +361,130 @@
             </div>
           </div>
 
-          <div class="roster-list">
+          <div class="roster-scroll-list">
             {#if filteredQueue.length === 0}
-              <div class="roster-empty">No students match this filter.</div>
+              <div class="roster-empty">No students found.</div>
             {:else}
               {#each filteredQueue as item (item.session_id)}
                 <button
                   type="button"
-                  class="roster-card"
+                  class="roster-item-btn"
                   class:active={selected?.session_id === item.session_id}
                   onclick={() => selectItem(item)}
                 >
-                  <span class="roster-avatar">{item.student_id.slice(0, 2).toUpperCase()}</span>
-                  <div class="roster-card-info">
-                    <span class="roster-name">{item.student_id}</span>
+                  <span class="roster-avatar-mini">{item.student_id.slice(0, 2).toUpperCase()}</span>
+                  <div class="roster-item-info">
+                    <span class="roster-item-id">{item.student_id}</span>
                     {#if !assignmentId && item.assignment_title}
-                      <span class="roster-assignment-tag" title={item.assignment_title}>{item.assignment_title}</span>
+                      <span class="roster-item-assignment">{item.assignment_title}</span>
                     {/if}
-                    <span class="roster-time">{formatDate(item.submitted_at)}</span>
+                    <span class="roster-item-date">{formatDate(item.submitted_at)}</span>
                   </div>
                   {#if item.status === 'submitted'}
-                    <span class="roster-badge submitted">Ready</span>
+                    <span class="mini-status-badge submitted">Ready</span>
                   {:else if item.status === 'completed'}
-                    <span class="roster-badge completed">Finalized</span>
+                    <span class="mini-status-badge completed">Final</span>
                   {:else}
-                    <span class="roster-badge in-progress">Draft</span>
+                    <span class="mini-status-badge in-progress">Draft</span>
                   {/if}
                 </button>
               {/each}
             {/if}
           </div>
 
-          <button type="button" class="roster-refresh" onclick={loadQueue} title="Check for new submissions">
+          <button type="button" class="roster-refresh-btn" onclick={loadQueue} title="Check for new submissions">
             ↻ Refresh Roster
           </button>
         </aside>
       {:else}
-        <!-- Collapsed Roster Rail -->
-        <aside class="roster-rail" onclick={() => (isRosterCollapsed = false)} title="Click to expand student roster">
+        <!-- Collapsed Roster Rail (42px) -->
+        <aside class="canvas-roster-rail" onclick={() => (isRosterCollapsed = false)} title="Click to expand student roster">
           <button type="button" class="btn-expand-rail" onclick={() => (isRosterCollapsed = false)} title="Expand student roster">
             ⇥
           </button>
-          <div class="rail-label">ROSTER ({filteredQueue.length})</div>
+          <div class="rail-vertical-text">STUDENTS ({filteredQueue.length})</div>
         </aside>
       {/if}
 
-      <!-- ═══════════════════════════════════════════════════════════ -->
-      <!-- EVALUATION WORKSPACE: Side-by-Side Dual-Pane Layout        -->
-      <!-- ═══════════════════════════════════════════════════════════ -->
-      <section class="dossier-pane">
+      <!-- ── 2. CENTER STAGE: Student Deliverable Canvas (HERO) ──── -->
+      <main class="canvas-document-hero">
         {#if !selected}
-          <div class="empty-dossier">
-            <div class="empty-icon">📋</div>
-            <strong>No student selected for evaluation</strong>
-            <p>Select a learner from the student roster on the left to inspect their submitted deliverables and reasoning trace.</p>
+          <div class="hero-empty-state">
+            <span class="empty-hero-icon">📋</span>
+            <h3>No Student Selected</h3>
+            <p>Select a student from the roster on the left to review their submission deliverable.</p>
           </div>
         {:else if !dossier}
           <div class="loading small"><div class="spinner"></div><span>Opening evaluation dossier…</span></div>
         {:else}
-          <!-- Unified Dossier Header with Quick-Flipper & Document Controls -->
-          <header class="dossier-header-bar">
-            <div class="dossier-student-info">
-              <span class="dossier-avatar">{selected.student_id.slice(0, 2).toUpperCase()}</span>
-              <div>
-                <div class="dossier-title-line">
-                  <h2>{selected.student_id}</h2>
-                  <div
-                    class="status-badge"
+          <!-- Compact Hero Control Bar -->
+          <header class="document-hero-toolbar">
+            <div class="hero-student-meta">
+              <span class="hero-avatar">{selected.student_id.slice(0, 2).toUpperCase()}</span>
+              <div class="hero-student-text">
+                <div class="hero-title-row">
+                  <h3 class="hero-student-name">{selected.student_id}</h3>
+                  <span
+                    class="status-chip"
                     class:submitted={selected.status === 'submitted'}
                     class:completed={selected.status === 'completed'}
                     class:in-progress={selected.status !== 'submitted' && selected.status !== 'completed'}
                   >
                     {#if selected.status === 'submitted'}
-                      <span>✓ Ready for Grading</span>
+                      ✓ Ready for Grading
                     {:else if selected.status === 'completed'}
-                      <span>✓ Grade Finalized</span>
+                      ✓ Grade Finalized
                     {:else}
-                      <span>● In Progress (Live Draft)</span>
+                      ● Live Session (Draft)
                     {/if}
-                  </div>
+                  </span>
                 </div>
-                <p class="dossier-sub">
-                  {#if selected.assignment_title}
-                    <span class="dossier-assignment-name">{selected.assignment_title}</span> &bull;
-                  {/if}
-                  {selected.status === 'submitted' ? 'Submitted' : selected.status === 'completed' ? 'Finalized' : 'Last Active'}: {formatDate(selected.submitted_at)}
-                </p>
+                <div class="hero-timestamp-row">
+                  {selected.status === 'submitted' ? 'Submitted' : selected.status === 'completed' ? 'Finalized' : 'Active'}: {formatDate(selected.submitted_at)}
+                </div>
               </div>
             </div>
 
-            <!-- Cohort Quick-Flipper -->
-            <div class="quick-flipper">
+            <!-- Cohort Quick-Flipper Navigation -->
+            <div class="cohort-quick-flipper">
               <button
                 type="button"
-                class="flipper-btn"
+                class="btn-flipper"
                 onclick={selectPrevStudent}
                 disabled={currentStudentIndex <= 0}
-                title="Go to previous student in queue"
+                title="Previous Student"
               >
                 ‹ Prev
               </button>
-              <span class="flipper-counter">
+              <span class="flipper-index-label">
                 {currentStudentIndex >= 0 ? `${currentStudentIndex + 1} of ${filteredQueue.length}` : '—'}
               </span>
               <button
                 type="button"
-                class="flipper-btn"
+                class="btn-flipper"
                 onclick={selectNextStudent}
                 disabled={currentStudentIndex < 0 || currentStudentIndex >= filteredQueue.length - 1}
-                title="Go to next student in queue"
+                title="Next Student"
               >
                 Next ›
               </button>
             </div>
 
-            <!-- Deliverables View Toggles & Actions -->
-            <div class="dossier-header-actions">
-              <div class="work-view-selector">
+            <!-- View Switcher & PDF Download -->
+            <div class="hero-toolbar-actions">
+              <div class="view-toggle-group">
                 <button
                   type="button"
-                  class="work-view-btn"
+                  class="btn-view-toggle"
                   class:active={activeWorkTab === 'sections'}
                   onclick={() => (activeWorkTab = 'sections')}
                   title="View written canvas sections"
                 >
-                  📝 Sections
+                  📝 Canvas
                 </button>
                 <button
                   type="button"
-                  class="work-view-btn"
+                  class="btn-view-toggle"
                   class:active={activeWorkTab === 'pdf'}
                   onclick={() => (activeWorkTab = 'pdf')}
                   title="Render student's submitted assignment as a PDF document"
@@ -498,582 +494,543 @@
               </div>
 
               <a
-                class="btn-download-pdf"
+                class="btn-download-pdf-compact"
                 href={`/evidence/dossier/${selected.session_id}/pdf`}
                 download
-                title="Download assignment submission as a PDF"
+                title="Download official PDF submission"
               >
-                <span class="btn-icon">⬇</span> PDF
+                ⬇ PDF
               </a>
             </div>
           </header>
 
-          <!-- ── Side-by-Side Dual-Pane Grid ──────────────────────────── -->
-          <div class="eval-dual-workspace">
-
-            <!-- ── LEFT PANE: Student Deliverables Academic Reader ────── -->
-            <div class="eval-document-pane">
-              <div class="pane-header-bar">
-                <div class="pane-title-group">
-                  <span class="pane-icon">📝</span>
-                  <span class="pane-title">Student Deliverables</span>
+          <!-- Document Center Stage Scroll Viewport -->
+          <div class="document-center-viewport">
+            {#if activeWorkTab === 'pdf'}
+              <!-- Rendered PDF Viewer Mode -->
+              <div class="pdf-document-container">
+                <div class="pdf-container-toolbar">
+                  <span class="pdf-badge">Official PDF Submission Document</span>
+                  <a
+                    class="btn-open-tab"
+                    href={`/evidence/dossier/${selected.session_id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open in Tab ↗
+                  </a>
                 </div>
-                <div class="pane-meta-badge">
-                  {displaySections.length} {displaySections.length === 1 ? 'Section' : 'Sections'}
-                  {#if totalDeliverableWords > 0}
-                    &bull; ~{totalDeliverableWords} words
-                  {/if}
+                <div class="pdf-embed-box">
+                  {#key selected.session_id}
+                    <PdfViewer
+                      url={`/evidence/dossier/${selected.session_id}/pdf`}
+                      title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
+                    />
+                  {/key}
                 </div>
               </div>
+            {:else}
+              <!-- Continuous Academic Paper Sheet Mode -->
+              <article class="academic-paper-sheet">
+                <header class="sheet-title-header">
+                  <h1 class="sheet-main-heading">{selected.assignment_title || 'Assignment Submission Deliverables'}</h1>
+                  <div class="sheet-meta-line">
+                    <span>Author: <strong>{selected.student_id}</strong></span>
+                    <span class="sheet-dot">&bull;</span>
+                    <span>{displaySections.length} {displaySections.length === 1 ? 'Section' : 'Sections'}</span>
+                    {#if totalDeliverableWords > 0}
+                      <span class="sheet-dot">&bull;</span>
+                      <span>~{totalDeliverableWords} words</span>
+                    {/if}
+                  </div>
+                </header>
 
-              <div class="document-scroll-viewport">
-                {#if activeWorkTab === 'pdf'}
-                  <!-- Rendered PDF View -->
-                  <div class="pdf-reader-card">
-                    <div class="pdf-reader-toolbar">
-                      <div class="pdf-reader-title">
-                        <span>📄</span>
-                        <strong>Official Submission Document</strong>
-                      </div>
-                      <div class="pdf-reader-actions">
-                        <a
-                          class="btn-action-ghost"
-                          href={`/evidence/dossier/${selected.session_id}/pdf`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Open PDF in a new browser tab"
-                        >
-                          Open in Tab ↗
-                        </a>
-                        <a
-                          class="btn-action-ghost"
-                          href={`/evidence/dossier/${selected.session_id}/pdf`}
-                          download
-                          title="Download PDF to device"
-                        >
-                          Download ⬇
-                        </a>
-                      </div>
-                    </div>
-                    <div class="pdf-render-viewport">
-                      {#key selected.session_id}
-                        <PdfViewer
-                          url={`/evidence/dossier/${selected.session_id}/pdf`}
-                          title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
-                        />
-                      {/key}
-                    </div>
+                {#if displaySections.length === 0}
+                  <div class="paper-empty-notice">
+                    No authored text was recorded for this submission.
                   </div>
                 {:else}
-                  <!-- Canvas Sections Continuous Academic Reader -->
-                  {#if displaySections.length === 0}
-                    <div class="academic-empty-state">
-                      <p>No authored work sections recorded for this session.</p>
-                    </div>
-                  {:else}
-                    <div class="academic-document-body">
-                      {#each displaySections as sec, sIdx (sec.section_id)}
-                        <article class="academic-section-card">
-                          <header class="academic-section-header">
-                            <div class="academic-section-title-wrap">
-                              <span class="section-number-pill">{sIdx + 1}</span>
-                              <h3 class="academic-section-title">{sec.title || sec.section_id.replaceAll('_', ' ')}</h3>
+                  <div class="paper-sections-flow">
+                    {#each displaySections as sec, sIdx (sec.section_id)}
+                      <section class="paper-section-block">
+                        <div class="section-heading-bar">
+                          <div class="section-title-wrap">
+                            <span class="section-idx-badge">{sIdx + 1}</span>
+                            <h2 class="section-title-text">{sec.title || sec.section_id.replaceAll('_', ' ')}</h2>
+                          </div>
+                          {#if sec.revision}
+                            <span class="revision-pill">Rev {sec.revision}</span>
+                          {/if}
+                        </div>
+
+                        {#if sec.prompt}
+                          <blockquote class="paper-prompt-callout">
+                            <span class="prompt-eyebrow">Guiding Prompt</span>
+                            <p>{sec.prompt}</p>
+                          </blockquote>
+                        {/if}
+
+                        {#if sec.text}
+                          <div class="paper-body-text">{sec.text}</div>
+                        {:else}
+                          <div class="paper-body-empty">No text provided for this section.</div>
+                        {/if}
+
+                        {#if sec.source_references?.length}
+                          <div class="paper-sources-footer">
+                            <span class="sources-eyebrow">Cited Grounding Sources:</span>
+                            <div class="sources-tags-row">
+                              {#each sec.source_references as src}
+                                <span class="paper-source-chip">
+                                  📖 {src.document_title || 'Reference'}{src.page_number ? ` (p. ${src.page_number})` : ''}
+                                </span>
+                              {/each}
                             </div>
-                            {#if sec.revision}
-                              <span class="revision-tag">Rev {sec.revision}</span>
-                            {/if}
+                          </div>
+                        {/if}
+                      </section>
+                    {/each}
+                  </div>
+                {/if}
+              </article>
+            {/if}
+          </div>
+        {/if}
+      </main>
+
+      <!-- ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ────────── -->
+      {#if selected && dossier}
+        <aside class="canvas-workbench-gutter">
+
+          <!-- Sticky Pinned Grade Finalization Bar -->
+          <div class="gutter-finalization-bar">
+            {#if selected.status === 'submitted'}
+              <div class="gutter-grade-form">
+                <div class="grade-input-group">
+                  <label class="field-label-mini">
+                    <span>Grade</span>
+                    <input
+                      type="text"
+                      class="input-grade-compact"
+                      bind:value={grade}
+                      placeholder="A, 92%"
+                    />
+                  </label>
+                  <label class="field-label-mini feedback-flex">
+                    <span>Formative Feedback</span>
+                    <input
+                      type="text"
+                      class="input-feedback-compact"
+                      bind:value={feedback}
+                      placeholder="Feedback for next cycle…"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  class="btn-finalize-compact"
+                  onclick={finalise}
+                  disabled={isFinalizing || !grade.trim()}
+                >
+                  {isFinalizing ? 'Finalizing…' : 'Finalize Grade & Seal ➔'}
+                </button>
+              </div>
+            {:else if selected.status === 'completed'}
+              <div class="gutter-sealed-banner">
+                <span class="sealed-check">✓</span>
+                <div class="sealed-text">
+                  <strong>Grade Finalized & Sealed</strong>
+                  <small>Recorded in sovereign ledger.</small>
+                </div>
+                <a class="btn-sealed-pdf" href={`/evidence/dossier/${selected.session_id}/pdf`} download>
+                  ⬇ PDF
+                </a>
+              </div>
+            {:else}
+              <div class="gutter-draft-banner">
+                <span class="draft-dot">●</span>
+                <div class="draft-text">
+                  <strong>Live Student Session</strong>
+                  <small>Student actively reasoning.</small>
+                </div>
+                <a class="btn-recorder-link" href={`#/student/trace?session_id=${selected.session_id}`}>
+                  Trace ↗
+                </a>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Workbench Tabs Bar -->
+          <nav class="gutter-tabs-bar">
+            <button
+              type="button"
+              class="gutter-tab-btn"
+              class:active={activeEvalTab === 'rubric'}
+              onclick={() => (activeEvalTab = 'rubric')}
+            >
+              <span>📊 Rubric</span>
+              <span class="gutter-tab-count">{totalRubricCriteria}</span>
+            </button>
+
+            <button
+              type="button"
+              class="gutter-tab-btn"
+              class:active={activeEvalTab === 'traps'}
+              onclick={() => (activeEvalTab = 'traps')}
+            >
+              <span>🪤 Traps</span>
+              <span class="gutter-tab-count" class:alert={scan && (scan.findings || []).length > 0}>
+                {scan ? (scan.findings || []).length : 'Scan'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              class="gutter-tab-btn"
+              class:active={activeEvalTab === 'reasoning'}
+              onclick={() => (activeEvalTab = 'reasoning')}
+            >
+              <span>💡 Trace</span>
+              <span class="gutter-tab-count">{reasoningNodes.length + activityNodes.length}</span>
+            </button>
+          </nav>
+
+          <!-- Workbench Tab Body Viewport (Independently Scrolling) -->
+          <div class="gutter-tab-viewport">
+
+            <!-- ── TAB 1: Rubric Assessment ── -->
+            {#if activeEvalTab === 'rubric'}
+              <div class="rubric-inspector">
+                {#if !dossier.per_question_evidence || dossier.per_question_evidence.length === 0}
+                  <div class="tab-empty-msg">No rubric criteria configured for this assignment.</div>
+                {:else}
+                  <div class="rubric-matrix-list">
+                    {#each dossier.per_question_evidence as question}
+                      {#each Object.entries(question.rubric_evidence || {}) as [, criterion]}
+                        <article class="criterion-chip-card" class:met={criterion.met}>
+                          <header class="criterion-chip-header">
+                            <span class="criterion-tag" class:met={criterion.met}>
+                              {criterion.met ? '✓ Evidence Met' : '● Needs Review'}
+                            </span>
+                            <span class="criterion-conf-pill">
+                              {Math.round((criterion.confidence || 0) * 100)}%
+                            </span>
                           </header>
 
-                          {#if sec.prompt}
-                            <div class="academic-prompt-box">
-                              <span class="prompt-label">Prompt:</span>
-                              <p class="prompt-text">{sec.prompt}</p>
+                          <strong class="criterion-label">
+                            {criterion.label || (criterion.met ? 'Standard Met' : 'Criterion Pending')}
+                          </strong>
+
+                          <p class="criterion-explanation-text">{criterion.description}</p>
+
+                          {#if criterion.evidence}
+                            <div class="criterion-quote-block">
+                              <span class="quote-header">Submission Quote:</span>
+                              <div class="quote-text">{criterion.evidence}</div>
                             </div>
                           {/if}
 
-                          {#if sec.text}
-                            <div class="academic-text-content">{sec.text}</div>
-                          {:else}
-                            <div class="work-empty-text">No text submitted for this section.</div>
-                          {/if}
-
-                          {#if sec.source_references?.length}
-                            <div class="academic-sources-box">
-                              <span class="sources-label">Cited References:</span>
-                              <div class="sources-pills-list">
-                                {#each sec.source_references as src}
-                                  <span class="source-tag">
-                                    📖 {src.document_title || 'Reference'}{src.page_number ? ` (p. ${src.page_number})` : ''}
-                                  </span>
-                                {/each}
-                              </div>
-                            </div>
+                          {#if criterion.explanation}
+                            <small class="criterion-note">{criterion.explanation}</small>
                           {/if}
                         </article>
                       {/each}
-                    </div>
-                  {/if}
+                    {/each}
+                  </div>
                 {/if}
               </div>
-            </div>
 
-            <!-- ── RIGHT PANE: Evaluator Workbench ───────────────────── -->
-            <div class="eval-workbench-pane">
-
-              <!-- Sticky Sovereign Finalization Bar / Status -->
-              <div class="workbench-action-header">
-                {#if selected.status === 'submitted'}
-                  <div class="grade-action-form">
-                    <div class="grade-inputs-row">
-                      <label class="grade-input-label">
-                        <span>Grade</span>
-                        <input
-                          type="text"
-                          class="grade-input"
-                          bind:value={grade}
-                          placeholder="A, B+, 92%"
-                        />
-                      </label>
-                      <label class="feedback-input-label">
-                        <span>Formative Evaluation Feedback</span>
-                        <input
-                          type="text"
-                          class="feedback-input"
-                          bind:value={feedback}
-                          placeholder="Actionable feedback for next reasoning cycle…"
-                        />
-                      </label>
-                    </div>
+            <!-- ── TAB 2: Cognitive Traps & Misconceptions ── -->
+            {:else if activeEvalTab === 'traps'}
+              <div class="traps-inspector">
+                {#if !scan}
+                  <div class="trap-scan-prompt">
+                    <span class="trap-scan-icon">🪤</span>
+                    <h4>Misconception Trap Scan</h4>
+                    <p class="trap-scan-desc">
+                      Scans student thesis against cognitive traps authored in the course knowledge graph.
+                    </p>
                     <button
                       type="button"
-                      class="btn btn-success grade-finalize-btn"
-                      onclick={finalise}
-                      disabled={isFinalizing || !grade.trim()}
+                      class="btn-trigger-scan"
+                      onclick={runMisconceptionScan}
+                      disabled={isScanning}
                     >
-                      {isFinalizing ? 'Finalizing…' : 'Finalize Grade & Seal ➔'}
+                      {isScanning ? 'Analyzing with LLM…' : '⚡ Run Trap Scan'}
+                    </button>
+                    {#if isScanning}
+                      <p class="scan-running-note">Evidencing mental models (takes ~20s)…</p>
+                    {/if}
+                  </div>
+                {:else if (scan.findings || []).length === 0}
+                  <div class="trap-clean-prompt">
+                    <span class="clean-check-icon">✓</span>
+                    <h4>No Cognitive Traps Found</h4>
+                    <p class="clean-desc">The student avoided known mental traps for this inquiry.</p>
+                    <button
+                      type="button"
+                      class="btn-rescan-ghost"
+                      onclick={runMisconceptionScan}
+                      disabled={isScanning}
+                    >
+                      ↻ Re-scan Submission
                     </button>
                   </div>
-                {:else if selected.status === 'completed'}
-                  <div class="status-banner completed-banner">
-                    <span class="banner-badge">✓ Grade Finalized</span>
-                    <span class="banner-text">Submission officially graded and sealed in ledger.</span>
-                    <a class="btn-banner-link" href={`/evidence/dossier/${selected.session_id}/pdf`} download>
-                      ⬇ Sealed PDF
-                    </a>
-                  </div>
                 {:else}
-                  <div class="status-banner inprogress-banner">
-                    <span class="banner-badge">● Live Draft</span>
-                    <span class="banner-text">Student is currently in an active reasoning session.</span>
-                    <a class="btn-banner-link" href={`#/student/trace?session_id=${selected.session_id}`}>
-                      Flight Recorder ↗
-                    </a>
-                  </div>
-                {/if}
-              </div>
-
-              <!-- Workbench Tabs Navigation -->
-              <nav class="eval-tabs-bar">
-                <button
-                  type="button"
-                  class="eval-tab-btn"
-                  class:active={activeEvalTab === 'rubric'}
-                  onclick={() => (activeEvalTab = 'rubric')}
-                >
-                  <span class="tab-icon">📊</span>
-                  <span>Rubric Assessment</span>
-                  <span class="tab-count-pill">{totalRubricCriteria}</span>
-                </button>
-
-                <button
-                  type="button"
-                  class="eval-tab-btn"
-                  class:active={activeEvalTab === 'traps'}
-                  onclick={() => (activeEvalTab = 'traps')}
-                >
-                  <span class="tab-icon">🪤</span>
-                  <span>Misconceptions & Traps</span>
-                  <span class="tab-count-pill" class:highlight={scan && (scan.findings || []).length > 0}>
-                    {scan ? (scan.findings || []).length : 'Scan'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  class="eval-tab-btn"
-                  class:active={activeEvalTab === 'reasoning'}
-                  onclick={() => (activeEvalTab = 'reasoning')}
-                >
-                  <span class="tab-icon">💡</span>
-                  <span>Reasoning Trace</span>
-                  <span class="tab-count-pill">{reasoningNodes.length + activityNodes.length}</span>
-                </button>
-              </nav>
-
-              <!-- Workbench Tab Body Container -->
-              <div class="eval-tab-viewport">
-
-                <!-- ════ TAB 1: Rubric Assessment ════ -->
-                {#if activeEvalTab === 'rubric'}
-                  <div class="rubric-tab-content">
-                    {#if !dossier.per_question_evidence || dossier.per_question_evidence.length === 0}
-                      <p class="tab-empty">No rubric evaluation criteria published for this assignment.</p>
-                    {:else}
-                      <div class="rubric-summary-bar">
-                        <span class="rubric-summary-title">Evidence Entailment Matrix</span>
-                        <span class="rubric-summary-note">Scored against authored curriculum rubrics</span>
-                      </div>
-
-                      <div class="criteria-list">
-                        {#each dossier.per_question_evidence as question}
-                          {#each Object.entries(question.rubric_evidence || {}) as [, criterion]}
-                            <article class="criterion-card" class:met={criterion.met}>
-                              <header class="criterion-header">
-                                <div class="criterion-badge-row">
-                                  <span class="criterion-status-tag" class:met={criterion.met}>
-                                    {criterion.met ? '✓ Evidence Met' : '● Needs Review'}
-                                  </span>
-                                  <span class="criterion-confidence">
-                                    Confidence: {Math.round((criterion.confidence || 0) * 100)}%
-                                  </span>
-                                </div>
-                                <strong class="criterion-title">
-                                  {criterion.label || (criterion.met ? 'Standard Met' : 'Criterion Pending')}
-                                </strong>
-                              </header>
-
-                              <p class="criterion-desc">{criterion.description}</p>
-
-                              {#if criterion.evidence}
-                                <div class="criterion-quote-box">
-                                  <span class="quote-label">Direct Submission Quote:</span>
-                                  <div class="criterion-quote">{criterion.evidence}</div>
-                                </div>
-                              {/if}
-
-                              {#if criterion.explanation}
-                                <small class="criterion-explanation">{criterion.explanation}</small>
-                              {/if}
-                            </article>
-                          {/each}
-                        {/each}
-                      </div>
-                    {/if}
+                  <div class="traps-results-bar">
+                    <span class="traps-count-label">
+                      {(scan.findings || []).length} Cognitive {(scan.findings || []).length === 1 ? 'Trap' : 'Traps'} Evidenced
+                    </span>
+                    <button
+                      type="button"
+                      class="btn-rescan-mini"
+                      onclick={runMisconceptionScan}
+                      disabled={isScanning}
+                    >
+                      ↻ Re-scan
+                    </button>
                   </div>
 
-                <!-- ════ TAB 2: Misconceptions & Cognitive Traps ════ -->
-                {:else if activeEvalTab === 'traps'}
-                  <div class="traps-tab-content">
-                    {#if !scan}
-                      <div class="traps-unscanned-box">
-                        <div class="traps-unscanned-icon">🪤</div>
-                        <h4>Misconception & Cognitive Trap Scan</h4>
-                        <p class="trap-intro">
-                          Reads the student's submitted text against cognitive traps and flawed mental models
-                          authored in the course knowledge graph, surfacing verified textual evidence.
-                        </p>
-                        <button
-                          type="button"
-                          class="trap-scan-btn"
-                          onclick={runMisconceptionScan}
-                          disabled={isScanning}
-                        >
-                          {isScanning ? 'Analyzing submission with LLM…' : '⚡ Analyze This Submission'}
-                        </button>
-                        {#if isScanning}
-                          <p class="trap-note">Examining student thesis against cognitive traps (takes ~20-30s)…</p>
+                  <div class="traps-cards-flow">
+                    {#each scan.findings as finding}
+                      <article class="trap-item-card">
+                        <header class="trap-item-header">
+                          <strong class="trap-item-name">{finding.name}</strong>
+                          <span class="trap-item-badge" class:weak={finding.detection !== 'llm_verified'}>
+                            {finding.detection === 'llm_verified' ? 'Evidenced' : 'Candidate'}
+                          </span>
+                        </header>
+
+                        <p class="trap-flawed-rule">{finding.flawed_rule}</p>
+
+                        {#if finding.evidence_quote}
+                          <div class="trap-quote-box">
+                            <span class="quote-eyebrow">Student Quote:</span>
+                            <blockquote class="trap-quote-text">"{finding.evidence_quote}"</blockquote>
+                          </div>
+                          <p class="trap-why-text">{finding.why}</p>
                         {/if}
-                      </div>
-                    {:else if (scan.findings || []).length === 0}
-                      <div class="traps-clear-box">
-                        <span class="clear-check">✓</span>
-                        <h4>No Cognitive Traps Evidenced</h4>
-                        <p class="trap-clear-note">The student avoided known mental traps for this inquiry.</p>
-                        {#if scan.note}<p class="trap-note">{scan.note}</p>{/if}
-                        <button
-                          type="button"
-                          class="trap-rescan-btn"
-                          onclick={runMisconceptionScan}
-                          disabled={isScanning}
-                        >
-                          Re-Analyze Submission
-                        </button>
-                      </div>
-                    {:else}
-                      <div class="traps-findings-header">
-                        <span class="traps-found-count">
-                          {(scan.findings || []).length} Cognitive {(scan.findings || []).length === 1 ? 'Trap' : 'Traps'} Identified
-                        </span>
-                        <button
-                          type="button"
-                          class="trap-rescan-btn-inline"
-                          onclick={runMisconceptionScan}
-                          disabled={isScanning}
-                        >
-                          ↻ Re-scan
-                        </button>
-                      </div>
 
-                      <div class="traps-list">
-                        {#each scan.findings as finding}
-                          <article class="trap-card">
-                            <header class="trap-head">
-                              <strong class="trap-title">{finding.name}</strong>
-                              <span class="trap-method" class:weak={finding.detection !== 'llm_verified'}>
-                                {finding.detection === 'llm_verified' ? 'Evidenced' : 'Candidate'}
-                              </span>
-                            </header>
+                        {#if finding.remediation_hint}
+                          <div class="trap-remediation-line">
+                            <span class="remed-label">Remediate:</span>
+                            <span>{finding.remediation_hint}</span>
+                          </div>
+                        {/if}
 
-                            <p class="trap-rule">{finding.flawed_rule}</p>
+                        <div class="trap-card-actions">
+                          <button
+                            type="button"
+                            class="btn-draft-note"
+                            onclick={() => openDraft(finding)}
+                          >
+                            ✉ Socratic Note
+                          </button>
+                          {#if finding.concept_id}
+                            <a
+                              class="trap-concept-link"
+                              href={`/#/knowledge-graph?course_id=${courseId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Graph ↗
+                            </a>
+                          {/if}
+                        </div>
 
-                            {#if finding.evidence_quote}
-                              <div class="trap-quote-wrap">
-                                <span class="trap-quote-label">Student excerpt:</span>
-                                <blockquote class="trap-quote">"{finding.evidence_quote}"</blockquote>
-                              </div>
-                              <p class="trap-why">{finding.why}</p>
-                            {/if}
-
-                            {#if finding.remediation_hint}
-                              <p class="trap-refer">
-                                <span class="trap-refer-label">Remediation focus:</span> {finding.remediation_hint}
-                              </p>
-                            {/if}
-
-                            <div class="trap-actions">
-                              <button
-                                type="button"
-                                class="trap-draft-btn"
-                                onclick={() => openDraft(finding)}
-                              >
-                                ✉ Draft Socratic Intervention
-                              </button>
-                              {#if finding.concept_id}
-                                <a
-                                  class="trap-graph-link"
-                                  href={`/#/knowledge-graph?course_id=${courseId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  Explore in graph ↗
-                                </a>
-                              {/if}
+                        {#if draftOpenFor === finding.misconception_id}
+                          <div class="inline-socratic-draft">
+                            <label class="draft-field-label" for="draft-subject">Subject</label>
+                            <input
+                              id="draft-subject"
+                              class="draft-subject-input"
+                              bind:value={draftSubject}
+                            />
+                            <label class="draft-field-label" for="draft-body">Socratic Guidance</label>
+                            <textarea
+                              id="draft-body"
+                              class="draft-body-input"
+                              rows="6"
+                              bind:value={draftBody}
+                            ></textarea>
+                            <div class="draft-action-btns">
+                              <button type="button" class="btn-mail" onclick={openInMailClient}>Open in Mail</button>
+                              <button type="button" class="btn-copy" onclick={copyDraft}>Copy</button>
+                              <button type="button" class="btn-close" onclick={() => (draftOpenFor = '')}>Close</button>
                             </div>
-
-                            {#if draftOpenFor === finding.misconception_id}
-                              <div class="trap-draft">
-                                <label class="trap-draft-label" for="draft-subject">Intervention Subject</label>
-                                <input
-                                  id="draft-subject"
-                                  class="trap-draft-subject"
-                                  bind:value={draftSubject}
-                                />
-                                <label class="trap-draft-label" for="draft-body">Formative Guidance Message</label>
-                                <textarea
-                                  id="draft-body"
-                                  class="trap-draft-body"
-                                  rows="8"
-                                  bind:value={draftBody}
-                                ></textarea>
-                                <p class="trap-note">
-                                  Points the learner toward source material through Socratic questioning rather than giving answers.
-                                </p>
-                                <div class="trap-draft-actions">
-                                  <button type="button" class="trap-send" onclick={openInMailClient}>Open in Mail</button>
-                                  <button type="button" class="trap-copy" onclick={copyDraft}>Copy to Clipboard</button>
-                                  <button type="button" class="trap-cancel" onclick={() => (draftOpenFor = '')}>Close</button>
-                                </div>
-                              </div>
-                            {/if}
-                          </article>
-                        {/each}
-                      </div>
-                      {#if scan.note}<p class="trap-note">{scan.note}</p>{/if}
-                    {/if}
-
-                    {#if scanError}
-                      <p class="trap-error">{scanError}</p>
-                    {/if}
-                  </div>
-
-                <!-- ════ TAB 3: Reasoning & Engagement Trace ════ -->
-                {:else if activeEvalTab === 'reasoning'}
-                  <div class="reasoning-tab-content">
-                    <div class="reasoning-subnav">
-                      <div class="reasoning-pills">
-                        <button
-                          type="button"
-                          class="acc-tab-btn"
-                          class:active={activeReviewTimelineTab === 'reasoning'}
-                          onclick={() => (activeReviewTimelineTab = 'reasoning')}
-                        >
-                          💡 Intellectual Milestones ({reasoningNodes.length})
-                        </button>
-                        <button
-                          type="button"
-                          class="acc-tab-btn"
-                          class:active={activeReviewTimelineTab === 'activity'}
-                          onclick={() => (activeReviewTimelineTab = 'activity')}
-                        >
-                          ⏱️ Activity Log ({activityNodes.length})
-                        </button>
-                      </div>
-                      <a
-                        class="acc-flight-link"
-                        href={`#/student/trace?session_id=${selected.session_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Flight Recorder ↗
-                      </a>
-                    </div>
-
-                    <div class="timeline-container">
-                      {#if activeReviewTimelineTab === 'reasoning'}
-                        {#if reasoningNodes.length === 0}
-                          <p class="tab-empty">No reasoning trace events logged yet for this session.</p>
-                        {:else}
-                          <ThinkingTimeline
-                            nodes={reasoningNodes}
-                            expandedNodeIndex={expandedReasoningNode}
-                            onToggleNode={(idx) => {
-                              expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
-                            }}
-                          />
+                          </div>
                         {/if}
-                      {:else}
-                        {#if activityNodes.length === 0}
-                          <p class="tab-empty">No activity events logged for this session.</p>
-                        {:else}
-                          <ThinkingTimeline
-                            nodes={activityNodes}
-                            expandedNodeIndex={expandedActivityNode}
-                            onToggleNode={(idx) => {
-                              expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
-                            }}
-                          />
-                        {/if}
-                      {/if}
-                    </div>
+                      </article>
+                    {/each}
                   </div>
                 {/if}
 
+                {#if scanError}
+                  <p class="trap-scan-error">{scanError}</p>
+                {/if}
               </div>
-            </div>
+
+            <!-- ── TAB 3: Reasoning Trace ── -->
+            {:else if activeEvalTab === 'reasoning'}
+              <div class="trace-inspector">
+                <div class="trace-sub-toolbar">
+                  <div class="trace-toggle-buttons">
+                    <button
+                      type="button"
+                      class="btn-trace-sub"
+                      class:active={activeReviewTimelineTab === 'reasoning'}
+                      onclick={() => (activeReviewTimelineTab = 'reasoning')}
+                    >
+                      Milestones ({reasoningNodes.length})
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-trace-sub"
+                      class:active={activeReviewTimelineTab === 'activity'}
+                      onclick={() => (activeReviewTimelineTab = 'activity')}
+                    >
+                      Log ({activityNodes.length})
+                    </button>
+                  </div>
+                  <a
+                    class="btn-flight-recorder"
+                    href={`#/student/trace?session_id=${selected.session_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Recorder ↗
+                  </a>
+                </div>
+
+                <div class="trace-timeline-area">
+                  {#if activeReviewTimelineTab === 'reasoning'}
+                    {#if reasoningNodes.length === 0}
+                      <p class="tab-empty-msg">No reasoning milestones logged yet.</p>
+                    {:else}
+                      <ThinkingTimeline
+                        nodes={reasoningNodes}
+                        expandedNodeIndex={expandedReasoningNode}
+                        onToggleNode={(idx) => {
+                          expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
+                        }}
+                      />
+                    {/if}
+                  {:else}
+                    {#if activityNodes.length === 0}
+                      <p class="tab-empty-msg">No activity events logged.</p>
+                    {:else}
+                      <ThinkingTimeline
+                        nodes={activityNodes}
+                        expandedNodeIndex={expandedActivityNode}
+                        onToggleNode={(idx) => {
+                          expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
+                        }}
+                      />
+                    {/if}
+                  {/if}
+                </div>
+              </div>
+            {/if}
 
           </div>
-        {/if}
-      </section>
+        </aside>
+      {/if}
 
     </div>
   {/if}
 
-  {#if notice}<div class="notice success">{notice}</div>{/if}
-  {#if error && queue.length > 0}<div class="notice error">{error}</div>{/if}
-</main>
+  {#if notice}<div class="toast-notice success">{notice}</div>{/if}
+  {#if error && queue.length > 0}<div class="toast-notice error">{error}</div>{/if}
+</div>
 
 <style>
   /* ================================================================
-     BASE LAYOUT & CONTAINER
+     CANVAS REVIEW ROOT CONTAINER (FULL HEIGHT 100%)
      ================================================================ */
-  .review-main {
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: 24px 28px 80px;
+  .canvas-review-root {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    height: 100%;
+    width: 100%;
+    background: var(--color-bone, #f6f5f1);
     font-family: var(--font-ui, system-ui, sans-serif);
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
   }
 
-  .review-main.embedded-container {
-    padding: 0;
-    max-width: 100%;
-    margin: 0;
-  }
-
-  /* ── Standalone Mode Header ──────────────────────────────────── */
-  .review-header {
-    border-bottom: 1px solid var(--color-graphite-border);
+  /* Compact Top Bar for Standalone Mode */
+  .standalone-top-bar {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    gap: 20px;
-    padding-bottom: 16px;
+    align-items: center;
+    padding: 8px 18px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-graphite-border);
+    flex-shrink: 0;
+    height: 42px;
+    box-sizing: border-box;
   }
 
-  .eyebrow {
-    color: var(--color-slate-muted);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.55px;
-    text-transform: uppercase;
-  }
-
-  .review-header h1 {
-    color: var(--color-heading);
-    font-family: var(--font-brand, "Newsreader", serif);
-    font-size: 26px;
-    margin: 4px 0 6px;
-  }
-
-  .review-header p {
-    color: var(--color-slate-light);
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0;
-    max-width: 740px;
-  }
-
-  .queue-count {
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    border: 1px solid rgba(2, 132, 199, 0.28);
-    border-radius: var(--radius-md, 8px);
+  .standalone-title {
     display: flex;
-    flex-direction: column;
-    padding: 8px 14px;
-    text-align: right;
+    align-items: center;
+    gap: 8px;
   }
 
-  .queue-count span {
-    color: var(--color-slate-muted);
-    font-size: 10px;
+  .standalone-title .eyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    color: var(--color-slate-muted);
   }
 
-  .queue-count strong {
-    color: var(--color-aurora-bright, #0369a1);
+  .standalone-title h2 {
+    font-size: 14px;
     font-family: var(--font-brand, serif);
-    font-size: 22px;
+    color: var(--color-heading);
+    margin: 0;
+  }
+
+  .standalone-meta {
+    font-size: 11.5px;
+    color: var(--color-slate-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .standalone-meta strong {
+    color: var(--color-horizon-bright, #d97706);
+    font-size: 13px;
   }
 
   /* ================================================================
-     REVIEW LAYOUT: ROSTER SIDEBAR + WORKSPACE
+     3-COLUMN CANVAS WORKSPACE GRID
+     [LEFT ROSTER: 260px] [CENTER HERO: 1fr] [RIGHT WORKBENCH: 380px]
      ================================================================ */
-  .review-layout {
+  .canvas-3col-workspace {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: 0;
-    align-items: stretch;
-    min-height: calc(100vh - 220px);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md, 8px);
-    background: var(--color-bone-surface, #fff);
+    grid-template-columns: 260px minmax(0, 1fr) 380px;
+    flex: 1;
+    height: calc(100% - 42px);
+    min-height: 0;
     overflow: hidden;
+    background: var(--color-bone, #f6f5f1);
   }
 
-  .review-layout.roster-hidden {
-    grid-template-columns: 44px minmax(0, 1fr);
+  .canvas-3col-workspace.roster-collapsed {
+    grid-template-columns: 42px minmax(0, 1fr) 380px;
   }
 
-  /* ── Left Sidebar: Student Roster ────────────────────────────── */
-  .roster-sidebar {
+  /* ── 1. LEFT SIDEBAR: Student Roster ─────────────────────────── */
+  .canvas-roster-sidebar {
     display: flex;
     flex-direction: column;
+    background: #ffffff;
     border-right: 1px solid var(--color-graphite-border);
-    background: var(--color-graphite, #f8f9f5);
-    height: calc(100vh - 220px);
+    height: 100%;
     overflow: hidden;
   }
 
@@ -1081,13 +1038,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--color-graphite-border);
+    padding: 8px 12px;
     background: var(--color-bone, #f6f5f1);
+    border-bottom: 1px solid var(--color-graphite-border);
+    flex-shrink: 0;
+    height: 38px;
+    box-sizing: border-box;
   }
 
   .roster-top-title {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
@@ -1097,83 +1057,84 @@
   .btn-collapse-sidebar {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
+    font-size: 12px;
+    padding: 1px 6px;
     cursor: pointer;
-    font-size: 13px;
-    padding: 2px 7px;
     color: var(--color-slate-muted);
-    transition: all 0.15s ease;
+    transition: all 0.12s;
   }
 
   .btn-collapse-sidebar:hover {
-    background: var(--color-graphite-hover, #eee);
+    background: #e2e8f0;
     color: var(--color-heading);
   }
 
-  /* Collapsed Roster Rail */
-  .roster-rail {
+  /* Collapsed Rail */
+  .canvas-roster-rail {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 14px 4px;
-    gap: 16px;
-    background: var(--color-graphite, #f8f9f5);
+    padding: 10px 4px;
+    gap: 14px;
+    background: #ffffff;
     border-right: 1px solid var(--color-graphite-border);
     cursor: pointer;
     transition: background 0.15s;
   }
 
-  .roster-rail:hover {
-    background: var(--color-bone-muted, #f4f5f0);
+  .canvas-roster-rail:hover {
+    background: var(--color-bone, #f6f5f1);
   }
 
   .btn-expand-rail {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
+    font-size: 12px;
+    padding: 3px 5px;
     cursor: pointer;
-    font-size: 13px;
-    padding: 4px 6px;
     color: var(--color-slate-muted);
   }
 
-  .rail-label {
+  .rail-vertical-text {
     writing-mode: vertical-rl;
     text-orientation: mixed;
     transform: rotate(180deg);
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     color: var(--color-slate-muted);
   }
 
-  .roster-header {
-    padding: 12px 14px 10px;
+  .roster-search-bar {
+    padding: 8px 10px;
     border-bottom: 1px solid var(--color-graphite-border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     flex-shrink: 0;
   }
 
-  .roster-search {
+  .roster-search-input {
     width: 100%;
-    padding: 7px 10px;
-    font-size: 12px;
+    padding: 5px 8px;
+    font-size: 11.5px;
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-sm, 6px);
-    background: var(--color-bone-surface, #fff);
+    background: #ffffff;
     color: var(--color-slate-bright);
-    font-family: var(--font-ui);
     box-sizing: border-box;
   }
 
-  .roster-search:focus {
+  .roster-search-input:focus {
     outline: none;
     border-color: var(--color-horizon-blue, #4f6bff);
   }
 
-  .roster-filters {
+  .roster-filter-pills {
     display: flex;
     gap: 4px;
-    margin-top: 8px;
     flex-wrap: wrap;
   }
 
@@ -1182,85 +1143,83 @@
     border: 1px solid var(--pill-border, rgba(0, 0, 0, 0.08));
     border-radius: 999px;
     color: var(--color-slate-muted);
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 2px 7px;
     cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: var(--font-ui);
+    transition: all 0.12s;
   }
 
   .filter-pill:hover {
-    background: var(--pill-hover, rgba(0, 0, 0, 0.07));
-    color: var(--color-slate-bright);
+    background: rgba(0, 0, 0, 0.08);
   }
 
   .filter-pill.active {
-    background: var(--pill-active-bg, rgba(217, 119, 6, 0.14));
-    border-color: var(--pill-active-border, rgba(217, 119, 6, 0.35));
-    color: var(--pill-active-color, #92400e);
+    background: rgba(217, 119, 6, 0.12);
+    border-color: rgba(217, 119, 6, 0.35);
+    color: #92400e;
   }
 
-  .roster-list {
+  .roster-scroll-list {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
 
   .roster-empty {
     color: var(--color-slate-muted);
-    font-size: 11.5px;
+    font-size: 11px;
     text-align: center;
-    padding: 24px 10px;
+    padding: 20px 8px;
     font-style: italic;
   }
 
-  .roster-card {
+  .roster-item-btn {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 11px;
-    background: var(--color-bone-surface, #fff);
+    gap: 8px;
+    padding: 7px 9px;
+    background: #ffffff;
     border: 1px solid var(--color-graphite-border);
     border-left: 3px solid transparent;
     border-radius: var(--radius-sm, 6px);
     cursor: pointer;
     text-align: left;
     width: 100%;
-    transition: all 0.15s ease;
-    font-family: var(--font-ui);
+    transition: all 0.12s ease;
     color: inherit;
+    font-family: inherit;
   }
 
-  .roster-card:hover {
+  .roster-item-btn:hover {
     border-left-color: var(--color-horizon-blue, #4f6bff);
-    background: var(--color-graphite-hover, #f1f2ed);
+    background: #f8fafc;
   }
 
-  .roster-card.active {
+  .roster-item-btn.active {
     border-left-color: var(--color-horizon-bright, #d97706);
-    background: var(--color-horizon-glow, rgba(217, 119, 6, 0.08));
-    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.15);
+    background: rgba(217, 119, 6, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.12);
   }
 
-  .roster-avatar {
-    width: 30px;
-    height: 30px;
+  .roster-avatar-mini {
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     background: linear-gradient(135deg, #4f6bff, #0ea5e9);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
     color: #fff;
     flex-shrink: 0;
   }
 
-  .roster-card-info {
+  .roster-item-info {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -1268,160 +1227,179 @@
     gap: 1px;
   }
 
-  .roster-name {
-    font-size: 12px;
+  .roster-item-id {
+    font-size: 11.5px;
     font-weight: 600;
     color: var(--color-heading);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .roster-assignment-tag {
-    font-size: 10px;
-    color: var(--color-slate-light);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .roster-time {
+  .roster-item-assignment {
     font-size: 9.5px;
+    color: var(--color-slate-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .roster-item-date {
+    font-size: 9px;
     color: var(--color-slate-muted);
   }
 
-  .roster-badge {
-    font-size: 9.5px;
-    font-weight: 600;
-    padding: 2px 6px;
+  .mini-status-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
     border-radius: 999px;
     flex-shrink: 0;
     white-space: nowrap;
   }
 
-  .roster-badge.submitted {
-    background: var(--color-signal-green-bg, #ecfdf5);
-    color: var(--color-signal-green-text, #065f46);
+  .mini-status-badge.submitted {
+    background: #ecfdf5;
+    color: #065f46;
     border: 1px solid rgba(5, 150, 105, 0.2);
   }
 
-  .roster-badge.completed {
+  .mini-status-badge.completed {
     background: #ecfdf5;
     color: #047857;
     border: 1px solid rgba(16, 185, 129, 0.25);
   }
 
-  .roster-badge.in-progress {
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    color: var(--color-aurora-bright, #0369a1);
+  .mini-status-badge.in-progress {
+    background: rgba(2, 132, 199, 0.1);
+    color: #0369a1;
     border: 1px solid rgba(2, 132, 199, 0.2);
   }
 
-  .roster-refresh {
+  .roster-refresh-btn {
     flex-shrink: 0;
-    padding: 8px;
-    font-size: 10.5px;
+    padding: 7px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--color-horizon-bright, #d97706);
     background: none;
     border: none;
     border-top: 1px solid var(--color-graphite-border);
     cursor: pointer;
-    font-family: var(--font-ui);
-    transition: background 0.15s;
+    transition: background 0.12s;
   }
 
-  .roster-refresh:hover {
-    background: var(--color-graphite-hover, #f1f2ed);
+  .roster-refresh-btn:hover {
+    background: var(--color-graphite-hover, #eee);
   }
 
-  /* ================================================================
-     DOSSIER PANE: MAIN WORKSPACE CONTAINER
-     ================================================================ */
-  .dossier-pane {
+  /* ── 2. CENTER STAGE: Student Deliverables Canvas (HERO) ─────── */
+  .canvas-document-hero {
     display: flex;
     flex-direction: column;
-    background: var(--color-bone-surface, #fff);
-    height: calc(100vh - 220px);
+    background: var(--color-bone, #f6f5f1);
+    border-right: 1px solid var(--color-graphite-border);
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
-    position: relative;
-    min-width: 0;
   }
 
-  /* ── Dossier Header Bar ──────────────────────────────────────── */
-  .dossier-header-bar {
+  /* Compact Hero Toolbar */
+  .document-hero-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 14px;
-    padding: 12px 18px;
-    background: var(--color-bone, #f6f5f1);
+    gap: 12px;
+    padding: 8px 18px;
+    background: #ffffff;
     border-bottom: 1px solid var(--color-graphite-border);
     flex-shrink: 0;
+    height: 48px;
+    box-sizing: border-box;
   }
 
-  .dossier-student-info {
+  .hero-student-meta {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
   }
 
-  .dossier-avatar {
-    width: 38px;
-    height: 38px;
+  .hero-avatar {
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     background: linear-gradient(135deg, #4f6bff, #3b82f6);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 11.5px;
     font-weight: 700;
     color: #fff;
     flex-shrink: 0;
   }
 
-  .dossier-title-line {
+  .hero-student-text {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    min-width: 0;
   }
 
-  .dossier-title-line h2 {
-    color: var(--color-heading);
-    font-size: 17px;
+  .hero-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hero-student-name {
+    font-size: 14px;
+    font-weight: 700;
     font-family: var(--font-brand, serif);
+    color: var(--color-heading);
     margin: 0;
     line-height: 1.2;
-  }
-
-  .dossier-sub {
-    color: var(--color-slate-muted);
-    font-size: 11px;
-    margin: 2px 0 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  .dossier-assignment-name {
-    color: var(--color-slate-light);
-    font-weight: 600;
+  .hero-timestamp-row {
+    font-size: 10px;
+    color: var(--color-slate-muted);
   }
 
-  /* Quick Flipper */
-  .quick-flipper {
+  .status-chip {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .status-chip.submitted,
+  .status-chip.completed {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+  }
+
+  .status-chip.in-progress {
+    background: rgba(2, 132, 199, 0.1);
+    color: #0369a1;
+    border: 1px solid rgba(2, 132, 199, 0.25);
+  }
+
+  /* Cohort Quick-Flipper */
+  .cohort-quick-flipper {
     display: flex;
     align-items: center;
-    gap: 6px;
-    background: var(--color-bone-surface, #fff);
+    gap: 4px;
+    background: var(--color-bone, #f6f5f1);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-sm, 6px);
-    padding: 3px 6px;
+    padding: 2px 5px;
     flex-shrink: 0;
   }
 
-  .flipper-btn {
+  .btn-flipper {
     background: transparent;
     border: none;
     font-size: 11px;
@@ -1433,882 +1411,805 @@
     transition: all 0.12s;
   }
 
-  .flipper-btn:hover:not(:disabled) {
-    background: var(--color-graphite-hover, #eee);
+  .btn-flipper:hover:not(:disabled) {
+    background: #ffffff;
     color: var(--color-heading);
   }
 
-  .flipper-btn:disabled {
+  .btn-flipper:disabled {
     opacity: 0.35;
     cursor: default;
   }
 
-  .flipper-counter {
-    font-size: 11px;
+  .flipper-index-label {
+    font-size: 10.5px;
     font-weight: 700;
     color: var(--color-slate-bright);
     padding: 0 4px;
     white-space: nowrap;
   }
 
-  /* Dossier Header Actions */
-  .dossier-header-actions {
+  /* Hero Actions */
+  .hero-toolbar-actions {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
   }
 
-  .work-view-selector {
+  .view-toggle-group {
     display: flex;
-    background: var(--color-bone-surface, #fff);
+    background: var(--color-bone, #f6f5f1);
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-sm, 6px);
     padding: 2px;
   }
 
-  .work-view-btn {
+  .btn-view-toggle {
     background: transparent;
     border: none;
-    padding: 4px 9px;
-    font-size: 11px;
+    padding: 3px 8px;
+    font-size: 10.5px;
     font-weight: 600;
     border-radius: 4px;
     cursor: pointer;
     color: var(--color-slate-muted);
-    transition: all 0.15s;
-    font-family: var(--font-ui);
+    transition: all 0.12s;
   }
 
-  .work-view-btn:hover {
+  .btn-view-toggle:hover {
     color: var(--color-heading);
   }
 
-  .work-view-btn.active {
-    background: var(--color-horizon-blue, #4f6bff);
-    color: #fff;
+  .btn-view-toggle.active {
+    background: #4f6bff;
+    color: #ffffff;
   }
 
-  .btn-download-pdf {
+  .btn-download-pdf-compact {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 5px 10px;
+    padding: 4px 8px;
     border-radius: var(--radius-sm, 6px);
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
     color: #1d4ed8;
     background: #eff6ff;
     border: 1px solid #bfdbfe;
     text-decoration: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.12s;
   }
 
-  .btn-download-pdf:hover {
+  .btn-download-pdf-compact:hover {
     background: #dbeafe;
-    color: #1e40af;
   }
 
-  .status-badge {
-    padding: 3px 8px;
-    border-radius: 999px;
-    font-size: 10.5px;
-    font-weight: 700;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  .status-badge.submitted,
-  .status-badge.completed {
-    background: var(--color-signal-green-bg, #ecfdf5);
-    color: var(--color-signal-green-text, #065f46);
-    border: 1px solid rgba(5, 150, 105, 0.25);
-  }
-
-  .status-badge.in-progress {
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    color: var(--color-aurora-bright, #0369a1);
-    border: 1px solid rgba(2, 132, 199, 0.25);
-  }
-
-  /* ================================================================
-     EVALUATION SPLIT WORKSPACE: LEFT (DOC) + RIGHT (WORKBENCH)
-     ================================================================ */
-  .eval-dual-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  /* ── LEFT PANE: Academic Deliverables Reader ─────────────────── */
-  .eval-document-pane {
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--color-graphite-border);
-    background: var(--color-bone, #f6f5f1);
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .pane-header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 18px;
-    background: #ffffff;
-    border-bottom: 1px solid var(--color-graphite-border);
-    flex-shrink: 0;
-  }
-
-  .pane-title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .pane-icon {
-    font-size: 14px;
-  }
-
-  .pane-title {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--color-heading);
-    letter-spacing: 0.2px;
-  }
-
-  .pane-meta-badge {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: var(--color-slate-muted);
-    background: var(--color-bone, #f6f5f1);
-    padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--color-graphite-border);
-  }
-
-  .document-scroll-viewport {
+  /* Document Scroll Viewport */
+  .document-center-viewport {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 24px 60px;
-  }
-
-  /* Academic Document Cards */
-  .academic-document-body {
+    padding: 24px 28px 80px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    max-width: 820px;
-    margin: 0 auto;
+    align-items: center;
   }
 
-  .academic-section-card {
+  /* The Academic Paper Sheet (Center Stage Hero) */
+  .academic-paper-sheet {
     background: #ffffff;
+    width: 100%;
+    max-width: 820px;
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md, 8px);
-    padding: 20px 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
+    padding: 32px 38px 48px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 24px;
   }
 
-  .academic-section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--color-graphite-border);
-    padding-bottom: 10px;
+  .sheet-title-header {
+    border-bottom: 2px solid var(--color-bone, #f6f5f1);
+    padding-bottom: 14px;
   }
 
-  .academic-section-title-wrap {
+  .sheet-main-heading {
+    font-family: var(--font-brand, "Newsreader", serif);
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--color-heading);
+    margin: 0 0 6px;
+    line-height: 1.3;
+  }
+
+  .sheet-meta-line {
+    font-size: 11.5px;
+    color: var(--color-slate-muted);
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .section-number-pill {
-    width: 22px;
-    height: 22px;
+  .sheet-dot {
+    color: var(--color-graphite-border);
+  }
+
+  .paper-sections-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .paper-section-block {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--color-bone, #f6f5f1);
+  }
+
+  .paper-section-block:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .section-heading-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .section-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-idx-badge {
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: var(--color-bone, #f6f5f1);
     border: 1px solid var(--color-graphite-border);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--color-slate-light);
   }
 
-  .academic-section-title {
-    font-size: 15px;
+  .section-title-text {
     font-family: var(--font-brand, serif);
+    font-size: 16px;
     font-weight: 700;
     color: var(--color-heading);
     margin: 0;
     text-transform: capitalize;
   }
 
-  .revision-tag {
-    font-size: 10px;
+  .revision-pill {
+    font-size: 9.5px;
     color: var(--color-slate-muted);
-    background: var(--pill-bg, rgba(0, 0, 0, 0.04));
-    padding: 2px 7px;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 1px 6px;
     border-radius: 4px;
     border: 1px solid var(--color-graphite-border);
   }
 
-  .academic-prompt-box {
+  .paper-prompt-callout {
     background: #fdfbf7;
     border-left: 3px solid #d97706;
     padding: 8px 12px;
-    border-radius: 0 var(--radius-xs, 4px) var(--radius-xs, 4px) 0;
-    font-size: 12px;
+    border-radius: 0 4px 4px 0;
+    margin: 0;
   }
 
-  .prompt-label {
-    font-size: 10px;
+  .prompt-eyebrow {
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
     color: #b45309;
     display: block;
     margin-bottom: 2px;
   }
 
-  .prompt-text {
+  .paper-prompt-callout p {
     margin: 0;
+    font-size: 12px;
     color: var(--color-slate-light);
     font-style: italic;
     line-height: 1.45;
   }
 
-  .academic-text-content {
+  .paper-body-text {
     font-size: 13.5px;
-    line-height: 1.68;
+    line-height: 1.7;
     color: #1e293b;
     white-space: pre-wrap;
     background: #fafaf8;
-    border: 1px solid #eceae2;
-    border-radius: var(--radius-xs, 4px);
+    border: 1px solid #eeebe2;
+    border-radius: 4px;
     padding: 14px 16px;
   }
 
-  .work-empty-text {
+  .paper-body-empty {
     font-size: 12px;
     color: var(--color-slate-muted);
     font-style: italic;
-    padding: 10px 0;
+    padding: 8px 0;
   }
 
-  .academic-sources-box {
+  .paper-sources-footer {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-top: 1px dashed var(--color-graphite-border);
-    padding-top: 8px;
+    padding-top: 4px;
   }
 
-  .sources-label {
-    font-size: 10px;
+  .sources-eyebrow {
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.3px;
     color: var(--color-slate-muted);
   }
 
-  .sources-pills-list {
+  .sources-tags-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .source-tag {
-    font-size: 10.5px;
+  .paper-source-chip {
+    font-size: 10px;
     color: #0369a1;
     background: #f0f9ff;
     border: 1px solid #bae6fd;
-    padding: 3px 8px;
+    padding: 2px 7px;
     border-radius: 4px;
   }
 
-  .academic-empty-state {
+  .paper-empty-notice {
     text-align: center;
     color: var(--color-slate-muted);
-    padding: 60px 20px;
+    padding: 48px 16px;
     font-style: italic;
     font-size: 13px;
   }
 
-  /* PDF Reader in Left Pane */
-  .pdf-reader-card {
-    display: flex;
-    flex-direction: column;
+  /* PDF Reader in Center Stage */
+  .pdf-document-container {
+    width: 100%;
+    max-width: 860px;
     background: #ffffff;
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-md, 8px);
     overflow: hidden;
   }
 
-  .pdf-reader-toolbar {
+  .pdf-container-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 14px;
+    padding: 8px 14px;
     background: #f8fafc;
     border-bottom: 1px solid var(--color-graphite-border);
   }
 
-  .pdf-reader-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
+  .pdf-badge {
+    font-size: 11.5px;
+    font-weight: 600;
     color: var(--color-heading);
   }
 
-  .pdf-reader-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .btn-action-ghost {
+  .btn-open-tab {
     font-size: 11px;
     font-weight: 600;
-    color: var(--color-horizon-blue, #2563eb);
+    color: #2563eb;
     text-decoration: none;
-    padding: 3px 7px;
+    padding: 2px 6px;
     border-radius: 4px;
-    border: 1px solid #bfdbfe;
     background: #eff6ff;
+    border: 1px solid #bfdbfe;
   }
 
-  .btn-action-ghost:hover {
-    background: #dbeafe;
-  }
-
-  .pdf-render-viewport {
-    height: 700px;
+  .pdf-embed-box {
+    height: 720px;
     min-height: 520px;
     background: #0f172a;
     position: relative;
   }
 
-  /* ── RIGHT PANE: Evaluator Workbench ──────────────────────────── */
-  .eval-workbench-pane {
+  /* Empty Hero */
+  .hero-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--color-slate-muted);
+  }
+
+  .empty-hero-icon { font-size: 40px; margin-bottom: 8px; }
+  .hero-empty-state h3 { font-size: 16px; color: var(--color-heading); margin: 0 0 6px; }
+  .hero-empty-state p { max-width: 360px; font-size: 12.5px; margin: 0; line-height: 1.5; }
+
+  /* ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ────────────── */
+  .canvas-workbench-gutter {
     display: flex;
     flex-direction: column;
     background: #ffffff;
+    height: 100%;
     min-height: 0;
     overflow: hidden;
   }
 
-  /* Sticky Workbench Header: Sovereign Finalization / Status */
-  .workbench-action-header {
+  /* Pinned Finalization Bar */
+  .gutter-finalization-bar {
+    padding: 8px 12px;
     background: var(--color-bone, #f6f5f1);
     border-bottom: 1px solid var(--color-graphite-border);
-    padding: 12px 16px;
     flex-shrink: 0;
   }
 
-  .grade-action-form {
+  .gutter-grade-form {
     display: flex;
     flex-direction: column;
+    gap: 6px;
+  }
+
+  .grade-input-group {
+    display: flex;
     gap: 8px;
   }
 
-  .grade-inputs-row {
-    display: flex;
-    gap: 10px;
-  }
-
-  .grade-input-label {
-    flex: 0 0 85px;
+  .field-label-mini {
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
 
-  .feedback-input-label {
+  .field-label-mini.feedback-flex {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
     min-width: 0;
   }
 
-  .grade-input-label span,
-  .feedback-input-label span {
-    font-size: 9.5px;
+  .field-label-mini span {
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.3px;
     color: var(--color-slate-muted);
   }
 
-  .grade-input,
-  .feedback-input {
-    padding: 6px 9px;
-    font-size: 12px;
+  .input-grade-compact {
+    width: 68px;
+    padding: 4px 7px;
+    font-size: 11.5px;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
     background: #ffffff;
     color: var(--color-slate-bright);
-    font-family: var(--font-ui);
+    box-sizing: border-box;
   }
 
-  .grade-input:focus,
-  .feedback-input:focus {
-    outline: none;
-    border-color: var(--color-horizon-blue, #4f6bff);
-  }
-
-  .grade-finalize-btn {
-    padding: 7px 12px;
+  .input-feedback-compact {
+    width: 100%;
+    padding: 4px 7px;
     font-size: 11.5px;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--color-slate-bright);
+    box-sizing: border-box;
+  }
+
+  .input-grade-compact:focus,
+  .input-feedback-compact:focus {
+    outline: none;
+    border-color: #4f6bff;
+  }
+
+  .btn-finalize-compact {
+    padding: 6px 10px;
+    font-size: 11px;
     font-weight: 700;
-    cursor: pointer;
     background: #059669;
-    color: #fff;
+    color: #ffffff;
     border: none;
-    border-radius: var(--radius-sm, 6px);
-    transition: background 0.15s;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s;
     width: 100%;
   }
 
-  .grade-finalize-btn:hover:not(:disabled) {
+  .btn-finalize-compact:hover:not(:disabled) {
     background: #047857;
   }
 
-  .grade-finalize-btn:disabled {
+  .btn-finalize-compact:disabled {
     opacity: 0.5;
     cursor: default;
   }
 
-  .status-banner {
+  .gutter-sealed-banner,
+  .gutter-draft-banner {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    border-radius: var(--radius-sm, 6px);
+    padding: 6px 10px;
+    border-radius: 4px;
     font-size: 11px;
   }
 
-  .status-banner.completed-banner {
+  .gutter-sealed-banner {
     background: #ecfdf5;
     border: 1px solid #a7f3d0;
   }
 
-  .status-banner.inprogress-banner {
+  .gutter-draft-banner {
     background: #f0f9ff;
     border: 1px solid #bae6fd;
   }
 
-  .banner-badge {
+  .sealed-check {
+    color: #059669;
     font-weight: 700;
-    color: #065f46;
-    white-space: nowrap;
   }
 
-  .inprogress-banner .banner-badge {
+  .draft-dot {
     color: #0369a1;
   }
 
-  .banner-text {
+  .sealed-text,
+  .draft-text {
     flex: 1;
-    color: var(--color-slate-light);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
-  .btn-banner-link {
+  .sealed-text strong,
+  .draft-text strong {
     font-size: 11px;
+    color: var(--color-heading);
+  }
+
+  .sealed-text small,
+  .draft-text small {
+    font-size: 9.5px;
+    color: var(--color-slate-muted);
+  }
+
+  .btn-sealed-pdf,
+  .btn-recorder-link {
+    font-size: 10.5px;
     font-weight: 600;
     color: inherit;
     text-decoration: underline;
-    white-space: nowrap;
   }
 
-  /* Workbench Tabs Bar */
-  .eval-tabs-bar {
+  /* Gutter Tabs Bar */
+  .gutter-tabs-bar {
     display: flex;
     border-bottom: 1px solid var(--color-graphite-border);
     background: #ffffff;
     flex-shrink: 0;
-    overflow-x: auto;
   }
 
-  .eval-tab-btn {
+  .gutter-tab-btn {
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 10px 14px;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 6px;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--color-slate-muted);
     cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s ease;
-    font-family: var(--font-ui);
+    transition: all 0.12s;
+    font-family: inherit;
   }
 
-  .eval-tab-btn:hover {
+  .gutter-tab-btn:hover {
+    background: var(--color-bone, #f6f5f1);
     color: var(--color-heading);
-    background: var(--color-bone-muted, #f4f5f0);
   }
 
-  .eval-tab-btn.active {
+  .gutter-tab-btn.active {
     color: #0f172a;
-    border-bottom-color: var(--color-horizon-blue, #4f6bff);
+    border-bottom-color: #4f6bff;
+    font-weight: 700;
     background: #ffffff;
-    font-weight: 700;
   }
 
-  .tab-icon {
-    font-size: 13px;
-  }
-
-  .tab-count-pill {
-    font-size: 10px;
-    font-weight: 700;
+  .gutter-tab-count {
+    font-size: 9.5px;
     background: var(--color-bone, #f6f5f1);
     color: var(--color-slate-muted);
-    padding: 1px 6px;
+    padding: 1px 5px;
     border-radius: 999px;
     border: 1px solid var(--color-graphite-border);
   }
 
-  .tab-count-pill.highlight {
+  .gutter-tab-count.alert {
     background: #fef3c7;
     color: #92400e;
     border-color: #fde68a;
   }
 
-  /* Tab Viewport */
-  .eval-tab-viewport {
+  /* Gutter Tab Viewport (Independently Scrolling) */
+  .gutter-tab-viewport {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 18px 40px;
+    padding: 12px 14px 40px;
   }
 
-  .tab-empty {
+  .tab-empty-msg {
     color: var(--color-slate-muted);
-    font-size: 12px;
-    font-style: italic;
-    padding: 24px 0;
-    text-align: center;
-  }
-
-  /* ── Tab 1: Rubric Assessment Styles ─────────────────────────── */
-  .rubric-summary-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--color-graphite-border);
-    margin-bottom: 12px;
-  }
-
-  .rubric-summary-title {
     font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--color-heading);
+    font-style: italic;
+    text-align: center;
+    padding: 24px 0;
   }
 
-  .rubric-summary-note {
-    font-size: 10.5px;
-    color: var(--color-slate-muted);
-  }
-
-  .criteria-list {
+  /* Rubric Matrix */
+  .rubric-matrix-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
-  .criterion-card {
+  .criterion-chip-card {
     background: #fafaf8;
     border: 1px solid var(--color-graphite-border);
     border-left: 3px solid #d97706;
-    border-radius: var(--radius-sm, 6px);
-    padding: 12px 14px;
+    border-radius: 4px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
-  .criterion-card.met {
+  .criterion-chip-card.met {
     border-left-color: #059669;
     background: #ffffff;
   }
 
-  .criterion-header {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .criterion-badge-row {
+  .criterion-chip-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
 
-  .criterion-status-tag {
-    font-size: 10px;
+  .criterion-tag {
+    font-size: 9px;
     font-weight: 700;
-    color: #92400e;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    color: #92400e;
   }
 
-  .criterion-status-tag.met {
+  .criterion-tag.met {
     color: #047857;
   }
 
-  .criterion-confidence {
-    font-size: 10px;
-    font-weight: 600;
+  .criterion-conf-pill {
+    font-size: 9.5px;
     color: var(--color-slate-muted);
+    font-weight: 600;
   }
 
-  .criterion-title {
-    font-size: 13px;
+  .criterion-label {
+    font-size: 12px;
     color: var(--color-heading);
   }
 
-  .criterion-desc {
+  .criterion-explanation-text {
+    font-size: 11px;
     color: var(--color-slate-light);
-    font-size: 12px;
     margin: 0;
-    line-height: 1.45;
+    line-height: 1.4;
   }
 
-  .criterion-quote-box {
-    margin-top: 4px;
+  .criterion-quote-block {
     background: #f4f5f0;
-    border-radius: var(--radius-xs, 4px);
-    padding: 8px 10px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin-top: 2px;
   }
 
-  .quote-label {
-    font-size: 9.5px;
+  .quote-header {
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
     color: var(--color-slate-muted);
     display: block;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
   }
 
-  .criterion-quote {
-    color: var(--color-slate-bright);
-    font-size: 11.5px;
+  .quote-text {
+    font-size: 11px;
     font-family: var(--font-mono, monospace);
-    line-height: 1.45;
+    color: var(--color-slate-bright);
+    line-height: 1.4;
   }
 
-  .criterion-explanation {
+  .criterion-note {
+    font-size: 10px;
     color: var(--color-slate-muted);
-    font-size: 10.5px;
-    display: block;
-    margin-top: 2px;
     font-style: italic;
+    display: block;
   }
 
-  /* ── Tab 2: Misconceptions & Cognitive Traps ─────────────────── */
-  .traps-unscanned-box,
-  .traps-clear-box {
+  /* Traps Inspector */
+  .trap-scan-prompt,
+  .trap-clean-prompt {
     text-align: center;
-    padding: 32px 18px;
+    padding: 24px 14px;
     background: #fafaf8;
     border: 1px dashed var(--color-graphite-border);
     border-radius: var(--radius-md, 8px);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
-  .traps-unscanned-icon {
-    font-size: 32px;
-  }
-
-  .clear-check {
-    width: 34px;
-    height: 34px;
+  .trap-scan-icon { font-size: 28px; }
+  .clean-check-icon {
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: #ecfdf5;
     color: #059669;
-    font-size: 18px;
+    font-size: 15px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
   }
 
-  .traps-unscanned-box h4,
-  .traps-clear-box h4 {
+  .trap-scan-prompt h4,
+  .trap-clean-prompt h4 {
     margin: 0;
-    font-size: 15px;
+    font-size: 13.5px;
     color: var(--color-heading);
   }
 
-  .trap-intro {
-    font-size: 12px;
-    color: var(--color-slate-light);
-    line-height: 1.5;
-    max-width: 400px;
-    margin: 0;
-  }
-
-  .trap-clear-note {
-    font-size: 12px;
+  .trap-scan-desc,
+  .clean-desc {
+    font-size: 11.5px;
     color: var(--color-slate-light);
     margin: 0;
+    line-height: 1.45;
   }
 
-  .trap-note {
-    font-size: 11px;
-    color: var(--color-slate-muted);
-    margin: 4px 0 0;
-  }
-
-  .trap-error {
-    font-size: 12px;
-    color: #b91c1c;
-    margin-top: 10px;
-  }
-
-  .trap-scan-btn {
-    padding: 8px 16px;
-    font-size: 12px;
+  .btn-trigger-scan {
+    padding: 7px 14px;
+    font-size: 11.5px;
     font-weight: 700;
     color: #ffffff;
     background: #0b4a4f;
     border: none;
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
     cursor: pointer;
-    margin-top: 6px;
-    transition: background 0.15s;
+    margin-top: 4px;
   }
 
-  .trap-scan-btn:hover:not(:disabled) {
-    background: #083337;
+  .btn-trigger-scan:disabled { opacity: 0.55; cursor: default; }
+
+  .scan-running-note {
+    font-size: 10.5px;
+    color: var(--color-slate-muted);
+    margin: 2px 0 0;
   }
 
-  .trap-scan-btn:disabled,
-  .trap-rescan-btn:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
-  .trap-rescan-btn {
-    padding: 6px 12px;
-    font-size: 11px;
+  .btn-rescan-ghost {
+    padding: 4px 10px;
+    font-size: 10.5px;
     font-weight: 600;
     background: transparent;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
     cursor: pointer;
-    margin-top: 8px;
     color: var(--color-slate-light);
+    margin-top: 4px;
   }
 
-  .traps-findings-header {
+  .traps-results-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 8px;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--color-graphite-border);
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
-  .traps-found-count {
-    font-size: 12px;
+  .traps-count-label {
+    font-size: 11px;
     font-weight: 700;
     color: #b45309;
   }
 
-  .trap-rescan-btn-inline {
+  .btn-rescan-mini {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
     border-radius: 4px;
-    font-size: 10.5px;
-    padding: 2px 7px;
+    font-size: 10px;
+    padding: 2px 6px;
     cursor: pointer;
     color: var(--color-slate-muted);
   }
 
-  .traps-list {
+  .traps-cards-flow {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
-  .trap-card {
+  .trap-item-card {
     border: 1px solid rgba(216, 154, 58, 0.4);
     border-left: 3px solid #d97706;
-    border-radius: var(--radius-sm, 6px);
-    padding: 12px 14px;
+    border-radius: 4px;
+    padding: 10px 12px;
     background: #fffdfa;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
   }
 
-  .trap-head {
+  .trap-item-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
-  .trap-title {
-    font-size: 13.5px;
+  .trap-item-name {
+    font-size: 12.5px;
     color: #92400e;
   }
 
-  .trap-method {
-    font-size: 9.5px;
-    letter-spacing: 0.05em;
+  .trap-item-badge {
+    font-size: 9px;
     text-transform: uppercase;
-    padding: 2px 7px;
+    padding: 1px 6px;
     border-radius: 999px;
     background: rgba(216, 154, 58, 0.18);
     color: #8c6212;
     font-weight: 700;
   }
 
-  .trap-method.weak {
+  .trap-item-badge.weak {
     background: rgba(148, 163, 184, 0.2);
     color: #64748b;
   }
 
-  .trap-rule {
+  .trap-flawed-rule {
     margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
+    font-size: 11.5px;
+    line-height: 1.4;
     color: var(--color-heading);
   }
 
-  .trap-quote-wrap {
+  .trap-quote-box {
     background: rgba(216, 154, 58, 0.08);
     border-left: 2px solid #d97706;
-    padding: 6px 10px;
+    padding: 5px 8px;
     border-radius: 0 4px 4px 0;
-    margin: 2px 0;
   }
 
-  .trap-quote-label {
-    font-size: 9.5px;
+  .quote-eyebrow {
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     color: #b45309;
@@ -2316,46 +2217,44 @@
     margin-bottom: 2px;
   }
 
-  .trap-quote {
+  .trap-quote-text {
     margin: 0;
-    font-size: 12px;
+    font-size: 11.5px;
     font-style: italic;
     color: #1e293b;
-    line-height: 1.45;
+    line-height: 1.4;
   }
 
-  .trap-why {
+  .trap-why-text {
     margin: 0;
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--color-slate-light);
-    line-height: 1.45;
+    line-height: 1.4;
   }
 
-  .trap-refer {
-    margin: 0;
-    font-size: 11.5px;
+  .trap-remediation-line {
+    font-size: 11px;
     color: var(--color-slate-light);
   }
 
-  .trap-refer-label {
+  .remed-label {
     font-weight: 700;
     color: #0b4a4f;
+    font-size: 9px;
     text-transform: uppercase;
-    font-size: 9.5px;
   }
 
-  .trap-actions {
+  .trap-card-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
     margin-top: 4px;
-    flex-wrap: wrap;
   }
 
-  .trap-draft-btn {
-    font-size: 11px;
+  .btn-draft-note {
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 5px 10px;
+    padding: 4px 8px;
     border-radius: 4px;
     border: 1px solid #0b4a4f;
     background: #0b4a4f;
@@ -2363,52 +2262,52 @@
     cursor: pointer;
   }
 
-  .trap-graph-link {
-    font-size: 11px;
+  .trap-concept-link {
+    font-size: 10.5px;
     color: #0b4a4f;
     text-decoration: none;
     border-bottom: 1px solid currentColor;
   }
 
-  .trap-draft {
-    margin-top: 10px;
-    padding-top: 10px;
+  .inline-socratic-draft {
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px dashed rgba(148, 163, 184, 0.45);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
 
-  .trap-draft-label {
-    font-size: 9.5px;
+  .draft-field-label {
+    font-size: 9px;
     text-transform: uppercase;
     font-weight: 700;
     color: var(--color-slate-muted);
   }
 
-  .trap-draft-subject,
-  .trap-draft-body {
+  .draft-subject-input,
+  .draft-body-input {
     width: 100%;
     font: inherit;
-    font-size: 12px;
-    line-height: 1.45;
-    padding: 7px 9px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    padding: 5px 7px;
     border-radius: 4px;
     border: 1px solid var(--color-graphite-border);
-    background: #fff;
+    background: #ffffff;
     box-sizing: border-box;
   }
 
-  .trap-draft-actions {
+  .draft-action-btns {
     display: flex;
-    gap: 6px;
-    margin-top: 6px;
+    gap: 4px;
+    margin-top: 4px;
   }
 
-  .trap-send {
-    font-size: 11px;
+  .btn-mail {
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 5px 10px;
+    padding: 4px 8px;
     background: #0b4a4f;
     color: #fff;
     border: none;
@@ -2416,10 +2315,10 @@
     cursor: pointer;
   }
 
-  .trap-copy,
-  .trap-cancel {
-    font-size: 11px;
-    padding: 5px 10px;
+  .btn-copy,
+  .btn-close {
+    font-size: 10.5px;
+    padding: 4px 8px;
     background: transparent;
     border: 1px solid var(--color-graphite-border);
     border-radius: 4px;
@@ -2427,194 +2326,141 @@
     color: var(--color-slate-light);
   }
 
-  /* ── Tab 3: Reasoning & Engagement Trace ─────────────────────── */
-  .reasoning-subnav {
+  .trap-scan-error {
+    font-size: 11.5px;
+    color: #b91c1c;
+    margin-top: 8px;
+  }
+
+  /* Trace Inspector */
+  .trace-sub-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 10px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--color-graphite-border);
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-    gap: 8px;
+    margin-bottom: 10px;
+    gap: 6px;
   }
 
-  .reasoning-pills {
+  .trace-toggle-buttons {
     display: flex;
     gap: 4px;
   }
 
-  .acc-tab-btn {
+  .btn-trace-sub {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: 4px;
     color: var(--color-slate-muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 3px 6px;
     cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px 8px;
-    transition: all 0.15s ease;
-    font-family: var(--font-ui);
   }
 
-  .acc-tab-btn:hover {
-    color: var(--color-heading);
-    border-color: var(--color-horizon-blue, #4f6bff);
+  .btn-trace-sub.active {
+    background: rgba(217, 119, 6, 0.12);
+    border-color: rgba(217, 119, 6, 0.35);
+    color: #92400e;
   }
 
-  .acc-tab-btn.active {
-    background: var(--pill-active-bg, rgba(217, 119, 6, 0.14));
-    border-color: var(--pill-active-border, rgba(217, 119, 6, 0.35));
-    color: var(--pill-active-color, #92400e);
-  }
-
-  .acc-flight-link {
-    background: var(--color-signal-green-bg, #ecfdf5);
+  .btn-flight-recorder {
+    background: #ecfdf5;
     border: 1px solid rgba(5, 150, 105, 0.25);
-    border-radius: var(--radius-sm, 6px);
-    color: var(--color-signal-green-text, #065f46);
-    font-size: 11px;
+    border-radius: 4px;
+    color: #065f46;
+    font-size: 10.5px;
     font-weight: 600;
-    padding: 4px 8px;
+    padding: 3px 6px;
     text-decoration: none;
-    transition: all 0.15s ease;
   }
 
-  .acc-flight-link:hover {
-    background: rgba(5, 150, 105, 0.12);
-  }
-
-  .timeline-container {
-    padding-top: 4px;
-  }
-
-  /* ── Shared Utilities & Empty States ─────────────────────────── */
-  .empty-dossier {
-    color: var(--color-slate-muted);
-    font-size: 12.5px;
-    line-height: 1.6;
-    padding: 60px 24px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    margin: auto;
-  }
-
-  .empty-icon {
-    font-size: 40px;
-  }
-
-  .empty-dossier strong {
-    color: var(--color-heading);
-    font-size: 15px;
-  }
-
-  .empty-dossier p {
-    max-width: 380px;
-    margin: 0;
-  }
-
-  .load-error {
-    align-items: center;
-    background: #fef2f2;
-    border: 1px solid rgba(220, 38, 38, 0.2);
-    border-radius: var(--radius-lg, 12px);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-height: 250px;
-    justify-content: center;
-    text-align: center;
-  }
-
-  .load-error strong { color: #991b1b; }
-  .load-error p { color: var(--color-slate-light); font-size: 12px; margin: 0; max-width: 540px; }
-
-  .notice {
-    border-radius: var(--radius-sm, 6px);
-    font-size: 12px;
-    padding: 10px 14px;
-  }
-
-  .notice.success {
-    background: var(--color-signal-green-bg, #ecfdf5);
-    border: 1px solid rgba(5, 150, 105, 0.2);
-    color: var(--color-signal-green-text, #065f46);
-  }
-
-  .notice.error {
-    background: #fef2f2;
-    border: 1px solid rgba(220, 38, 38, 0.2);
-    color: #991b1b;
-  }
-
+  /* Shared Load / Error / Notice States */
   .loading {
-    align-items: center;
-    color: var(--color-slate-light);
     display: flex;
-    gap: 12px;
+    align-items: center;
     justify-content: center;
-    min-height: 280px;
+    gap: 10px;
+    color: var(--color-slate-light);
+    height: 100%;
+    min-height: 200px;
   }
-
-  .loading.small { min-height: 380px; }
 
   .spinner {
     animation: spin 0.8s linear infinite;
     border: 3px solid rgba(217, 119, 6, 0.2);
     border-radius: 50%;
-    border-top-color: var(--color-horizon-bright, #d97706);
-    height: 24px;
-    width: 24px;
+    border-top-color: #d97706;
+    height: 22px;
+    width: 22px;
   }
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Responsive Behavior ─────────────────────────────────────── */
-  @media (max-width: 1100px) {
-    .eval-dual-workspace {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-      overflow-y: auto;
-    }
+  .load-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #fef2f2;
+    border: 1px solid rgba(220, 38, 38, 0.2);
+    border-radius: var(--radius-md, 8px);
+    padding: 24px;
+    margin: 20px;
+    text-align: center;
+  }
 
-    .eval-document-pane {
-      border-right: none;
-      border-bottom: 1px solid var(--color-graphite-border);
-      height: 480px;
-    }
+  .load-error strong { color: #991b1b; }
+  .load-error p { color: var(--color-slate-light); font-size: 12px; margin: 0; }
 
-    .eval-workbench-pane {
-      height: 520px;
+  .toast-notice {
+    position: absolute;
+    bottom: 16px;
+    right: 18px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    padding: 8px 12px;
+    z-index: 50;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .toast-notice.success {
+    background: #ecfdf5;
+    border: 1px solid rgba(5, 150, 105, 0.25);
+    color: #065f46;
+  }
+
+  .toast-notice.error {
+    background: #fef2f2;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    color: #991b1b;
+  }
+
+  /* ── Responsive adjustments ─────────────────────────────────── */
+  @media (max-width: 1200px) {
+    .canvas-3col-workspace {
+      grid-template-columns: 240px minmax(0, 1fr) 340px;
     }
   }
 
-  @media (max-width: 820px) {
-    .review-layout {
+  @media (max-width: 960px) {
+    .canvas-3col-workspace {
       grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      overflow-y: auto;
     }
 
-    .review-layout.roster-hidden {
-      grid-template-columns: 1fr;
-    }
-
-    .roster-sidebar {
-      height: auto;
-      max-height: 220px;
+    .canvas-roster-sidebar {
+      height: 200px;
       border-right: none;
       border-bottom: 1px solid var(--color-graphite-border);
     }
 
-    .dossier-header-bar {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
-    .quick-flipper {
-      align-self: flex-start;
+    .canvas-document-hero {
+      border-right: none;
+      border-bottom: 1px solid var(--color-graphite-border);
     }
   }
 </style>
