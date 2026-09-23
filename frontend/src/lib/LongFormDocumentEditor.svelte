@@ -2535,14 +2535,14 @@
 
   .truth-highlights-toggle:hover {
     background: var(--color-graphite-hover, #e8eae3);
-    border-color: var(--color-aurora, #0284c7);
+    border-color: var(--color-horizon-blue, #4F6BFF);
     color: var(--color-heading, #121418);
   }
 
   .truth-highlights-toggle.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+    background: var(--color-horizon-blue-soft, #EBF0FF);
+    border-color: rgba(79, 107, 255, 0.4);
+    color: var(--color-horizon-blue, #4F6BFF);
     box-shadow: none;
   }
 
@@ -2563,7 +2563,7 @@
   }
 
   .truth-highlights-toggle.active .truth-toggle-pip {
-    background: #2563eb;
+    background: var(--color-horizon-blue, #4F6BFF);
   }
 
   .truth-toggle-pill {
@@ -2578,8 +2578,8 @@
   }
 
   .truth-highlights-toggle.active .truth-toggle-pill {
-    background: #dbeafe;
-    color: #1e40af;
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
   }
 
   .epistemic-sentence-strip {
@@ -2822,7 +2822,7 @@
   }
 
   .page-footer-add-btn:hover {
-    color: #2563eb;
+    color: var(--color-horizon-blue, #4F6BFF);
   }
 
   .page-footer-pagination {
@@ -2876,7 +2876,7 @@
   }
 
   .page-mini-pill.active {
-    background: #2563eb;
+    background: var(--color-horizon-blue, #4F6BFF);
     color: #ffffff;
   }
 
@@ -2932,12 +2932,12 @@
   }
 
   .notion-editor-container :global(.notion-minimal-prosemirror blockquote) {
-    border-left: 3px solid #3b82f6;
+    border-left: 3px solid var(--color-horizon-blue, #4F6BFF);
     margin: 1.2em 0;
     padding: 8px 18px;
     color: var(--color-slate-light);
     font-style: italic;
-    background: rgba(59, 130, 246, 0.04);
+    background: var(--color-horizon-blue-soft, #EBF0FF);
     border-radius: 0 6px 6px 0;
   }
 
@@ -3121,8 +3121,8 @@
   }
 
   .outline-page-group.is-current-page {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+    border-color: var(--color-horizon-blue, #4F6BFF);
+    box-shadow: 0 0 0 1px var(--color-horizon-glow, rgba(79, 107, 255, 0.2));
   }
 
   .outline-page-item {
@@ -3266,9 +3266,9 @@
   }
 
   .outline-add-page-btn:hover:not(:disabled) {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+    background: var(--color-horizon-blue-soft, #EBF0FF);
+    border-color: var(--color-horizon-blue, #4F6BFF);
+    color: var(--color-horizon-blue, #4F6BFF);
   }
 
   .outline-toggle-btn {
@@ -3280,9 +3280,9 @@
   }
 
   .outline-toggle-btn.active {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+    background: var(--color-horizon-blue-soft, #EBF0FF);
+    border-color: var(--color-horizon-blue, #4F6BFF);
+    color: var(--color-horizon-blue, #4F6BFF);
   }
 
   .editor-main-pane {
@@ -3480,11 +3480,11 @@
     font-weight: 600;
   }
 
-  .epistemic-badge.claim { background: rgba(59, 130, 246, 0.12); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); }
-  .epistemic-badge.evidence { background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); }
-  .epistemic-badge.reasoning { background: rgba(139, 92, 246, 0.12); color: #7c3aed; border: 1px solid rgba(139, 92, 246, 0.25); }
-  .epistemic-badge.assumption { background: rgba(217, 119, 6, 0.12); color: #d97706; border: 1px solid rgba(217, 119, 6, 0.25); }
-  .epistemic-badge.premature_closure { background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.25); }
+  .epistemic-badge.claim { background: var(--color-horizon-blue-soft, #EBF0FF); color: var(--color-horizon-blue, #4F6BFF); border: 1px solid rgba(79, 107, 255, 0.25); }
+  .epistemic-badge.evidence { background: var(--color-signal-green-bg, #EBF7F0); color: var(--color-signal-green-text, #2D6340); border: 1px solid rgba(95, 175, 122, 0.25); }
+  .epistemic-badge.reasoning { background: var(--color-aurora-soft, #F1EDFF); color: var(--color-aurora, #7B61FF); border: 1px solid rgba(123, 97, 255, 0.25); }
+  .epistemic-badge.assumption { background: var(--color-amber-bg, #FDF6EC); color: var(--color-amber-text, #8C5B14); border: 1px solid rgba(216, 154, 58, 0.25); }
+  .epistemic-badge.premature_closure { background: var(--color-rose-bg, #FCEFEF); color: var(--color-rose-text, #822727); border: 1px solid rgba(183, 76, 76, 0.25); }
 
   .vulnerability-tag {
     font-size: 10px;
@@ -4232,6 +4232,6 @@
   }
 
   .footer-add-page-btn:hover {
-    color: #2563eb;
+    color: var(--color-horizon-blue, #4F6BFF);
   }
 </style>

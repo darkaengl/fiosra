@@ -535,20 +535,26 @@
 
   .assistant-launch {
     align-items: center;
-    background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(124,58,237,.15));
-    border: 1px solid rgba(96,165,250,.36);
+    background: var(--color-horizon-blue-soft, #EBF0FF);
+    border: 1px solid rgba(79, 107, 255, 0.3);
     border-radius: var(--radius-full);
-    color: var(--color-heading);
+    color: var(--color-horizon-blue, #4F6BFF);
     cursor: pointer;
     display: inline-flex;
     font-size: 11px;
     font-weight: 700;
     gap: 5px;
-    padding: 6px 10px;
+    padding: 6px 12px;
     white-space: nowrap;
+    transition: all 0.15s ease;
   }
-  .assistant-launch:hover { border-color: var(--color-horizon-bright); color: var(--color-horizon-bright); }
-  .assistant-spark { color: var(--color-horizon-bright); font-size: 13px; }
+  .assistant-launch:hover {
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
+    border-color: var(--color-horizon-bright, #3D5AFE);
+    box-shadow: 0 2px 6px var(--color-horizon-glow, rgba(79, 107, 255, 0.25));
+  }
+  .assistant-spark { font-size: 13px; }
 
   /* Theme Toggle */
   .theme-toggle-btn {
@@ -665,15 +671,15 @@
     gap: 7px;
     padding: 2px 8px 2px 3px;
     background: var(--user-chip-bg);
-    border: 1px solid rgba(45, 212, 191, 0.4);
+    border: 1px solid var(--border);
     border-radius: var(--radius-full);
     transition: all 0.15s ease;
     position: relative;
   }
 
   .student-switcher-chip:hover {
-    border-color: var(--color-teal);
-    background: rgba(45, 212, 191, 0.08);
+    border-color: var(--color-horizon-blue);
+    background: var(--color-horizon-blue-soft);
   }
 
   .student-select-wrap {
@@ -702,8 +708,8 @@
   }
 
   .student-header-select option {
-    background: var(--color-graphite-card, #1e293b);
-    color: var(--color-heading, #f8fafc);
+    background: var(--surface, #ffffff);
+    color: var(--color-heading, #111315);
     font-size: 12px;
     padding: 6px 10px;
   }
@@ -732,18 +738,18 @@
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #e5a93c, #c68a25);
+    background: var(--color-amber, #D89A3A);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 9.5px;
     font-weight: 700;
-    color: #121418;
+    color: #ffffff;
   }
 
   .user-avatar.student-avatar {
-    background: linear-gradient(135deg, #4eaa7a, #38bdf8);
-    color: #121418;
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
   }
 
   .user-name {
