@@ -4,6 +4,8 @@
   import './css/design-system.css';
   import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
   import AppHeader from './lib/AppHeader.svelte';
+  import FloatingFiosraEntry from './lib/FloatingFiosraEntry.svelte';
+  import InstitutionalFooter from './lib/InstitutionalFooter.svelte';
 
   import Modules from './routes/Modules.svelte';
   import Courses from './routes/Courses.svelte';
@@ -15,11 +17,31 @@
   import StudentTimeline from './routes/StudentTimeline.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
   import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
+  import Home from './routes/Home.svelte';
+  import StudentNow from './routes/StudentNow.svelte';
+  import { onMount } from 'svelte';
 
   let assistantOpen = $state(false);
+  let currentHash = $state(
+    typeof window !== 'undefined' ? window.location.hash.replace('#', '') || '/' : '/',
+  );
+
+  // The public landing page carries its own header, footer and full-bleed
+  // sections, so the application shell steps out of its way entirely.
+  let isLanding = $derived(currentHash.split('?')[0] === '/');
+  let isStudent = $derived(currentHash.startsWith('/student'));
+
+  onMount(() => {
+    currentHash = window.location.hash.replace('#', '') || '/';
+    const handleHashChange = () => {
+      currentHash = window.location.hash.replace('#', '') || '/';
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  });
 
   const routes = {
-    '/': Courses,
+    '/': Home,
     '/portfolio': Courses,
     '/courses': Courses,
     '/modules': Modules,
@@ -29,9 +51,10 @@
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
-    '/student/courses': StudentPortal,
-    '/student/home': StudentHome,
-    '/student/portal': StudentPortal,
+    '/student/courses': StudentNow,
+    '/student/home': StudentNow,
+    '/student/portal': StudentNow,
+    '/student/now': StudentNow,
     '/student/sources': StudentSources,
     '/student/timeline': StudentTimeline,
     '/student/trace': StudentTrace,
@@ -59,37 +82,33 @@
   });
 </script>
 
-<div class="app-root" class:zen-mode={isZenMode}>
-  {#if !isZenMode}
+<div class="min-h-screen bg-[var(--m-color-bone)] text-[var(--m-color-obsidian)] flex flex-col selection:bg-[var(--m-color-horizon-blue-soft)] selection:text-[var(--m-color-horizon-blue)]" class:zen-mode={isZenMode}>
+  {#if !isLanding && !isZenMode}
     <AppHeader />
   {/if}
-  <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
-    <div class="route-viewport">
+  <div class:assistant-open={assistantOpen && !isZenMode && !isLanding} class="app-body">
+    <div class="route-viewport flex-1 w-full {isLanding ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 py-8'}">
       <Router {routes} />
     </div>
-    {#if !isZenMode}
+    {#if !isZenMode && !isLanding}
       <AIDesignAssistant bind:open={assistantOpen} />
     {/if}
   </div>
+  {#if !isLanding && !isZenMode}
+    {#if isStudent}
+      <FloatingFiosraEntry />
+    {/if}
+    <InstitutionalFooter variant="application" />
+  {/if}
 </div>
 
 <style>
   :global(body) {
     margin: 0;
     padding: 0;
-    background-color: var(--color-obsidian);
-    color: var(--color-slate-bright);
-    font-family: var(--font-ui);
-    -webkit-font-smoothing: antialiased;
   }
 
-  .app-root {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
-
-  .app-root.zen-mode {
+  .zen-mode {
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
@@ -99,7 +118,6 @@
   .app-body.assistant-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 32vw); }
 
   .route-viewport {
-    flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;

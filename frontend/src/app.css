@@ -1,3 +1,94 @@
+@import "tailwindcss";
+@source "./";
+
+@theme {
+  /* Tailwind v4 theme configuration maps CSS variables automatically, but we can define explicit vars here if needed. 
+     Tailwind v4 handles all variables seamlessly. */
+}
+
+@layer base {
+  :root {
+    /* Fiosra Core Palette: Bone, Cloud, Slate, Obsidian, Graphite */
+    --m-color-bone: #F6F5F1;
+    --m-color-cloud: #E9E8E3;
+    --m-color-cloud-subtle: #F0EFEA;
+    --m-color-slate: #6D7378;
+    --m-color-slate-light: #8A9096;
+    --m-color-obsidian: #111315;
+    --m-color-graphite: #23272B;
+    --m-color-graphite-soft: #32373C;
+
+    /* Accents */
+    --m-color-horizon-blue: #4F6BFF;
+    --m-color-horizon-blue-soft: #EBF0FF;
+    --m-color-aurora: #7B61FF;
+    --m-color-aurora-soft: #F1EDFF;
+    --m-color-signal-green: #5FAF7A;
+    --m-color-signal-green-soft: #EBF7F0;
+    --m-color-amber: #D89A3A;
+    --m-color-amber-soft: #FDF6EC;
+    --m-color-deep-red: #B74C4C;
+    --m-color-deep-red-soft: #FCEFEF;
+
+    /* Semantic Theme Mappings (Default: Light Mode / Bone Base) */
+    --background: var(--m-color-bone);
+    --foreground: var(--m-color-obsidian);
+    --card: #FFFFFF;
+    --card-foreground: var(--m-color-obsidian);
+    --popover: #FFFFFF;
+    --popover-foreground: var(--m-color-obsidian);
+    --primary: var(--m-color-horizon-blue);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--m-color-cloud);
+    --secondary-foreground: var(--m-color-obsidian);
+    --muted: var(--m-color-cloud);
+    --muted-foreground: var(--m-color-slate);
+    --accent: var(--m-color-cloud-subtle);
+    --accent-foreground: var(--m-color-obsidian);
+    --destructive: var(--m-color-deep-red);
+    --destructive-foreground: #FFFFFF;
+    --border: #DDDCD5;
+    --input: #DDDCD5;
+    --ring: var(--m-color-horizon-blue);
+    --radius: 10px;
+  }
+
+  [data-theme="dark"] {
+    --background: var(--m-color-obsidian);
+    --foreground: var(--m-color-bone);
+    --card: var(--m-color-graphite);
+    --card-foreground: var(--m-color-bone);
+    --popover: var(--m-color-graphite);
+    --popover-foreground: var(--m-color-bone);
+    --primary: var(--m-color-horizon-blue);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--m-color-graphite-soft);
+    --secondary-foreground: var(--m-color-bone);
+    --muted: var(--m-color-graphite-soft);
+    --muted-foreground: var(--m-color-slate-light);
+    --accent: var(--m-color-graphite-soft);
+    --accent-foreground: var(--m-color-bone);
+    --destructive: var(--m-color-deep-red);
+    --destructive-foreground: #FFFFFF;
+    --border: #353B41;
+    --input: #353B41;
+    --ring: var(--m-color-horizon-blue);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
 #app {
   width: 100%;
   min-height: 100vh;
