@@ -146,8 +146,8 @@
       activeTab = 'modules';
     }
 
-    const logoHref = isStudentView ? '#/student/portal' : '#/courses';
-    const logoTitle = isStudentView ? 'Return to Student Courses' : 'Return to Course Portfolio';
+    const logoHref = '#/';
+    const logoTitle = 'Return to Fiosra Home';
     const isGlobalView = !isStudentView && activeTab === 'courses';
 
     return { path, courseId, courseQuery, activeTab, isStudentView, isStudentGlobal, isGlobalView, logoHref, logoTitle };

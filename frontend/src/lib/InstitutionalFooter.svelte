@@ -10,11 +10,13 @@
 <footer class="institutional-footer" class:public-variant={isPublic}>
   <div class="footer-container">
     <div class="footer-brand-side">
-      <img
-        src={FIOSRA_LOCKUP_URL}
-        alt="Fiosra · Learning in Motion"
-        class="footer-logo"
-      />
+      <a href="#/" class="footer-logo-link" title="Return to Fiosra Home">
+        <img
+          src={FIOSRA_LOCKUP_URL}
+          alt="Fiosra · Learning in Motion"
+          class="footer-logo"
+        />
+      </a>
       <p class="footer-tagline">
         Make the thinking between first draft and final work visible.
       </p>
