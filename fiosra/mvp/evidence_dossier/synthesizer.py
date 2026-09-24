@@ -72,9 +72,17 @@ class EvidenceDossierSynthesizer:
 
                 if ev_type == "student_prompt_submitted":
                     input_text = payload.get("student_input", "")
-                    attempts.append(
-                        {"text": input_text, "timestamp": created_at, "event_id": event_id}
-                    )
+                    if input_text:
+                        attempts.append(
+                            {"text": input_text, "timestamp": created_at, "event_id": event_id}
+                        )
+
+                elif ev_type == "canvas_section_saved":
+                    content = payload.get("plaintext") or payload.get("content") or ""
+                    if content:
+                        attempts.append(
+                            {"text": content, "timestamp": created_at, "event_id": event_id}
+                        )
 
                 elif ev_type == "hint_delivered":
                     hints_used += 1

@@ -816,6 +816,18 @@
             <!-- ── TAB 1: Rubric Assessment ── -->
             {#if activeEvalTab === "rubric"}
               <div class="rubric-inspector">
+                <!-- Bloom's Taxonomy Cognitive Hierarchy Strip -->
+                <div class="bloom-framework-strip">
+                  <span class="bloom-strip-label">Bloom's Taxonomy Framework</span>
+                  <div class="bloom-strip-pills">
+                    <span class="bloom-strip-pill l2">L2 Understand</span>
+                    <span class="bloom-strip-pill l3">L3 Apply</span>
+                    <span class="bloom-strip-pill l4">L4 Analyze</span>
+                    <span class="bloom-strip-pill l5">L5 Evaluate</span>
+                    <span class="bloom-strip-pill l6">L6 Create</span>
+                  </div>
+                </div>
+
                 {#if !dossier.per_question_evidence || dossier.per_question_evidence.length === 0}
                   <div class="tab-empty-msg">
                     No rubric criteria configured for this assignment.
@@ -824,22 +836,40 @@
                   <div class="rubric-matrix-list">
                     {#each dossier.per_question_evidence as question}
                       {#each Object.entries(question.rubric_evidence || {}) as [, criterion]}
+                        {@const bloom = getCriterionBloom(criterion)}
+                        {@const isSubmitted = hasEvidence(criterion)}
                         <article
                           class="criterion-chip-card"
                           class:met={criterion.met}
+                          class:unassessed={!isSubmitted}
                         >
                           <header class="criterion-chip-header">
-                            <span
-                              class="criterion-tag"
-                              class:met={criterion.met}
-                            >
-                              {criterion.met
-                                ? "✓ Evidence Met"
-                                : "● Needs Review"}
-                            </span>
-                            <span class="criterion-conf-pill">
-                              {Math.round((criterion.confidence || 0) * 100)}%
-                            </span>
+                            <div class="criterion-header-left">
+                              <span
+                                class="criterion-tag"
+                                class:met={criterion.met}
+                                class:unassessed={!isSubmitted}
+                              >
+                                {#if !isSubmitted}
+                                  ○ In Progress
+                                {:else if criterion.met}
+                                  ✓ Evidence Met
+                                {:else}
+                                  ● Partial Evidence
+                                {/if}
+                              </span>
+                              <span
+                                class="bloom-badge target"
+                                style={`--b-color: ${bloom.target.color}; --b-bg: ${bloom.target.bg}; --b-border: ${bloom.target.border}`}
+                                title={`Target Cognitive Demand: ${bloom.target.name} (Level ${bloom.target.level})`}
+                              >
+                                🎯 {bloom.target.badge}
+                              </span>
+                            </div>
+
+                            <div class="criterion-header-right">
+                              <span class="criterion-weight-pill">{bloom.weight} Weight</span>
+                            </div>
                           </header>
 
                           <strong class="criterion-label">
@@ -853,15 +883,39 @@
                             {criterion.description}
                           </p>
 
-                          {#if criterion.evidence}
+                          {#if isSubmitted}
                             <div class="criterion-quote-block">
-                              <span class="quote-header">Submission Quote:</span
-                              >
+                              <div class="quote-header-row">
+                                <span class="quote-header">Submission Quote</span>
+                                {#if bloom.demonstrated}
+                                  <span
+                                    class="bloom-demonstrated-pill"
+                                    class:met={bloom.demonstrated.level >= bloom.target.level}
+                                    class:below={bloom.demonstrated.level < bloom.target.level}
+                                  >
+                                    {#if bloom.demonstrated.level >= bloom.target.level}
+                                      ✓ Demonstrated: {bloom.demonstrated.badge}
+                                    {:else}
+                                      ⚠️ Demonstrated: {bloom.demonstrated.badge} (Target: {bloom.target.name})
+                                    {/if}
+                                  </span>
+                                {/if}
+                              </div>
                               <div class="quote-text">{criterion.evidence}</div>
+                            </div>
+                          {:else}
+                            <div class="criterion-unassessed-box">
+                              <div class="unassessed-row">
+                                <span class="unassessed-dot">◌</span>
+                                <span class="unassessed-text">No student evidence submitted yet</span>
+                              </div>
+                              <small class="unassessed-cognitive-demand">
+                                Required cognitive depth: <strong>{bloom.target.badge}</strong> — {bloom.demandDesc}
+                              </small>
                             </div>
                           {/if}
 
-                          {#if criterion.explanation}
+                          {#if criterion.explanation && isSubmitted}
                             <small class="criterion-note"
                               >{criterion.explanation}</small
                             >
