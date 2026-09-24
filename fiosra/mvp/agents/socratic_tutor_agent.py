@@ -305,7 +305,14 @@ class SocraticTutorAgent:
                 if isinstance(data, dict):
                     if "properties" in data and isinstance(data["properties"], dict):
                         data = data["properties"]
-                    extracted_text = data.get("socratic_response")
+                    extracted_text = (
+                        data.get("socratic_response")
+                        or data.get("socratic_question")
+                        or data.get("response")
+                        or data.get("question")
+                        or data.get("tutor_response")
+                        or data.get("reply")
+                    )
             except Exception:
                 pass
             fallback_response = extracted_text or (

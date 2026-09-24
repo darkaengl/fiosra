@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.dialogue_engine import dialogue_engine
 from fiosra.mvp.event_store import event_store
+from fiosra.mvp.learning_canvas_schemas import default_canvas_sections
 
 router = APIRouter(prefix="/dialogue", tags=["Socratic Dialogue"])
 SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
@@ -73,17 +74,19 @@ async def handle_dialogue_turn(
             raise HTTPException(status_code=409, detail="The session's published assignment is no longer available.")
         if request.assignment_id and str(request.assignment_id) != str(authoritative_assignment_id):
             raise HTTPException(status_code=409, detail="The request assignment does not match this student session.")
-        section_id = request.active_section_id or assignment_context.canvas_sections[0].section_id
+        canvas_sections = assignment_context.canvas_sections or default_canvas_sections()
+        section_id = request.active_section_id or (canvas_sections[0].section_id if canvas_sections else None)
         active_section = next(
-            (section for section in assignment_context.canvas_sections if section.section_id == section_id),
+            (section for section in canvas_sections if section.section_id == section_id),
             None,
-        )
-        if not active_section:
+        ) if section_id else None
+        if request.active_section_id and not active_section:
             raise HTTPException(status_code=409, detail="The requested canvas section is not declared by this assignment.")
-        active_section_context = (
-            f"{active_section.label}: {active_section.purpose} "
-            f"Guidance: {active_section.completion_guidance}"
-        )
+        if active_section:
+            active_section_context = (
+                f"{active_section.label}: {active_section.purpose} "
+                f"Guidance: {active_section.completion_guidance}"
+            )
 
     valid_question_ids = {
         str(authoritative_question_id).lower(),

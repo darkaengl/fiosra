@@ -6,7 +6,7 @@ Defines explicit state schemas, critic verification verdicts, and telemetry pack
 from __future__ import annotations
 
 from typing import Any, TypedDict
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 # -------------------------------------------------------------------------
@@ -88,11 +88,20 @@ class UniversalSocraticTurn(BaseModel):
         )
     )
     socratic_response: str = Field(
+        ...,
+        validation_alias=AliasChoices(
+            "socratic_response",
+            "socratic_question",
+            "response",
+            "question",
+            "tutor_response",
+            "reply",
+        ),
         description=(
             "A natural, conversational 1-3 sentence Socratic response ending with exactly one question mark. "
             "Must directly engage with the student's latest message. "
             "Never give advice, recommendations, or direct answers."
-        )
+        ),
     )
     is_claim_ready_for_draft: bool = Field(
         default=False,

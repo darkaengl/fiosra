@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from sqlalchemy import text
 from fiosra.mvp.database import AsyncSessionLocal
+from fiosra.mvp.learning_canvas_schemas import default_canvas_sections
 from fiosra.mvp.neo4j_client import neo4j_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -348,6 +349,7 @@ async def seed_postgres() -> uuid.UUID:
             "question_id": question_id,
             "assignment_id": question_id,
             "target_kcs": ["c8", "c2", "c1"],
+            "canvas_sections": [s.model_dump() for s in default_canvas_sections()],
             "published": {
                 "title": PUBLISHED_TITLE,
                 "course_title": "BUS C150: Principles of Marketing",
