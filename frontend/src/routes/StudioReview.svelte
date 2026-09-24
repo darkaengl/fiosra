@@ -102,13 +102,18 @@
     window.addEventListener("pointerup", onPointerUp);
   }
 
-  // ---- Misconception review ---------------------------------------------
+  // ---- Misconception review & Interventions ----------------------------
   let scanBySession = $state({});
   let scanningSession = $state("");
   let scanError = $state("");
   let draftOpenFor = $state("");
   let draftBody = $state("");
   let draftSubject = $state("");
+  let interventionsBySession = $state({});
+  let challengeDraftOpenFor = $state("");
+  let challengeDraftPrompt = $state("");
+  let dispatchingFindingId = $state("");
+  let interventionNotice = $state("");
 
   let scan = $derived(
     selected ? scanBySession[selected.session_id] || null : null,
@@ -116,6 +121,93 @@
   let isScanning = $derived(
     Boolean(selected) && scanningSession === selected.session_id,
   );
+  let activeInterventions = $derived(
+    selected ? interventionsBySession[selected.session_id] || [] : [],
+  );
+
+  async function loadInterventions(sessionId) {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/interventions/session/${sessionId}`);
+      if (res.ok) {
+        interventionsBySession = {
+          ...interventionsBySession,
+          [sessionId]: await res.json(),
+        };
+      }
+    } catch (err) {
+      console.warn("Failed to load interventions:", err);
+    }
+  }
+
+  function openChallengeDraft(finding) {
+    if (challengeDraftOpenFor === finding.misconception_id) {
+      challengeDraftOpenFor = "";
+      return;
+    }
+    challengeDraftOpenFor = finding.misconception_id;
+    challengeDraftPrompt = finding.activity_prompt || finding.suggested_message?.body || "";
+  }
+
+  async function dispatchIntervention(finding) {
+    if (!selected) return;
+    const sessionId = selected.session_id;
+    dispatchingFindingId = finding.misconception_id;
+    interventionNotice = "";
+    try {
+      const res = await fetch("/interventions/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: selected.student_id,
+          teacher_id: teacherId.trim() || "educator_workspace",
+          document_id: finding.document_id || null,
+          block_id: finding.block_id || null,
+          concept_id: finding.concept_id || null,
+          concept_label: finding.concept_label || null,
+          misconception_id: finding.misconception_id,
+          evidence_quote: finding.evidence_quote || "",
+          activity_type: finding.activity_type || "socratic_nudge",
+          activity_prompt: challengeDraftPrompt.trim() || finding.activity_prompt || "",
+          activity_guidance: finding.activity_guidance || finding.remediation_hint || "",
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await responseError(res, "Failed to dispatch challenge."));
+      }
+      const dispatched = await res.json();
+      const currentList = interventionsBySession[sessionId] || [];
+      interventionsBySession = {
+        ...interventionsBySession,
+        [sessionId]: [dispatched, ...currentList.filter((i) => i.intervention_id !== dispatched.intervention_id)],
+      };
+      challengeDraftOpenFor = "";
+      interventionNotice = `Challenge dispatched to ${selected.student_id}.`;
+    } catch (err) {
+      interventionNotice = err.message || "Failed to dispatch challenge.";
+    } finally {
+      dispatchingFindingId = "";
+    }
+  }
+
+  async function acknowledgeIntervention(interventionId) {
+    if (!selected) return;
+    const sessionId = selected.session_id;
+    try {
+      const res = await fetch(`/interventions/${interventionId}/acknowledge`, { method: "POST" });
+      if (res.ok) {
+        const updated = await res.json();
+        const currentList = interventionsBySession[sessionId] || [];
+        interventionsBySession = {
+          ...interventionsBySession,
+          [sessionId]: currentList.map((i) => (i.intervention_id === updated.intervention_id ? updated : i)),
+        };
+      }
+    } catch (err) {
+      console.warn("Failed to acknowledge intervention:", err);
+    }
+  }
 
   async function runMisconceptionScan() {
     if (!selected || isScanning) return;
@@ -401,6 +493,8 @@
         : "";
     error = "";
     draftOpenFor = "";
+    challengeDraftOpenFor = "";
+    loadInterventions(item.session_id);
 
     const [dossierResponse, traceResponse, reasoningRes, activityRes] =
       await Promise.all([
@@ -1043,6 +1137,14 @@
                     </button>
                   </div>
                 {:else}
+                  {#if interventionNotice}
+                    <div class="intervention-toast-bar">
+                      <span>💡</span>
+                      <span>{interventionNotice}</span>
+                      <button type="button" class="btn-toast-dismiss" onclick={() => (interventionNotice = "")}>✕</button>
+                    </div>
+                  {/if}
+
                   <div class="traps-results-bar">
                     <span class="traps-count-label">
                       {(scan.findings || []).length} Cognitive {(
@@ -1063,6 +1165,7 @@
 
                   <div class="traps-cards-flow">
                     {#each scan.findings as finding}
+                      {@const matchedIntervention = activeInterventions.find((i) => i.misconception_id === finding.misconception_id)}
                       <article class="trap-item-card">
                         <header class="trap-item-header">
                           <strong class="trap-item-name">{finding.name}</strong>
@@ -1095,13 +1198,53 @@
                           </div>
                         {/if}
 
+                        {#if matchedIntervention}
+                          <div class="intervention-status-box" class:is-responded={matchedIntervention.status === 'responded'} class:is-ack={matchedIntervention.status === 'acknowledged'}>
+                            <div class="intervention-status-header">
+                              <span class="status-indicator">
+                                {#if matchedIntervention.status === 'acknowledged'}
+                                  ✓ Intervention Acknowledged
+                                {:else if matchedIntervention.status === 'responded'}
+                                  🟢 Student Reflection Received
+                                {:else}
+                                  🟡 Challenge Dispatched to Student
+                                {/if}
+                              </span>
+                              {#if matchedIntervention.status === 'responded'}
+                                <button
+                                  type="button"
+                                  class="btn-ack-intervention"
+                                  onclick={() => acknowledgeIntervention(matchedIntervention.intervention_id)}
+                                >
+                                  Mark Acknowledged ✓
+                                </button>
+                              {/if}
+                            </div>
+                            {#if matchedIntervention.student_response}
+                              <blockquote class="student-reflection-echo">
+                                "{matchedIntervention.student_response}"
+                              </blockquote>
+                            {:else}
+                              <p class="status-sub">Awaiting student reflection in their marginalia gutter.</p>
+                            {/if}
+                          </div>
+                        {/if}
+
                         <div class="trap-card-actions">
+                          <button
+                            type="button"
+                            class="btn-dispatch-challenge"
+                            class:active={challengeDraftOpenFor === finding.misconception_id}
+                            onclick={() => openChallengeDraft(finding)}
+                          >
+                            ⚡ {matchedIntervention ? 'Edit / Re-dispatch' : 'Dispatch Activity'}
+                          </button>
                           <button
                             type="button"
                             class="btn-draft-note"
                             onclick={() => openDraft(finding)}
                           >
-                            ✉ Socratic Note
+                            ✉ Mail
                           </button>
                           {#if finding.concept_id}
                             <a
@@ -1114,6 +1257,43 @@
                             </a>
                           {/if}
                         </div>
+
+                        {#if challengeDraftOpenFor === finding.misconception_id}
+                          <div class="inline-challenge-dispatch">
+                            <label class="draft-field-label" for={`challenge-${finding.misconception_id}`}>
+                              AI-Crafted Socratic Activity / Challenge (Editable)
+                            </label>
+                            <textarea
+                              id={`challenge-${finding.misconception_id}`}
+                              class="draft-body-input"
+                              rows="3"
+                              bind:value={challengeDraftPrompt}
+                            ></textarea>
+                            {#if finding.activity_guidance || finding.remediation_hint}
+                              <div class="challenge-guidance-preview">
+                                <span class="guidance-label">Reading / Remediation Hint:</span>
+                                <span>{finding.activity_guidance || finding.remediation_hint}</span>
+                              </div>
+                            {/if}
+                            <div class="draft-action-btns">
+                              <button
+                                type="button"
+                                class="btn-send-challenge"
+                                disabled={dispatchingFindingId === finding.misconception_id}
+                                onclick={() => dispatchIntervention(finding)}
+                              >
+                                {dispatchingFindingId === finding.misconception_id ? 'Dispatching...' : 'Send Activity to Student'}
+                              </button>
+                              <button
+                                type="button"
+                                class="btn-close"
+                                onclick={() => (challengeDraftOpenFor = "")}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        {/if}
 
                         {#if draftOpenFor === finding.misconception_id}
                           <div class="inline-socratic-draft">
@@ -2600,6 +2780,193 @@
     border-radius: 4px;
     cursor: pointer;
     color: var(--color-slate-light);
+  }
+
+  .btn-dispatch-challenge {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #b45309;
+    background: #fef3c7;
+    color: #92400e;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  :global([data-theme="dark"]) .btn-dispatch-challenge {
+    background: rgba(217, 119, 6, 0.2);
+    color: #fbbf24;
+    border-color: #d97706;
+  }
+
+  .btn-dispatch-challenge:hover,
+  .btn-dispatch-challenge.active {
+    background: #b45309;
+    color: #ffffff;
+  }
+
+  .btn-send-challenge {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: #b45309;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .btn-send-challenge:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .inline-challenge-dispatch {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(245, 158, 11, 0.05);
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  :global([data-theme="dark"]) .inline-challenge-dispatch {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
+  }
+
+  .challenge-guidance-preview {
+    font-size: 10.5px;
+    color: var(--color-slate-light);
+    line-height: 1.35;
+    padding: 4px 6px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 4px;
+  }
+
+  :global([data-theme="dark"]) .challenge-guidance-preview {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .guidance-label {
+    font-weight: 700;
+    color: #b45309;
+    margin-right: 4px;
+  }
+
+  .intervention-status-box {
+    margin: 8px 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #fefce8;
+    border: 1px solid #fef08a;
+    font-size: 11px;
+  }
+
+  :global([data-theme="dark"]) .intervention-status-box {
+    background: rgba(234, 179, 8, 0.08);
+    border-color: rgba(234, 179, 8, 0.25);
+  }
+
+  .intervention-status-box.is-responded {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+
+  :global([data-theme="dark"]) .intervention-status-box.is-responded {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.25);
+  }
+
+  .intervention-status-box.is-ack {
+    background: #f8fafc;
+    border-color: var(--color-graphite-border);
+  }
+
+  :global([data-theme="dark"]) .intervention-status-box.is-ack {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .intervention-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-indicator {
+    font-weight: 700;
+    font-size: 11px;
+  }
+
+  .status-sub {
+    margin: 4px 0 0 0;
+    font-size: 10.5px;
+    color: var(--color-slate-light);
+    font-style: italic;
+  }
+
+  .student-reflection-echo {
+    margin: 6px 0 0 0;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-left: 2.5px solid #10b981;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--color-heading);
+    border-radius: 0 4px 4px 0;
+  }
+
+  :global([data-theme="dark"]) .student-reflection-echo {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .btn-ack-intervention {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    background: #059669;
+    color: #ffffff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  .btn-ack-intervention:hover {
+    background: #047857;
+  }
+
+  .intervention-toast-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+
+  :global([data-theme="dark"]) .intervention-toast-bar {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+  }
+
+  .btn-toast-dismiss {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: inherit;
+    padding: 0 4px;
   }
 
   .trap-scan-error {

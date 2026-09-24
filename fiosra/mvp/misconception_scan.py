@@ -73,8 +73,8 @@ WORD = re.compile(r"[a-z][a-z'-]{2,}")
 
 # --------------------------------------------------------------------- sources
 
-async def _submission_text(session_id: UUID) -> tuple[str, str | None]:
-    """The student's written work, as one plaintext string, plus its title."""
+async def _submission_document(session_id: UUID) -> dict[str, Any]:
+    """The student's written work, title, document_id, and blocks with block_id."""
     async with AsyncSessionLocal() as db:
         doc = (await db.execute(text("""
             SELECT document_id, title FROM learning_documents
@@ -82,14 +82,36 @@ async def _submission_text(session_id: UUID) -> tuple[str, str | None]:
             ORDER BY created_at DESC LIMIT 1
         """), {"sid": str(session_id)})).mappings().first()
         if not doc:
-            return "", None
+            return {"body": "", "title": None, "document_id": None, "blocks": []}
         blocks = (await db.execute(text("""
-            SELECT plaintext FROM learning_document_blocks
+            SELECT block_id, plaintext, position FROM learning_document_blocks
             WHERE document_id = CAST(:did AS UUID)
             ORDER BY position ASC
         """), {"did": str(doc["document_id"])})).mappings().all()
     body = "\n\n".join((b["plaintext"] or "").strip() for b in blocks if (b["plaintext"] or "").strip())
-    return body, doc["title"]
+    return {
+        "body": body,
+        "title": doc["title"],
+        "document_id": str(doc["document_id"]),
+        "blocks": [dict(b) for b in blocks],
+    }
+
+
+async def _submission_text(session_id: UUID) -> tuple[str, str | None]:
+    """The student's written work, as one plaintext string, plus its title."""
+    doc_info = await _submission_document(session_id)
+    return doc_info["body"], doc_info["title"]
+
+
+def _match_block_for_quote(quote: str, blocks: list[dict[str, Any]]) -> str | None:
+    if not quote:
+        return None
+    norm_quote = _normalise(quote)
+    for b in blocks:
+        norm_text = _normalise(b.get("plaintext") or "")
+        if norm_quote in norm_text:
+            return str(b["block_id"])
+    return None
 
 
 async def _course_for_session(session_info: dict[str, Any]) -> str | None:
@@ -239,7 +261,7 @@ async def _verify(trap: dict[str, Any], submission: str, session_id: str) -> dic
     return {"quote": quote, "reason": (verdict.get("reason") or "").strip()[:200], "method": "llm_verified"}
 
 
-# ------------------------------------------------------------------- the draft
+# ------------------------------------------------------------------- the draft & activity
 
 def _draft_message(trap: dict[str, Any], student_id: str, assignment_title: str) -> dict[str, str]:
     """A note that points at the reading and asks a question. No answer in it."""
@@ -265,7 +287,71 @@ def _draft_message(trap: dict[str, Any], student_id: str, assignment_title: str)
     }
 
 
-# --------------------------------------------------------------------- the API
+ACTIVITY_SYSTEM = (
+    "You are a master educator crafting a targeted, minimal learning activity (a Socratic nudge) for a university student. "
+    "The student exhibited a specific reasoning error in their draft text. "
+    "You never give away the answer or rewrite their text. "
+    "Instead, craft a concise, thought-provoking cognitive challenge (1-2 sentences) that prompts the student to rethink this specific point. "
+    "Also provide a brief 1-sentence guidance on where to look or what principle to apply. "
+    'Reply with JSON only: {"activity_type": "socratic_nudge", "activity_prompt": "<1-2 sentence challenge question>", "activity_guidance": "<1 sentence guidance or reading hint>"}'
+)
+
+
+async def _generate_activity(trap: dict[str, Any], quote: str, session_id: str) -> dict[str, str]:
+    """Craft a minimal Socratic learning challenge grounded in the student's quote."""
+    probes = trap.get("probes") or []
+    opener = next((p["probe_text"] for p in probes if p.get("rung") == 0), None)
+    fallback_prompt = opener or (probes[0]["probe_text"] if probes else (
+        f"Consider how your reasoning in '{quote[:50]}...' aligns with {trap.get('concept_label') or 'the core concepts'}."
+        if quote else "Consider how this claim aligns with foundational principles."
+    ))
+    fallback_guidance = trap.get("remediation_hint") or "Review the foundational principles in the course materials."
+
+    orchestrator = LLMOrchestrator()
+    user_prompt = (
+        f"MISCONCEPTION: {trap.get('name')}\n"
+        f"FLAWED RULE: {trap.get('flawed_rule')}\n"
+        f"STUDENT QUOTE: \"{quote}\"\n"
+        f"SUGGESTED READING HINT: {fallback_guidance}\n"
+        f"SEED SOCRATIC QUESTION: {fallback_prompt}\n\n"
+        "Generate a minimal, sharp Socratic nudge activity for the student in JSON."
+    )
+    try:
+        generated = await orchestrator.enhance(
+            purpose="intervention_activity",
+            system_prompt=ACTIVITY_SYSTEM,
+            user_prompt=user_prompt,
+            deterministic_fallback="",
+            pseudonymous_seed=f"{session_id}:{trap.get('misconception_id')}:act",
+            max_characters=600,
+            max_tokens=250,
+            allow_live=True,
+            request_timeout_seconds=PER_TRAP_TIMEOUT_SECONDS,
+            response_format={"type": "json_object"},
+        )
+        raw = (generated.content or "").strip()
+        match = re.search(r"\{.*\}", raw, re.S)
+        if match:
+            parsed = json.loads(match.group(0))
+            prompt = (parsed.get("activity_prompt") or "").strip()
+            guidance = (parsed.get("activity_guidance") or "").strip()
+            if prompt:
+                return {
+                    "activity_type": parsed.get("activity_type") or "socratic_nudge",
+                    "activity_prompt": prompt,
+                    "activity_guidance": guidance or fallback_guidance,
+                }
+    except Exception as exc:
+        logger.info("Activity generation LLM failed: %s", exc)
+
+    return {
+        "activity_type": "socratic_nudge",
+        "activity_prompt": fallback_prompt,
+        "activity_guidance": fallback_guidance,
+    }
+
+
+# --------------------------------------------------------------------- schemas
 
 class Finding(BaseModel):
     misconception_id: str
@@ -279,6 +365,11 @@ class Finding(BaseModel):
     detection: str = Field(description="llm_verified, or lexical_candidate when no model was available")
     probes: list[dict[str, Any]] = []
     suggested_message: dict[str, str] = {}
+    document_id: str | None = None
+    block_id: str | None = None
+    activity_type: str = "socratic_nudge"
+    activity_prompt: str = ""
+    activity_guidance: str = ""
 
 
 class ScanResult(BaseModel):
@@ -291,14 +382,84 @@ class ScanResult(BaseModel):
     note: str
 
 
+class DispatchInterventionRequest(BaseModel):
+    session_id: UUID
+    student_id: str
+    teacher_id: str = "educator"
+    document_id: UUID | None = None
+    block_id: UUID | None = None
+    concept_id: str | None = None
+    concept_label: str | None = None
+    misconception_id: str | None = None
+    evidence_quote: str
+    activity_type: str = "socratic_nudge"
+    activity_prompt: str
+    activity_guidance: str | None = None
+
+
+class RespondInterventionRequest(BaseModel):
+    student_response: str
+
+
+class InterventionResponse(BaseModel):
+    intervention_id: str
+    session_id: str
+    student_id: str
+    teacher_id: str
+    document_id: str | None = None
+    block_id: str | None = None
+    concept_id: str | None = None
+    concept_label: str | None = None
+    misconception_id: str | None = None
+    evidence_quote: str
+    activity_type: str
+    activity_prompt: str
+    activity_guidance: str | None = None
+    student_response: str | None = None
+    status: str
+    created_at: str
+    responded_at: str | None = None
+    acknowledged_at: str | None = None
+
+
+def _row_to_intervention_dict(r: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "intervention_id": str(r["intervention_id"]),
+        "session_id": str(r["session_id"]),
+        "student_id": str(r["student_id"]),
+        "teacher_id": str(r["teacher_id"]),
+        "document_id": str(r["document_id"]) if r.get("document_id") else None,
+        "block_id": str(r["block_id"]) if r.get("block_id") else None,
+        "concept_id": r.get("concept_id"),
+        "concept_label": r.get("concept_label"),
+        "misconception_id": r.get("misconception_id"),
+        "evidence_quote": r.get("evidence_quote") or "",
+        "activity_type": r.get("activity_type") or "socratic_nudge",
+        "activity_prompt": r.get("activity_prompt") or "",
+        "activity_guidance": r.get("activity_guidance"),
+        "student_response": r.get("student_response"),
+        "status": r.get("status") or "dispatched",
+        "created_at": r["created_at"].isoformat() if hasattr(r.get("created_at"), "isoformat") else str(r.get("created_at") or ""),
+        "responded_at": r["responded_at"].isoformat() if hasattr(r.get("responded_at"), "isoformat") else (str(r.get("responded_at")) if r.get("responded_at") else None),
+        "acknowledged_at": r["acknowledged_at"].isoformat() if hasattr(r.get("acknowledged_at"), "isoformat") else (str(r.get("acknowledged_at")) if r.get("acknowledged_at") else None),
+    }
+
+
+# --------------------------------------------------------------------- the API
+
 @router.get("/scan/{session_id}", response_model=ScanResult)
 async def scan_submission(session_id: UUID) -> ScanResult:
-    """Find the traps a submitted assignment exhibits, with evidence."""
+    """Find the traps a submitted or in-progress assignment exhibits, with evidence."""
     session_info = await event_store.get_session_details(session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    submission, doc_title = await _submission_text(session_id)
+    doc_info = await _submission_document(session_id)
+    submission = doc_info["body"]
+    doc_title = doc_info["title"]
+    document_id = doc_info["document_id"]
+    blocks = doc_info["blocks"]
+
     if len(submission.strip()) < 120:
         return ScanResult(
             session_id=str(session_id), student_id=session_info.get("student_id"),
@@ -314,8 +475,6 @@ async def scan_submission(session_id: UUID) -> ScanResult:
     traps = await _traps_for_course(course_id)
     ranked = _rank(traps, submission)[:MAX_CANDIDATES]
 
-    # The candidates are independent questions, so ask them at once. Sequentially
-    # this is four round trips of dead time; concurrently it is one.
     verdicts = await asyncio.gather(
         *(_verify(trap, submission, str(session_id)) for trap, _ in ranked),
         return_exceptions=True,
@@ -332,17 +491,27 @@ async def scan_submission(session_id: UUID) -> ScanResult:
         elif not ranked or score < 0.6 * ranked[0][1]:
             continue
         else:
-            # No model available, but the lexical signal is strong. Report it as
-            # a candidate for the educator to judge, clearly labelled as such.
             verdict = {"quote": "", "reason": "Strong term overlap with this trap's flawed rule.",
                        "method": "lexical_candidate"}
+
+        quote = verdict["quote"]
+        block_id = _match_block_for_quote(quote, blocks) if quote else None
+
+        # Synthesize the minimal Socratic activity for this finding
+        activity = await _generate_activity(trap, quote, str(session_id))
+
         findings.append(Finding(
             misconception_id=trap["misconception_id"], name=trap.get("name") or "",
             flawed_rule=trap.get("flawed_rule") or "", remediation_hint=trap.get("remediation_hint") or "",
             concept_id=trap.get("concept_id"), concept_label=trap.get("concept_label"),
-            evidence_quote=verdict["quote"], why=verdict["reason"], detection=verdict["method"],
+            evidence_quote=quote, why=verdict["reason"], detection=verdict["method"],
             probes=trap.get("probes") or [],
             suggested_message=_draft_message(trap, session_info.get("student_id") or "", doc_title or "this assignment"),
+            document_id=document_id,
+            block_id=block_id,
+            activity_type=activity.get("activity_type") or "socratic_nudge",
+            activity_prompt=activity.get("activity_prompt") or "",
+            activity_guidance=activity.get("activity_guidance") or "",
         ))
 
     note = (
@@ -356,3 +525,174 @@ async def scan_submission(session_id: UUID) -> ScanResult:
         assignment_title=doc_title, submission_characters=len(submission),
         candidates_considered=len(ranked), findings=findings, note=note,
     )
+
+
+@router.post("/dispatch", response_model=InterventionResponse)
+async def dispatch_intervention(req: DispatchInterventionRequest) -> InterventionResponse:
+    """Educator dispatches an AI-generated or custom learning activity to a student."""
+    async with AsyncSessionLocal() as db:
+        insert_sql = text("""
+            INSERT INTO assignment_interventions (
+                session_id, student_id, teacher_id, document_id, block_id,
+                concept_id, concept_label, misconception_id, evidence_quote,
+                activity_type, activity_prompt, activity_guidance, status, created_at
+            ) VALUES (
+                CAST(:session_id AS UUID), :student_id, :teacher_id,
+                CAST(:document_id AS UUID), CAST(:block_id AS UUID),
+                :concept_id, :concept_label, :misconception_id, :evidence_quote,
+                :activity_type, :activity_prompt, :activity_guidance, 'dispatched', NOW()
+            ) RETURNING intervention_id, session_id, student_id, teacher_id, document_id, block_id,
+                        concept_id, concept_label, misconception_id, evidence_quote, activity_type,
+                        activity_prompt, activity_guidance, student_response, status,
+                        created_at, responded_at, acknowledged_at;
+        """)
+        result = await db.execute(insert_sql, {
+            "session_id": str(req.session_id),
+            "student_id": req.student_id,
+            "teacher_id": req.teacher_id,
+            "document_id": str(req.document_id) if req.document_id else None,
+            "block_id": str(req.block_id) if req.block_id else None,
+            "concept_id": req.concept_id,
+            "concept_label": req.concept_label,
+            "misconception_id": req.misconception_id,
+            "evidence_quote": req.evidence_quote,
+            "activity_type": req.activity_type,
+            "activity_prompt": req.activity_prompt,
+            "activity_guidance": req.activity_guidance,
+        })
+        await db.commit()
+        row = result.mappings().first()
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to dispatch intervention")
+
+    intervention_data = _row_to_intervention_dict(dict(row))
+
+    # Log telemetry event
+    try:
+        await event_store.log_event(
+            session_id=req.session_id,
+            student_id=req.student_id,
+            question_id="intervention",
+            event_type="intervention_dispatched",
+            payload={
+                "intervention_id": intervention_data["intervention_id"],
+                "concept_id": req.concept_id,
+                "misconception_id": req.misconception_id,
+                "activity_type": req.activity_type,
+                "teacher_id": req.teacher_id,
+            },
+        )
+    except Exception as exc:
+        logger.warning("Failed to record intervention event: %s", exc)
+
+    return InterventionResponse(**intervention_data)
+
+
+@router.get("/session/{session_id}", response_model=list[InterventionResponse])
+async def list_session_interventions(session_id: UUID) -> list[InterventionResponse]:
+    """Retrieve all interventions dispatched for a given student session."""
+    async with AsyncSessionLocal() as db:
+        query_sql = text("""
+            SELECT intervention_id, session_id, student_id, teacher_id, document_id, block_id,
+                   concept_id, concept_label, misconception_id, evidence_quote, activity_type,
+                   activity_prompt, activity_guidance, student_response, status,
+                   created_at, responded_at, acknowledged_at
+            FROM assignment_interventions
+            WHERE session_id = CAST(:session_id AS UUID)
+            ORDER BY created_at DESC;
+        """)
+        result = await db.execute(query_sql, {"session_id": str(session_id)})
+        rows = result.mappings().all()
+
+    return [InterventionResponse(**_row_to_intervention_dict(dict(r))) for r in rows]
+
+
+@router.post("/{intervention_id}/respond", response_model=InterventionResponse)
+async def respond_to_intervention(intervention_id: UUID, req: RespondInterventionRequest) -> InterventionResponse:
+    """Student submits a reflection or answer to the intervention activity."""
+    if not req.student_response or len(req.student_response.strip()) < 5:
+        raise HTTPException(status_code=422, detail="A response of at least 5 characters is required.")
+
+    async with AsyncSessionLocal() as db:
+        update_sql = text("""
+            UPDATE assignment_interventions
+            SET student_response = :student_response,
+                status = 'responded',
+                responded_at = NOW()
+            WHERE intervention_id = CAST(:intervention_id AS UUID)
+            RETURNING intervention_id, session_id, student_id, teacher_id, document_id, block_id,
+                      concept_id, concept_label, misconception_id, evidence_quote, activity_type,
+                      activity_prompt, activity_guidance, student_response, status,
+                      created_at, responded_at, acknowledged_at;
+        """)
+        result = await db.execute(update_sql, {
+            "intervention_id": str(intervention_id),
+            "student_response": req.student_response.strip(),
+        })
+        await db.commit()
+        row = result.mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Intervention not found")
+
+    intervention_data = _row_to_intervention_dict(dict(row))
+
+    # Log telemetry event
+    try:
+        await event_store.log_event(
+            session_id=row["session_id"],
+            student_id=row["student_id"],
+            question_id="intervention",
+            event_type="intervention_responded",
+            payload={
+                "intervention_id": intervention_data["intervention_id"],
+                "response_length": len(req.student_response.strip()),
+            },
+        )
+    except Exception as exc:
+        logger.warning("Failed to record intervention response event: %s", exc)
+
+    return InterventionResponse(**intervention_data)
+
+
+@router.post("/{intervention_id}/acknowledge", response_model=InterventionResponse)
+async def acknowledge_intervention(intervention_id: UUID) -> InterventionResponse:
+    """Educator marks student's intervention response as acknowledged/resolved."""
+    async with AsyncSessionLocal() as db:
+        update_sql = text("""
+            UPDATE assignment_interventions
+            SET status = 'acknowledged',
+                acknowledged_at = NOW()
+            WHERE intervention_id = CAST(:intervention_id AS UUID)
+            RETURNING intervention_id, session_id, student_id, teacher_id, document_id, block_id,
+                      concept_id, concept_label, misconception_id, evidence_quote, activity_type,
+                      activity_prompt, activity_guidance, student_response, status,
+                      created_at, responded_at, acknowledged_at;
+        """)
+        result = await db.execute(update_sql, {"intervention_id": str(intervention_id)})
+        await db.commit()
+        row = result.mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Intervention not found")
+
+    intervention_data = _row_to_intervention_dict(dict(row))
+    return InterventionResponse(**intervention_data)
+
+
+@router.get("/student/{student_id}", response_model=list[InterventionResponse])
+async def list_student_interventions(student_id: str) -> list[InterventionResponse]:
+    """Retrieve all interventions dispatched to a student across courses."""
+    async with AsyncSessionLocal() as db:
+        query_sql = text("""
+            SELECT intervention_id, session_id, student_id, teacher_id, document_id, block_id,
+                   concept_id, concept_label, misconception_id, evidence_quote, activity_type,
+                   activity_prompt, activity_guidance, student_response, status,
+                   created_at, responded_at, acknowledged_at
+            FROM assignment_interventions
+            WHERE student_id = :student_id
+            ORDER BY created_at DESC;
+        """)
+        result = await db.execute(query_sql, {"student_id": student_id})
+        rows = result.mappings().all()
+
+    return [InterventionResponse(**_row_to_intervention_dict(dict(r))) for r in rows]
+

@@ -298,6 +298,9 @@
         <a class="btn-studio-link" href={`/#/modules?course_id=${selectedCourseId}`} title="Open Course Studio">
           Studio ↗
         </a>
+        <a class="btn-studio-link" href={`/#/cohort-diagnostics?course_id=${selectedCourseId}`} title="Open Students & Cohort Diagnostics">
+          Cohort Diagnostics 👥 ↗
+        </a>
       {/if}
     </div>
   </header>

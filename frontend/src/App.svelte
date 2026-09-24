@@ -17,6 +17,7 @@
   import StudentTrace from './routes/StudentTrace.svelte';
   import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
   import StudioReview from './routes/StudioReview.svelte';
+  import CohortDiagnostics from './routes/CohortDiagnostics.svelte';
 
   let assistantOpen = $state(false);
 
@@ -28,6 +29,9 @@
     '/knowledge-graph': KnowledgeGraph,
     '/concept-graph': KnowledgeGraph,
     '/graph': KnowledgeGraph,
+    '/cohort-diagnostics': CohortDiagnostics,
+    '/cohort-graph': CohortDiagnostics,
+    '/cohort': CohortDiagnostics,
     '/studio/course': CourseStudio,
     '/studio/review': StudioReview,
     '/review': StudioReview,

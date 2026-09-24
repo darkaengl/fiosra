@@ -10,6 +10,7 @@ from fiosra.mvp.concepts.service import concept_graph_service
 from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.courses.schemas import (
     CohortRosterResponse,
+    CourseConceptMasteryResponse,
     CourseCreate,
     CourseDocumentResponse,
     CourseResponse,
@@ -688,6 +689,24 @@ async def get_cohort_roster(course_id: UUID) -> CohortRosterResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate cohort roster: {e!s}",
+        ) from e
+
+
+@router.get("/{course_id}/concept-mastery", response_model=CourseConceptMasteryResponse)
+async def get_course_concept_mastery(course_id: UUID) -> CourseConceptMasteryResponse:
+    """
+    Returns the course concept DAG augmented with cohort-level mastery rates,
+    struggle bottlenecks, and individual student mastery states.
+    """
+    try:
+        return await course_service.get_course_concept_mastery(course_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve)) from ve
+    except Exception as e:
+        logger.exception("Error generating course concept mastery")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate course concept mastery: {e!s}",
         ) from e
 
 

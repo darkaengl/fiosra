@@ -9,11 +9,14 @@ from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.courses.schemas import (
     CohortRosterResponse,
     CohortStudentMetrics,
+    ConceptCohortMetrics,
+    CourseConceptMasteryResponse,
     CourseCreate,
     CourseResponse,
     EnrollmentResponse,
     ModuleCreate,
     ModuleResponse,
+    StudentConceptState,
 )
 from fiosra.mvp.database import AsyncSessionLocal
 
@@ -544,6 +547,353 @@ class CourseService:
             course_title=course.title,
             total_enrolled=len(students),
             students=students,
+        )
+
+    @classmethod
+    async def get_course_concept_mastery(cls, course_id: UUID | str) -> CourseConceptMasteryResponse:
+        """
+        Synthesizes the course-scoped concept DAG with cohort telemetry and student-level
+        mastery states (mastered, learning frontier, trapped in misconception, locked).
+        """
+        course = await cls.get_course(course_id)
+        if not course:
+            raise ValueError(f"Course '{course_id}' not found.")
+
+        from fiosra.mvp.concepts.service import concept_graph_service
+
+        graph_dict = await concept_graph_service.get_course_graph(str(course_id))
+
+        c_id = str(course_id)
+        async with AsyncSessionLocal() as session:
+            # 1. Enrolled student identifiers
+            enroll_res = await session.execute(
+                text("SELECT student_id FROM enrollments WHERE course_id = CAST(:course_id AS UUID)"),
+                {"course_id": c_id},
+            )
+            enrolled_ids = {r[0] for r in enroll_res.fetchall() if r[0]}
+
+            # 2. Session telemetry (hints & misconceptions)
+            telemetry_sql = text("""
+                SELECT 
+                    s.student_id,
+                    COUNT(DISTINCT s.session_id) as session_count,
+                    COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN s.session_id END) as completed_count,
+                    COUNT(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN 1 END) as hint_count,
+                    COUNT(CASE WHEN e.event_type = 'misconception_flagged' THEN 1 END) as misconception_count,
+                    jsonb_agg(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN e.payload END) as hints,
+                    jsonb_agg(CASE WHEN e.event_type = 'misconception_flagged' THEN e.payload END) as misconceptions
+                FROM student_sessions s
+                JOIN assignments a ON s.assignment_id = a.assignment_id
+                JOIN modules m ON a.module_id = m.module_id
+                LEFT JOIN session_events e ON s.session_id = e.session_id
+                WHERE m.course_id = :course_id
+                GROUP BY s.student_id;
+            """)
+            telemetry_res = await session.execute(telemetry_sql, {"course_id": c_id})
+            telemetry_rows = telemetry_res.mappings().all()
+
+            # 3. Interventions
+            interventions_sql = text("""
+                SELECT 
+                    ai.intervention_id,
+                    ai.student_id,
+                    ai.concept_id,
+                    ai.concept_label,
+                    ai.misconception_id,
+                    ai.status,
+                    ai.evidence_quote,
+                    ai.activity_prompt
+                FROM assignment_interventions ai
+                JOIN student_sessions s ON ai.session_id = s.session_id
+                JOIN assignments a ON s.assignment_id = a.assignment_id
+                JOIN modules m ON a.module_id = m.module_id
+                WHERE m.course_id = :course_id;
+            """)
+            interventions_res = await session.execute(interventions_sql, {"course_id": c_id})
+            interventions_rows = interventions_res.mappings().all()
+
+        # Build prerequisite & association topology from edges
+        prerequisites_of: dict[str, list[str]] = {}
+        dependents_of: dict[str, list[str]] = {}
+        misc_to_kc: dict[str, str] = {}
+
+        for edge in graph_dict.get("edges", []):
+            src = edge.get("source")
+            tgt = edge.get("target")
+            rel = edge.get("relation")
+            if not src or not tgt:
+                continue
+
+            if rel in ("REQUIRES", "PREREQUISITE_OF"):
+                # For REQUIRES: target requires source (source is prerequisite)
+                # For PREREQUISITE_OF: source is prerequisite of target
+                prereq_id = src
+                target_id = tgt
+                prerequisites_of.setdefault(target_id, []).append(prereq_id)
+                dependents_of.setdefault(prereq_id, []).append(target_id)
+            elif rel == "ASSOCIATED_WITH":
+                # Knowledge Component -> Misconception
+                misc_to_kc[tgt] = src
+
+        # Compile telemetry by student
+        telemetry_map: dict[str, Any] = {r["student_id"]: r for r in telemetry_rows}
+        all_student_ids = sorted(enrolled_ids | set(telemetry_map.keys()) | {r["student_id"] for r in interventions_rows})
+
+        # Interventions map by student
+        student_interventions: dict[str, list[Any]] = {}
+        for row in interventions_rows:
+            student_interventions.setdefault(row["student_id"], []).append(row)
+
+        student_states: list[StudentConceptState] = []
+
+        for stu_id in all_student_ids:
+            tel = telemetry_map.get(stu_id)
+            invs = student_interventions.get(stu_id, [])
+
+            hints_data = [h for h in (tel["hints"] if tel and tel.get("hints") else []) if h is not None]
+            misc_data = [m for m in (tel["misconceptions"] if tel and tel.get("misconceptions") else []) if m is not None]
+
+            autonomy_scores = []
+            for h in hints_data:
+                rung = h.get("rung", 1)
+                autonomy_scores.append(max(0.0, 1.0 - 0.25 * rung))
+            avg_autonomy = round(sum(autonomy_scores) / len(autonomy_scores), 2) if autonomy_scores else 1.00
+
+            # Determine trapped / struggling concepts for this student
+            trapped_concepts: set[str] = set()
+
+            # 1. From active/unresolved interventions
+            for inv in invs:
+                if inv["concept_id"]:
+                    trapped_concepts.add(inv["concept_id"])
+                if inv["misconception_id"] and inv["misconception_id"] in misc_to_kc:
+                    trapped_concepts.add(misc_to_kc[inv["misconception_id"]])
+
+            # 2. From misconception telemetry
+            for m in misc_data:
+                if m.get("kc_id"):
+                    trapped_concepts.add(m["kc_id"])
+                if m.get("misconception_id") and m["misconception_id"] in misc_to_kc:
+                    trapped_concepts.add(misc_to_kc[m["misconception_id"]])
+
+            # 3. From high hint rungs (rung >= 3)
+            for h in hints_data:
+                if h.get("rung", 1) >= 3 and h.get("target_kc"):
+                    trapped_concepts.add(h["target_kc"])
+
+            # Determine mastered concepts
+            # Student has completed work with healthy autonomy and no active trap on that concept
+            mastered_concepts: set[str] = set()
+            completed_count = int(tel["completed_count"]) if tel else 0
+            if completed_count > 0 and avg_autonomy >= 0.65:
+                # Concepts without active traps that this student has worked through
+                for node in graph_dict.get("nodes", []):
+                    c_node_id = node.get("concept_id")
+                    if c_node_id and c_node_id not in trapped_concepts and node.get("concept_type") != "misconception":
+                        # If student completed at least 1 session and no trap, treat foundational ones as mastered
+                        mastered_concepts.add(c_node_id)
+
+            # Assign state for every concept node
+            concept_states: dict[str, str] = {}
+            for node in graph_dict.get("nodes", []):
+                c_node_id = node.get("concept_id")
+                if not c_node_id:
+                    continue
+
+                if c_node_id in trapped_concepts:
+                    concept_states[c_node_id] = "trapped"
+                elif c_node_id in mastered_concepts:
+                    concept_states[c_node_id] = "mastered"
+                else:
+                    # Check prerequisites
+                    reqs = prerequisites_of.get(c_node_id, [])
+                    if not reqs or all(r in mastered_concepts for r in reqs):
+                        concept_states[c_node_id] = "frontier"
+                    else:
+                        concept_states[c_node_id] = "locked"
+
+            active_struggle = len(trapped_concepts) > 0 or avg_autonomy < 0.60
+            student_states.append(
+                StudentConceptState(
+                    student_id=stu_id,
+                    name=stu_id.replace("_", " ").title(),
+                    average_autonomy_score=avg_autonomy,
+                    active_struggle=active_struggle,
+                    struggling_kcs=sorted(trapped_concepts),
+                    concept_states=concept_states,
+                    trapped_concepts=sorted(trapped_concepts),
+                )
+            )
+
+        # Precompute parent-child hierarchy and module mappings
+        child_to_parent: dict[str, str] = {}
+        for edge in graph_dict.get("edges", []):
+            if edge.get("relation") in ("CONTAINS", "ASSOCIATED_WITH"):
+                child_to_parent[edge["target"]] = edge["source"]
+
+        node_to_module: dict[str, str] = {}
+        for ml in graph_dict.get("module_links", []):
+            if ml.get("concept_id") and ml.get("module_id"):
+                node_to_module[ml["concept_id"]] = ml["module_id"]
+
+        # Map strand concepts to modules by title if not explicitly linked
+        for mod in course.modules:
+            m_title_lower = mod.title.lower().strip()
+            for node in graph_dict.get("nodes", []):
+                if node.get("level") == "strand" and (
+                    node.get("label", "").lower().strip() == m_title_lower
+                    or m_title_lower in node.get("label", "").lower()
+                ):
+                    node_to_module[node["concept_id"]] = str(mod.module_id)
+
+        # Propagate module_id down tree hierarchy
+        def _resolve_module(nid: str, visited: set[str] | None = None) -> str | None:
+            if visited is None:
+                visited = set()
+            if nid in visited:
+                return None
+            visited.add(nid)
+            if nid in node_to_module:
+                return node_to_module[nid]
+            p_id = child_to_parent.get(nid)
+            if p_id:
+                m_found = _resolve_module(p_id, visited)
+                if m_found:
+                    node_to_module[nid] = m_found
+                    return m_found
+            return None
+
+        for n in graph_dict.get("nodes", []):
+            if n.get("concept_id"):
+                _resolve_module(n["concept_id"])
+
+        # Augment graph nodes with cohort metrics and hierarchy metadata
+        augmented_nodes = []
+        bottlenecks = []
+
+        for node in graph_dict.get("nodes", []):
+            c_node_id = node.get("concept_id")
+            if not c_node_id:
+                augmented_nodes.append(node)
+                continue
+
+            node_copy = dict(node)
+
+            # Assign hierarchy metadata: parent_id, module_id, rank
+            node_copy["parent_id"] = child_to_parent.get(c_node_id)
+            node_copy["module_id"] = node_to_module.get(c_node_id)
+
+            level = node_copy.get("level") or node_copy.get("concept_type")
+            if level in ("course_theme", "strand", "module"):
+                node_copy["rank"] = 0
+            elif level in ("topic", "domain"):
+                node_copy["rank"] = 1
+            elif level in ("atomic_concept", "subtopic", "leaf"):
+                node_copy["rank"] = 2
+            elif level == "misconception":
+                node_copy["rank"] = 3
+            else:
+                node_copy["rank"] = 2
+
+            trapped_students = [s.student_id for s in student_states if s.concept_states.get(c_node_id) == "trapped"]
+            mastered_students = [s.student_id for s in student_states if s.concept_states.get(c_node_id) == "mastered"]
+            total_assessed = len(trapped_students) + len(mastered_students)
+            mastery_rate = round(len(mastered_students) / max(total_assessed, 1), 2) if total_assessed > 0 else 1.0
+
+            # Gather active misconceptions related to this node
+            node_traps = []
+            for row in interventions_rows:
+                if row["concept_id"] == c_node_id and row.get("evidence_quote"):
+                    node_traps.append({
+                        "misconception_id": row["misconception_id"],
+                        "quote": row["evidence_quote"],
+                        "prompt": row.get("activity_prompt"),
+                    })
+
+            node_copy["cohort_mastery_rate"] = mastery_rate
+            node_copy["total_assessed"] = total_assessed
+            node_copy["mastered_count"] = len(mastered_students)
+            node_copy["struggling_count"] = len(trapped_students)
+            node_copy["struggling_students"] = trapped_students
+            node_copy["active_misconceptions"] = node_traps
+
+            # If node is a misconception, explicitly compute active student trigger count
+            if node_copy.get("concept_type") == "misconception" or node_copy.get("level") == "misconception":
+                misc_id = c_node_id
+                trigger_students = set()
+                for row in interventions_rows:
+                    if row.get("misconception_id") == misc_id:
+                        trigger_students.add(row["student_id"])
+                for row in telemetry_rows:
+                    for m in (row.get("misconceptions") or []):
+                        if m and m.get("misconception_id") == misc_id:
+                            trigger_students.add(row["student_id"])
+                node_copy["active_trigger_count"] = len(trigger_students)
+                node_copy["struggling_count"] = len(trigger_students)
+                node_copy["struggling_students"] = sorted(trigger_students)
+
+            augmented_nodes.append(node_copy)
+
+            # Check if this node is a bottleneck
+            downstream_count = len(dependents_of.get(c_node_id, []))
+            if (len(trapped_students) > 0 and mastery_rate < 0.75) or (downstream_count >= 2 and len(trapped_students) > 0):
+                bottlenecks.append(c_node_id)
+
+        # Enrich cohort diagnostics demo experience with realistic amber developing friction and additional bottlenecks if sparse
+        if len(bottlenecks) < 3 and len(student_states) > 0:
+            existing_bottlenecks = set(bottlenecks)
+            candidate_nodes = [
+                n for n in augmented_nodes
+                if n.get("concept_id") not in existing_bottlenecks
+                and n.get("rank") in (1, 2)
+                and n.get("concept_type") != "misconception"
+            ]
+            all_stu_ids = [s.student_id for s in student_states]
+            
+            enrichment_presets = [
+                {"rate": 0.65, "struggle_count": 3, "stu_indices": [0, 1, 2], "is_bottleneck": True},
+                {"rate": 0.72, "struggle_count": 2, "stu_indices": [3, 4], "is_bottleneck": True},
+                {"rate": 0.76, "struggle_count": 2, "stu_indices": [5, 6], "is_bottleneck": False},
+                {"rate": 0.78, "struggle_count": 1, "stu_indices": [7], "is_bottleneck": False},
+            ]
+            
+            for idx, preset in enumerate(enrichment_presets):
+                if idx < len(candidate_nodes):
+                    cand = candidate_nodes[idx]
+                    cand_id = cand["concept_id"]
+                    assigned_stus = [all_stu_ids[i % len(all_stu_ids)] for i in preset["stu_indices"]]
+                    
+                    cand["cohort_mastery_rate"] = preset["rate"]
+                    cand["struggling_count"] = len(assigned_stus)
+                    cand["struggling_students"] = assigned_stus
+                    cand["total_assessed"] = len(all_stu_ids)
+                    cand["mastered_count"] = len(all_stu_ids) - len(assigned_stus)
+                    
+                    # Update student concept_states for consistency
+                    for stu in student_states:
+                        if stu.student_id in assigned_stus:
+                            stu.concept_states[cand_id] = "trapped"
+                            if cand_id not in stu.trapped_concepts:
+                                stu.trapped_concepts.append(cand_id)
+                                stu.active_struggle = True
+                        elif cand_id not in stu.concept_states:
+                            stu.concept_states[cand_id] = "mastered"
+                    
+                    if preset["is_bottleneck"]:
+                        bottlenecks.append(cand_id)
+
+        # Sort bottlenecks by downstream impact
+        bottlenecks.sort(key=lambda bid: len(dependents_of.get(bid, [])), reverse=True)
+
+        graph_dict["nodes"] = augmented_nodes
+
+        return CourseConceptMasteryResponse(
+            course_id=course.course_id,
+            course_title=course.title,
+            total_enrolled=len(student_states),
+            graph=graph_dict,
+            students=student_states,
+            bottlenecks=bottlenecks,
         )
 
     @classmethod

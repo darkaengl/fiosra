@@ -164,7 +164,7 @@
         courseId={currentCourseId}
         enrolledCount={rosterData.total_enrolled || rosterData.students?.length || 0}
         onAddModule={() => (isAddModuleOpen = true)}
-        onViewRoster={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
+        onViewRoster={() => { window.location.hash = `#/cohort-diagnostics?course_id=${currentCourseId}`; }}
       />
 
       <div class="view-switcher">
@@ -175,13 +175,9 @@
         >
           <span>🗺️</span> Curriculum Architecture &amp; Sequencer ({currentCourse.modules?.length || 0} Units)
         </button>
-        <button
-          type="button"
-          class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}"
-          onclick={() => { activeTab = 'roster'; }}
-        >
-          <span>👥</span> Students &amp; Cohort Roster ({rosterData.total_enrolled || rosterData.students?.length || 0})
-        </button>
+        <a href="#/cohort-diagnostics?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Students & Cohort Diagnostics">
+          <span>👥</span> Students &amp; Cohort Diagnostics ↗
+        </a>
         <a href="#/knowledge-graph?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Curriculum Concept Graph">
           <span>◌</span> Curriculum Concept Graph ↗
         </a>

@@ -289,6 +289,7 @@
   let probes = $state([]);
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
   let sessionEvents = $state([]);
+  let sessionInterventions = $state([]);
   let documentHeadings = $state([]);
   let isLoading = $state(true);
 
@@ -757,6 +758,38 @@
     await loadDocument();
     await loadProbes();
     await loadSessionEvents();
+    await loadSessionInterventions();
+  }
+
+  async function loadSessionInterventions() {
+    if (!sessionId) return;
+    try {
+      const response = await fetch(`/interventions/session/${sessionId}`);
+      if (response.ok) {
+        sessionInterventions = await response.json();
+      }
+    } catch (err) {
+      console.warn('Failed to load session interventions:', err);
+    }
+  }
+
+  async function handleRespondIntervention(interventionId, responseText) {
+    try {
+      const response = await fetch(`/interventions/${interventionId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_response: responseText }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        sessionInterventions = sessionInterventions.map((i) =>
+          i.intervention_id === updated.intervention_id ? updated : i
+        );
+        sourceActionNotice = 'Your reflection has been sent to your instructor.';
+      }
+    } catch (err) {
+      console.error('Failed to submit intervention response:', err);
+    }
   }
 
   async function syncDocument(patch) {
@@ -1640,6 +1673,8 @@
               sessionEvents={sessionEvents}
               graphMetrics={graphMetrics}
               sessionStatus={sessionStatus}
+              interventions={sessionInterventions}
+              onRespondIntervention={handleRespondIntervention}
               submittedAt={submittedAt}
               isSubmitting={isSubmitting}
               onSubmitMilestone={submitSession}

@@ -123,3 +123,44 @@ class EnrollmentResponse(BaseModel):
     student_id: str
     enrolled_at: datetime
 
+
+class ConceptCohortMetrics(BaseModel):
+    concept_id: str
+    label: str
+    level: str = "topic"
+    cohort_mastery_rate: float = Field(default=1.0, description="Cohort mastery rate (0.0 to 1.0)")
+    total_assessed: int = 0
+    mastered_count: int = 0
+    struggling_count: int = 0
+    struggling_students: list[str] = Field(default_factory=list)
+    active_traps: list[str] = Field(default_factory=list)
+    active_misconceptions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class StudentConceptState(BaseModel):
+    student_id: str
+    name: str | None = None
+    average_autonomy_score: float = 1.0
+    active_struggle: bool = False
+    struggling_kcs: list[str] = Field(default_factory=list)
+    concept_states: dict[str, str] = Field(
+        default_factory=dict,
+        description="concept_id -> 'mastered' | 'frontier' | 'trapped' | 'locked'",
+    )
+    trapped_concepts: list[str] = Field(default_factory=list)
+
+
+class CourseConceptMasteryResponse(BaseModel):
+    course_id: UUID
+    course_title: str
+    total_enrolled: int
+    graph: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Course concept graph augmented with cohort metrics per node",
+    )
+    students: list[StudentConceptState] = Field(default_factory=list)
+    bottlenecks: list[str] = Field(
+        default_factory=list,
+        description="List of concept_ids identified as high-downstream bottlenecks",
+    )
+

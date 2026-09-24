@@ -6,11 +6,13 @@
 
   let {
     probes = [],
+    interventions = [],
     documentBlocks = [],
     activeProbeId = '',
     focusedBlockId = '',
     focusedBlockOffsetTop = 0,
     onRespond = async () => null,
+    onRespondIntervention = async () => null,
     onDismiss = async () => null,
     onDefer = async () => null,
     onSelectBlock = () => null,
@@ -197,11 +199,13 @@
       {#if activeTab === 'marginalia'}
         <SocraticMarginaliaGutter
           {probes}
+          {interventions}
           {documentBlocks}
           {activeProbeId}
           {focusedBlockId}
           {focusedBlockOffsetTop}
           {onRespond}
+          {onRespondIntervention}
           {onDismiss}
           {onDefer}
           {onSelectBlock}
