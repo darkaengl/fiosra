@@ -1,35 +1,39 @@
 <script>
-  import { onMount } from 'svelte';
-  import ThinkingTimeline from '../lib/ThinkingTimeline.svelte';
-  import PdfViewer from '../lib/PdfViewer.svelte';
-  import { formatDate, responseError, routeParams } from '../lib/session.js';
+  import { onMount } from "svelte";
+  import ThinkingTimeline from "../lib/ThinkingTimeline.svelte";
+  import PdfViewer from "../lib/PdfViewer.svelte";
+  import { formatDate, responseError, routeParams } from "../lib/session.js";
 
   let {
-    courseId: propCourseId = '',
-    assignmentId: propAssignmentId = '',
-    targetStudentId = '',
-    targetSessionId = '',
+    courseId: propCourseId = "",
+    assignmentId: propAssignmentId = "",
+    targetStudentId = "",
+    targetSessionId = "",
     onBack = null,
   } = $props();
 
-  let courseId = $state(propCourseId || '');
-  let assignmentId = $state(propAssignmentId || '');
-  let filterStatus = $state('all'); // 'all' | 'completed' | 'submitted' | 'active'
-  let searchQuery = $state('');
+  let courseId = $state(propCourseId || "");
+  let assignmentId = $state(propAssignmentId || "");
+  let filterStatus = $state("all"); // 'all' | 'completed' | 'submitted' | 'active'
+  let searchQuery = $state("");
 
   // UI state for the 3-panel workspace
   let isRosterCollapsed = $state(false);
-  let activeEvalTab = $state('rubric'); // 'rubric' | 'traps' | 'reasoning'
-  let activeReviewTimelineTab = $state('reasoning'); // 'reasoning' | 'activity'
+  let activeEvalTab = $state("rubric"); // 'rubric' | 'traps' | 'reasoning'
+  let activeReviewTimelineTab = $state("reasoning"); // 'reasoning' | 'activity'
   let expandedReasoningNode = $state(-1);
   let expandedActivityNode = $state(-1);
 
   // Draggable sidebar widths (matching StudentWorkspace margin sliders)
   let rosterWidth = $state(
-    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_eval_roster_width'))) || 260
+    (typeof localStorage !== "undefined" &&
+      Number(localStorage.getItem("fiosra_eval_roster_width"))) ||
+      260,
   );
   let workbenchWidth = $state(
-    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_eval_workbench_width'))) || 380
+    (typeof localStorage !== "undefined" &&
+      Number(localStorage.getItem("fiosra_eval_workbench_width"))) ||
+      380,
   );
   let isResizingLeft = $state(false);
   let isResizingRight = $state(false);
@@ -42,21 +46,26 @@
 
     function onPointerMove(moveEvent) {
       const deltaX = moveEvent.clientX - startX;
-      const maxAllowed = Math.max(200, Math.min(460, window.innerWidth - workbenchWidth - 360));
-      rosterWidth = Math.round(Math.max(180, Math.min(maxAllowed, startWidth + deltaX)));
+      const maxAllowed = Math.max(
+        200,
+        Math.min(460, window.innerWidth - workbenchWidth - 360),
+      );
+      rosterWidth = Math.round(
+        Math.max(180, Math.min(maxAllowed, startWidth + deltaX)),
+      );
     }
 
     function onPointerUp() {
       isResizingLeft = false;
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
       try {
-        localStorage.setItem('fiosra_eval_roster_width', String(rosterWidth));
+        localStorage.setItem("fiosra_eval_roster_width", String(rosterWidth));
       } catch {}
     }
 
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
   }
 
   function startResizeRight(e) {
@@ -68,66 +77,86 @@
     function onPointerMove(moveEvent) {
       const deltaX = startX - moveEvent.clientX;
       const leftColWidth = isRosterCollapsed ? 42 : rosterWidth;
-      const maxAllowed = Math.max(300, Math.min(560, window.innerWidth - leftColWidth - 360));
-      workbenchWidth = Math.round(Math.max(280, Math.min(maxAllowed, startWidth + deltaX)));
+      const maxAllowed = Math.max(
+        300,
+        Math.min(560, window.innerWidth - leftColWidth - 360),
+      );
+      workbenchWidth = Math.round(
+        Math.max(280, Math.min(maxAllowed, startWidth + deltaX)),
+      );
     }
 
     function onPointerUp() {
       isResizingRight = false;
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
       try {
-        localStorage.setItem('fiosra_eval_workbench_width', String(workbenchWidth));
+        localStorage.setItem(
+          "fiosra_eval_workbench_width",
+          String(workbenchWidth),
+        );
       } catch {}
     }
 
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
   }
 
   // ---- Misconception review ---------------------------------------------
   let scanBySession = $state({});
-  let scanningSession = $state('');
-  let scanError = $state('');
-  let draftOpenFor = $state('');
-  let draftBody = $state('');
-  let draftSubject = $state('');
+  let scanningSession = $state("");
+  let scanError = $state("");
+  let draftOpenFor = $state("");
+  let draftBody = $state("");
+  let draftSubject = $state("");
 
-  let scan = $derived(selected ? scanBySession[selected.session_id] || null : null);
-  let isScanning = $derived(Boolean(selected) && scanningSession === selected.session_id);
+  let scan = $derived(
+    selected ? scanBySession[selected.session_id] || null : null,
+  );
+  let isScanning = $derived(
+    Boolean(selected) && scanningSession === selected.session_id,
+  );
 
   async function runMisconceptionScan() {
     if (!selected || isScanning) return;
     const sessionId = selected.session_id;
     scanningSession = sessionId;
-    scanError = '';
+    scanError = "";
     try {
       const response = await fetch(`/interventions/scan/${sessionId}`);
-      if (!response.ok) throw new Error(await responseError(response, 'The submission could not be analysed.'));
+      if (!response.ok)
+        throw new Error(
+          await responseError(
+            response,
+            "The submission could not be analysed.",
+          ),
+        );
       scanBySession = { ...scanBySession, [sessionId]: await response.json() };
     } catch (err) {
-      scanError = err.message || 'The submission could not be analysed.';
+      scanError = err.message || "The submission could not be analysed.";
     } finally {
-      scanningSession = '';
+      scanningSession = "";
     }
   }
 
   function openDraft(finding) {
     draftOpenFor = finding.misconception_id;
-    draftSubject = finding.suggested_message?.subject || '';
-    draftBody = finding.suggested_message?.body || '';
+    draftSubject = finding.suggested_message?.subject || "";
+    draftBody = finding.suggested_message?.body || "";
   }
 
   function openInMailClient() {
     const url = `mailto:?subject=${encodeURIComponent(draftSubject)}&body=${encodeURIComponent(draftBody)}`;
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   }
 
   async function copyDraft() {
     try {
-      await navigator.clipboard.writeText(`Subject: ${draftSubject}\n\n${draftBody}`);
+      await navigator.clipboard.writeText(
+        `Subject: ${draftSubject}\n\n${draftBody}`,
+      );
     } catch (err) {
-      console.warn('Clipboard unavailable', err);
+      console.warn("Clipboard unavailable", err);
     }
   }
 
@@ -147,10 +176,18 @@
   });
 
   $effect(() => {
-    if (targetSessionId && selected?.session_id !== targetSessionId && queue.length) {
+    if (
+      targetSessionId &&
+      selected?.session_id !== targetSessionId &&
+      queue.length
+    ) {
       const match = queue.find((item) => item.session_id === targetSessionId);
       if (match) selectItem(match);
-    } else if (targetStudentId && selected?.student_id !== targetStudentId && queue.length) {
+    } else if (
+      targetStudentId &&
+      selected?.student_id !== targetStudentId &&
+      queue.length
+    ) {
       const match = queue.find((item) => item.student_id === targetStudentId);
       if (match) selectItem(match);
     }
@@ -162,34 +199,54 @@
   let trace = $state([]);
   let reasoningNodes = $state([]);
   let activityNodes = $state([]);
-  let grade = $state('');
-  let feedback = $state('');
-  let teacherId = $state('educator_workspace');
+  let grade = $state("");
+  let feedback = $state("");
+  let teacherId = $state("educator_workspace");
   let isLoading = $state(true);
   let isFinalizing = $state(false);
-  let notice = $state('');
-  let error = $state('');
+  let notice = $state("");
+  let error = $state("");
 
   let filteredQueue = $derived.by(() => {
     let q = queue;
-    if (filterStatus === 'completed') q = q.filter((item) => item.status === 'completed');
-    else if (filterStatus === 'submitted') q = q.filter((item) => item.status === 'submitted');
-    else if (filterStatus === 'active') q = q.filter((item) => item.status !== 'submitted' && item.status !== 'completed');
+    if (filterStatus === "completed")
+      q = q.filter((item) => item.status === "completed");
+    else if (filterStatus === "submitted")
+      q = q.filter((item) => item.status === "submitted");
+    else if (filterStatus === "active")
+      q = q.filter(
+        (item) => item.status !== "submitted" && item.status !== "completed",
+      );
     if (searchQuery.trim()) {
       const term = searchQuery.trim().toLowerCase();
-      q = q.filter((item) => item.student_id.toLowerCase().includes(term) || (item.assignment_title && item.assignment_title.toLowerCase().includes(term)));
+      q = q.filter(
+        (item) =>
+          item.student_id.toLowerCase().includes(term) ||
+          (item.assignment_title &&
+            item.assignment_title.toLowerCase().includes(term)),
+      );
     }
     return q;
   });
 
-  let completedCount = $derived(queue.filter((item) => item.status === 'completed').length);
-  let submittedCount = $derived(queue.filter((item) => item.status === 'submitted').length);
-  let activeCount = $derived(queue.filter((item) => item.status !== 'submitted' && item.status !== 'completed').length);
+  let completedCount = $derived(
+    queue.filter((item) => item.status === "completed").length,
+  );
+  let submittedCount = $derived(
+    queue.filter((item) => item.status === "submitted").length,
+  );
+  let activeCount = $derived(
+    queue.filter(
+      (item) => item.status !== "submitted" && item.status !== "completed",
+    ).length,
+  );
 
   // Cohort Quick-Flipper index
   let currentStudentIndex = $derived.by(() => {
     if (!selected || !filteredQueue.length) return -1;
-    return filteredQueue.findIndex((item) => item.session_id === selected.session_id);
+    return filteredQueue.findIndex(
+      (item) => item.session_id === selected.session_id,
+    );
   });
 
   function selectPrevStudent() {
@@ -199,35 +256,53 @@
   }
 
   function selectNextStudent() {
-    if (currentStudentIndex >= 0 && currentStudentIndex < filteredQueue.length - 1) {
+    if (
+      currentStudentIndex >= 0 &&
+      currentStudentIndex < filteredQueue.length - 1
+    ) {
       selectItem(filteredQueue[currentStudentIndex + 1]);
     }
   }
 
   let totalRubricCriteria = $derived.by(() => {
     if (!dossier?.per_question_evidence) return 0;
-    return dossier.per_question_evidence.reduce((sum, q) => sum + Object.keys(q.rubric_evidence || {}).length, 0);
+    return dossier.per_question_evidence.reduce(
+      (sum, q) => sum + Object.keys(q.rubric_evidence || {}).length,
+      0,
+    );
   });
 
   async function loadQueue() {
-    error = '';
+    error = "";
     const params = new URLSearchParams();
-    if (courseId) params.set('course_id', courseId);
-    if (assignmentId) params.set('assignment_id', assignmentId);
-    const suffix = params.toString() ? `?${params.toString()}` : '';
+    if (courseId) params.set("course_id", courseId);
+    if (assignmentId) params.set("assignment_id", assignmentId);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
     const response = await fetch(`/evidence/review-queue${suffix}`);
-    if (!response.ok) throw new Error(await responseError(response, 'The evaluation review queue could not be loaded.'));
+    if (!response.ok)
+      throw new Error(
+        await responseError(
+          response,
+          "The evaluation review queue could not be loaded.",
+        ),
+      );
     queue = await response.json();
 
     let targetToSelect = null;
     if (targetSessionId) {
-      targetToSelect = queue.find((item) => item.session_id === targetSessionId);
+      targetToSelect = queue.find(
+        (item) => item.session_id === targetSessionId,
+      );
     }
     if (!targetToSelect && targetStudentId) {
-      targetToSelect = queue.find((item) => item.student_id === targetStudentId);
+      targetToSelect = queue.find(
+        (item) => item.student_id === targetStudentId,
+      );
     }
     if (!targetToSelect && selected) {
-      targetToSelect = queue.find((item) => item.session_id === selected.session_id);
+      targetToSelect = queue.find(
+        (item) => item.session_id === selected.session_id,
+      );
     }
     if (!targetToSelect && queue.length) {
       targetToSelect = queue[0];
@@ -245,50 +320,68 @@
     trace = [];
     reasoningNodes = [];
     activityNodes = [];
-    feedback = '';
-    grade = item.suggested_grade && item.suggested_grade !== 'Pending' ? item.suggested_grade : '';
-    error = '';
-    draftOpenFor = '';
+    feedback = "";
+    grade =
+      item.suggested_grade && item.suggested_grade !== "Pending"
+        ? item.suggested_grade
+        : "";
+    error = "";
+    draftOpenFor = "";
 
-    const [dossierResponse, traceResponse, reasoningRes, activityRes] = await Promise.all([
-      fetch(`/evidence/dossier/${item.session_id}`),
-      fetch(`/evidence/trace/${item.session_id}`),
-      fetch(`/evidence/trace/${item.session_id}/reasoning`),
-      fetch(`/evidence/trace/${item.session_id}/activity`),
-    ]);
+    const [dossierResponse, traceResponse, reasoningRes, activityRes] =
+      await Promise.all([
+        fetch(`/evidence/dossier/${item.session_id}`),
+        fetch(`/evidence/trace/${item.session_id}`),
+        fetch(`/evidence/trace/${item.session_id}/reasoning`),
+        fetch(`/evidence/trace/${item.session_id}/activity`),
+      ]);
     if (!dossierResponse.ok) {
-      error = await responseError(dossierResponse, 'The evidence dossier could not be loaded.');
+      error = await responseError(
+        dossierResponse,
+        "The evidence dossier could not be loaded.",
+      );
       return;
     }
     dossier = await dossierResponse.json();
-    if (traceResponse.ok) trace = (await traceResponse.json()).trace_nodes || [];
-    if (reasoningRes.ok) reasoningNodes = (await reasoningRes.json()).nodes || [];
+    if (traceResponse.ok)
+      trace = (await traceResponse.json()).trace_nodes || [];
+    if (reasoningRes.ok)
+      reasoningNodes = (await reasoningRes.json()).nodes || [];
     if (activityRes.ok) activityNodes = (await activityRes.json()).nodes || [];
   }
 
   async function finalise() {
     if (!selected || !grade.trim()) return;
     isFinalizing = true;
-    error = '';
-    notice = '';
+    error = "";
+    notice = "";
     try {
-      const response = await fetch(`/evidence/dossier/${selected.session_id}/finalise-grade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          approved_grade: grade.trim(),
-          teacher_id: teacherId.trim() || 'educator_workspace',
-          teacher_override: grade.trim() !== selected.suggested_grade,
-          feedback_comments: feedback.trim(),
-        }),
-      });
-      if (!response.ok) throw new Error(await responseError(response, 'The final grade could not be recorded.'));
+      const response = await fetch(
+        `/evidence/dossier/${selected.session_id}/finalise-grade`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            approved_grade: grade.trim(),
+            teacher_id: teacherId.trim() || "educator_workspace",
+            teacher_override: grade.trim() !== selected.suggested_grade,
+            feedback_comments: feedback.trim(),
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await responseError(
+            response,
+            "The final grade could not be recorded.",
+          ),
+        );
       notice = `Grade ${grade.trim()} finalized for ${selected.student_id}. Session sealed.`;
       selected = null;
       dossier = null;
       await loadQueue();
     } catch (err) {
-      error = err.message || 'The final grade could not be recorded.';
+      error = err.message || "The final grade could not be recorded.";
     } finally {
       isFinalizing = false;
     }
@@ -296,19 +389,22 @@
 
   onMount(async () => {
     const params = routeParams();
-    if (!courseId) courseId = params.get('course_id') || '';
-    if (!assignmentId) assignmentId = params.get('assignment_id') || '';
+    if (!courseId) courseId = params.get("course_id") || "";
+    if (!assignmentId) assignmentId = params.get("assignment_id") || "";
     try {
       await loadQueue();
     } catch (err) {
-      error = err.message || 'The evaluation queue could not be initialized.';
+      error = err.message || "The evaluation queue could not be initialized.";
     } finally {
       isLoading = false;
     }
   });
 </script>
 
-<div class="canvas-review-root" class:is-resizing={isResizingLeft || isResizingRight}>
+<div
+  class="canvas-review-root"
+  class:is-resizing={isResizingLeft || isResizingRight}
+>
   {#if !assignmentId}
     <!-- Compact Standalone Mode Top Bar -->
     <header class="standalone-top-bar">
@@ -324,24 +420,29 @@
   {/if}
 
   {#if isLoading}
-    <div class="loading"><div class="spinner"></div><span>Loading submitted assignments…</span></div>
+    <div class="loading">
+      <div class="spinner"></div>
+      <span>Loading submitted assignments…</span>
+    </div>
   {:else if error && queue.length === 0}
     <section class="load-error" role="alert">
       <strong>The evaluation queue could not be loaded.</strong>
       <p>{error}</p>
-      <button class="btn btn-secondary btn-sm" onclick={loadQueue}>Try again</button>
+      <button class="btn btn-secondary btn-sm" onclick={loadQueue}
+        >Try again</button
+      >
     </section>
   {:else}
     <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- 3-PANEL CANVAS WORKSPACE (Draggable Left | Center PDF | Draggable Right) -->
     <!-- ═══════════════════════════════════════════════════════════ -->
     <div class="canvas-eval-body">
-
       <!-- ── 1. LEFT SIDEBAR: Student Roster ─────────────────────── -->
       {#if !isRosterCollapsed}
         <aside class="canvas-roster-sidebar" style:width={`${rosterWidth}px`}>
           <div class="roster-top-bar">
-            <span class="roster-top-title">Roster ({filteredQueue.length})</span>
+            <span class="roster-top-title">Roster ({filteredQueue.length})</span
+            >
             <button
               type="button"
               class="btn-collapse-sidebar"
@@ -363,30 +464,34 @@
               <button
                 type="button"
                 class="filter-pill"
-                class:active={filterStatus === 'all'}
-                onclick={() => (filterStatus = 'all')}
-              >All ({queue.length})</button>
+                class:active={filterStatus === "all"}
+                onclick={() => (filterStatus = "all")}
+                >All ({queue.length})</button
+              >
               <button
                 type="button"
                 class="filter-pill"
-                class:active={filterStatus === 'completed'}
-                onclick={() => (filterStatus = 'completed')}
-              >Final ({completedCount})</button>
+                class:active={filterStatus === "completed"}
+                onclick={() => (filterStatus = "completed")}
+                >Final ({completedCount})</button
+              >
               {#if submittedCount > 0}
                 <button
                   type="button"
                   class="filter-pill"
-                  class:active={filterStatus === 'submitted'}
-                  onclick={() => (filterStatus = 'submitted')}
-                >Ready ({submittedCount})</button>
+                  class:active={filterStatus === "submitted"}
+                  onclick={() => (filterStatus = "submitted")}
+                  >Ready ({submittedCount})</button
+                >
               {/if}
               {#if activeCount > 0}
                 <button
                   type="button"
                   class="filter-pill"
-                  class:active={filterStatus === 'active'}
-                  onclick={() => (filterStatus = 'active')}
-                >Draft ({activeCount})</button>
+                  class:active={filterStatus === "active"}
+                  onclick={() => (filterStatus = "active")}
+                  >Draft ({activeCount})</button
+                >
               {/if}
             </div>
           </div>
@@ -402,17 +507,23 @@
                   class:active={selected?.session_id === item.session_id}
                   onclick={() => selectItem(item)}
                 >
-                  <span class="roster-avatar-mini">{item.student_id.slice(0, 2).toUpperCase()}</span>
+                  <span class="roster-avatar-mini"
+                    >{item.student_id.slice(0, 2).toUpperCase()}</span
+                  >
                   <div class="roster-item-info">
                     <span class="roster-item-id">{item.student_id}</span>
                     {#if !assignmentId && item.assignment_title}
-                      <span class="roster-item-assignment">{item.assignment_title}</span>
+                      <span class="roster-item-assignment"
+                        >{item.assignment_title}</span
+                      >
                     {/if}
-                    <span class="roster-item-date">{formatDate(item.submitted_at)}</span>
+                    <span class="roster-item-date"
+                      >{formatDate(item.submitted_at)}</span
+                    >
                   </div>
-                  {#if item.status === 'submitted'}
+                  {#if item.status === "submitted"}
                     <span class="mini-status-badge submitted">Ready</span>
-                  {:else if item.status === 'completed'}
+                  {:else if item.status === "completed"}
                     <span class="mini-status-badge completed">Final</span>
                   {:else}
                     <span class="mini-status-badge in-progress">Draft</span>
@@ -422,7 +533,12 @@
             {/if}
           </div>
 
-          <button type="button" class="roster-refresh-btn" onclick={loadQueue} title="Check for new submissions">
+          <button
+            type="button"
+            class="roster-refresh-btn"
+            onclick={loadQueue}
+            title="Check for new submissions"
+          >
             ↻ Refresh Roster
           </button>
         </aside>
@@ -438,11 +554,22 @@
         </div>
       {:else}
         <!-- Collapsed Roster Rail (42px) -->
-        <aside class="canvas-roster-rail" onclick={() => (isRosterCollapsed = false)} title="Click to expand student roster">
-          <button type="button" class="btn-expand-rail" onclick={() => (isRosterCollapsed = false)} title="Expand student roster">
+        <aside
+          class="canvas-roster-rail"
+          onclick={() => (isRosterCollapsed = false)}
+          title="Click to expand student roster"
+        >
+          <button
+            type="button"
+            class="btn-expand-rail"
+            onclick={() => (isRosterCollapsed = false)}
+            title="Expand student roster"
+          >
             ⇥
           </button>
-          <div class="rail-vertical-text">STUDENTS ({filteredQueue.length})</div>
+          <div class="rail-vertical-text">
+            STUDENTS ({filteredQueue.length})
+          </div>
         </aside>
       {/if}
 
@@ -452,27 +579,36 @@
           <div class="hero-empty-state">
             <span class="empty-hero-icon">📋</span>
             <h3>No Student Selected</h3>
-            <p>Select a student from the roster on the left to review their official submission PDF.</p>
+            <p>
+              Select a student from the roster on the left to review their
+              official submission PDF.
+            </p>
           </div>
         {:else if !dossier}
-          <div class="loading small"><div class="spinner"></div><span>Opening evaluation dossier…</span></div>
+          <div class="loading small">
+            <div class="spinner"></div>
+            <span>Opening evaluation dossier…</span>
+          </div>
         {:else}
           <!-- Slim Control Toolbar -->
           <header class="pdf-hero-toolbar">
             <div class="hero-student-meta">
-              <span class="hero-avatar">{selected.student_id.slice(0, 2).toUpperCase()}</span>
+              <span class="hero-avatar"
+                >{selected.student_id.slice(0, 2).toUpperCase()}</span
+              >
               <div class="hero-student-text">
                 <div class="hero-title-row">
                   <h3 class="hero-student-name">{selected.student_id}</h3>
                   <span
                     class="status-chip"
-                    class:submitted={selected.status === 'submitted'}
-                    class:completed={selected.status === 'completed'}
-                    class:in-progress={selected.status !== 'submitted' && selected.status !== 'completed'}
+                    class:submitted={selected.status === "submitted"}
+                    class:completed={selected.status === "completed"}
+                    class:in-progress={selected.status !== "submitted" &&
+                      selected.status !== "completed"}
                   >
-                    {#if selected.status === 'submitted'}
+                    {#if selected.status === "submitted"}
                       ✓ Ready for Grading
-                    {:else if selected.status === 'completed'}
+                    {:else if selected.status === "completed"}
                       ✓ Grade Finalized
                     {:else}
                       ● Live Session (Draft)
@@ -480,8 +616,14 @@
                   </span>
                 </div>
                 <div class="hero-timestamp-row">
-                  {selected.assignment_title ? `${selected.assignment_title} • ` : ''}
-                  {selected.status === 'submitted' ? 'Submitted' : selected.status === 'completed' ? 'Finalized' : 'Active'}: {formatDate(selected.submitted_at)}
+                  {selected.assignment_title
+                    ? `${selected.assignment_title} • `
+                    : ""}
+                  {selected.status === "submitted"
+                    ? "Submitted"
+                    : selected.status === "completed"
+                      ? "Finalized"
+                      : "Active"}: {formatDate(selected.submitted_at)}
                 </div>
               </div>
             </div>
@@ -498,13 +640,16 @@
                 ‹ Prev
               </button>
               <span class="flipper-index-label">
-                {currentStudentIndex >= 0 ? `${currentStudentIndex + 1} of ${filteredQueue.length}` : '—'}
+                {currentStudentIndex >= 0
+                  ? `${currentStudentIndex + 1} of ${filteredQueue.length}`
+                  : "—"}
               </span>
               <button
                 type="button"
                 class="btn-flipper"
                 onclick={selectNextStudent}
-                disabled={currentStudentIndex < 0 || currentStudentIndex >= filteredQueue.length - 1}
+                disabled={currentStudentIndex < 0 ||
+                  currentStudentIndex >= filteredQueue.length - 1}
                 title="Next Student"
               >
                 Next ›
@@ -538,7 +683,7 @@
             {#key selected.session_id}
               <PdfViewer
                 url={`/evidence/dossier/${selected.session_id}/pdf`}
-                title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
+                title={`${selected.student_id} - ${selected.assignment_title || "Assignment Submission"}`}
               />
             {/key}
           </div>
@@ -557,11 +702,13 @@
         </div>
 
         <!-- ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ──────── -->
-        <aside class="canvas-workbench-gutter" style:width={`${workbenchWidth}px`}>
-
+        <aside
+          class="canvas-workbench-gutter"
+          style:width={`${workbenchWidth}px`}
+        >
           <!-- Pinned Sovereign Grade Finalization Bar -->
           <div class="gutter-finalization-bar">
-            {#if selected.status === 'submitted'}
+            {#if selected.status === "submitted"}
               <div class="gutter-grade-form">
                 <div class="grade-input-group">
                   <label class="field-label-mini">
@@ -589,17 +736,21 @@
                   onclick={finalise}
                   disabled={isFinalizing || !grade.trim()}
                 >
-                  {isFinalizing ? 'Finalizing…' : 'Finalize Grade & Seal ➔'}
+                  {isFinalizing ? "Finalizing…" : "Finalize Grade & Seal ➔"}
                 </button>
               </div>
-            {:else if selected.status === 'completed'}
+            {:else if selected.status === "completed"}
               <div class="gutter-sealed-banner">
                 <span class="sealed-check">✓</span>
                 <div class="sealed-text">
                   <strong>Grade Finalized & Sealed</strong>
                   <small>Recorded in sovereign ledger.</small>
                 </div>
-                <a class="btn-sealed-pdf" href={`/evidence/dossier/${selected.session_id}/pdf`} download>
+                <a
+                  class="btn-sealed-pdf"
+                  href={`/evidence/dossier/${selected.session_id}/pdf`}
+                  download
+                >
                   ⬇ PDF
                 </a>
               </div>
@@ -610,7 +761,10 @@
                   <strong>Live Student Session</strong>
                   <small>Student actively reasoning.</small>
                 </div>
-                <a class="btn-recorder-link" href={`#/student/trace?session_id=${selected.session_id}`}>
+                <a
+                  class="btn-recorder-link"
+                  href={`#/student/trace?session_id=${selected.session_id}`}
+                >
                   Trace ↗
                 </a>
               </div>
@@ -622,8 +776,8 @@
             <button
               type="button"
               class="gutter-tab-btn"
-              class:active={activeEvalTab === 'rubric'}
-              onclick={() => (activeEvalTab = 'rubric')}
+              class:active={activeEvalTab === "rubric"}
+              onclick={() => (activeEvalTab = "rubric")}
             >
               <span>📊 Rubric</span>
               <span class="gutter-tab-count">{totalRubricCriteria}</span>
@@ -632,42 +786,56 @@
             <button
               type="button"
               class="gutter-tab-btn"
-              class:active={activeEvalTab === 'traps'}
-              onclick={() => (activeEvalTab = 'traps')}
+              class:active={activeEvalTab === "traps"}
+              onclick={() => (activeEvalTab = "traps")}
             >
               <span>🪤 Traps</span>
-              <span class="gutter-tab-count" class:alert={scan && (scan.findings || []).length > 0}>
-                {scan ? (scan.findings || []).length : 'Scan'}
+              <span
+                class="gutter-tab-count"
+                class:alert={scan && (scan.findings || []).length > 0}
+              >
+                {scan ? (scan.findings || []).length : "Scan"}
               </span>
             </button>
 
             <button
               type="button"
               class="gutter-tab-btn"
-              class:active={activeEvalTab === 'reasoning'}
-              onclick={() => (activeEvalTab = 'reasoning')}
+              class:active={activeEvalTab === "reasoning"}
+              onclick={() => (activeEvalTab = "reasoning")}
             >
               <span>💡 Trace</span>
-              <span class="gutter-tab-count">{reasoningNodes.length + activityNodes.length}</span>
+              <span class="gutter-tab-count"
+                >{reasoningNodes.length + activityNodes.length}</span
+              >
             </button>
           </nav>
 
           <!-- Workbench Tab Body Viewport (Independently Scrolling) -->
           <div class="gutter-tab-viewport">
-
             <!-- ── TAB 1: Rubric Assessment ── -->
-            {#if activeEvalTab === 'rubric'}
+            {#if activeEvalTab === "rubric"}
               <div class="rubric-inspector">
                 {#if !dossier.per_question_evidence || dossier.per_question_evidence.length === 0}
-                  <div class="tab-empty-msg">No rubric criteria configured for this assignment.</div>
+                  <div class="tab-empty-msg">
+                    No rubric criteria configured for this assignment.
+                  </div>
                 {:else}
                   <div class="rubric-matrix-list">
                     {#each dossier.per_question_evidence as question}
                       {#each Object.entries(question.rubric_evidence || {}) as [, criterion]}
-                        <article class="criterion-chip-card" class:met={criterion.met}>
+                        <article
+                          class="criterion-chip-card"
+                          class:met={criterion.met}
+                        >
                           <header class="criterion-chip-header">
-                            <span class="criterion-tag" class:met={criterion.met}>
-                              {criterion.met ? '✓ Evidence Met' : '● Needs Review'}
+                            <span
+                              class="criterion-tag"
+                              class:met={criterion.met}
+                            >
+                              {criterion.met
+                                ? "✓ Evidence Met"
+                                : "● Needs Review"}
                             </span>
                             <span class="criterion-conf-pill">
                               {Math.round((criterion.confidence || 0) * 100)}%
@@ -675,20 +843,28 @@
                           </header>
 
                           <strong class="criterion-label">
-                            {criterion.label || (criterion.met ? 'Standard Met' : 'Criterion Pending')}
+                            {criterion.label ||
+                              (criterion.met
+                                ? "Standard Met"
+                                : "Criterion Pending")}
                           </strong>
 
-                          <p class="criterion-explanation-text">{criterion.description}</p>
+                          <p class="criterion-explanation-text">
+                            {criterion.description}
+                          </p>
 
                           {#if criterion.evidence}
                             <div class="criterion-quote-block">
-                              <span class="quote-header">Submission Quote:</span>
+                              <span class="quote-header">Submission Quote:</span
+                              >
                               <div class="quote-text">{criterion.evidence}</div>
                             </div>
                           {/if}
 
                           {#if criterion.explanation}
-                            <small class="criterion-note">{criterion.explanation}</small>
+                            <small class="criterion-note"
+                              >{criterion.explanation}</small
+                            >
                           {/if}
                         </article>
                       {/each}
@@ -697,15 +873,16 @@
                 {/if}
               </div>
 
-            <!-- ── TAB 2: Cognitive Traps & Misconceptions ── -->
-            {:else if activeEvalTab === 'traps'}
+              <!-- ── TAB 2: Cognitive Traps & Misconceptions ── -->
+            {:else if activeEvalTab === "traps"}
               <div class="traps-inspector">
                 {#if !scan}
                   <div class="trap-scan-prompt">
                     <span class="trap-scan-icon">🪤</span>
                     <h4>Misconception Trap Scan</h4>
                     <p class="trap-scan-desc">
-                      Scans student thesis against cognitive traps authored in the course knowledge graph.
+                      Scans student thesis against cognitive traps authored in
+                      the course knowledge graph.
                     </p>
                     <button
                       type="button"
@@ -713,17 +890,21 @@
                       onclick={runMisconceptionScan}
                       disabled={isScanning}
                     >
-                      {isScanning ? 'Analyzing with LLM…' : '⚡ Run Trap Scan'}
+                      {isScanning ? "Analyzing with LLM…" : "⚡ Run Trap Scan"}
                     </button>
                     {#if isScanning}
-                      <p class="scan-running-note">Evidencing mental models (takes ~20s)…</p>
+                      <p class="scan-running-note">
+                        Evidencing mental models (takes ~20s)…
+                      </p>
                     {/if}
                   </div>
                 {:else if (scan.findings || []).length === 0}
                   <div class="trap-clean-prompt">
                     <span class="clean-check-icon">✓</span>
                     <h4>No Cognitive Traps Found</h4>
-                    <p class="clean-desc">The student avoided known mental traps for this inquiry.</p>
+                    <p class="clean-desc">
+                      The student avoided known mental traps for this inquiry.
+                    </p>
                     <button
                       type="button"
                       class="btn-rescan-ghost"
@@ -736,7 +917,11 @@
                 {:else}
                   <div class="traps-results-bar">
                     <span class="traps-count-label">
-                      {(scan.findings || []).length} Cognitive {(scan.findings || []).length === 1 ? 'Trap' : 'Traps'} Evidenced
+                      {(scan.findings || []).length} Cognitive {(
+                        scan.findings || []
+                      ).length === 1
+                        ? "Trap"
+                        : "Traps"} Evidenced
                     </span>
                     <button
                       type="button"
@@ -753,8 +938,13 @@
                       <article class="trap-item-card">
                         <header class="trap-item-header">
                           <strong class="trap-item-name">{finding.name}</strong>
-                          <span class="trap-item-badge" class:weak={finding.detection !== 'llm_verified'}>
-                            {finding.detection === 'llm_verified' ? 'Evidenced' : 'Candidate'}
+                          <span
+                            class="trap-item-badge"
+                            class:weak={finding.detection !== "llm_verified"}
+                          >
+                            {finding.detection === "llm_verified"
+                              ? "Evidenced"
+                              : "Candidate"}
                           </span>
                         </header>
 
@@ -763,7 +953,9 @@
                         {#if finding.evidence_quote}
                           <div class="trap-quote-box">
                             <span class="quote-eyebrow">Student Quote:</span>
-                            <blockquote class="trap-quote-text">"{finding.evidence_quote}"</blockquote>
+                            <blockquote class="trap-quote-text">
+                              "{finding.evidence_quote}"
+                            </blockquote>
                           </div>
                           <p class="trap-why-text">{finding.why}</p>
                         {/if}
@@ -797,13 +989,17 @@
 
                         {#if draftOpenFor === finding.misconception_id}
                           <div class="inline-socratic-draft">
-                            <label class="draft-field-label" for="draft-subject">Subject</label>
+                            <label class="draft-field-label" for="draft-subject"
+                              >Subject</label
+                            >
                             <input
                               id="draft-subject"
                               class="draft-subject-input"
                               bind:value={draftSubject}
                             />
-                            <label class="draft-field-label" for="draft-body">Socratic Guidance</label>
+                            <label class="draft-field-label" for="draft-body"
+                              >Socratic Guidance</label
+                            >
                             <textarea
                               id="draft-body"
                               class="draft-body-input"
@@ -811,9 +1007,22 @@
                               bind:value={draftBody}
                             ></textarea>
                             <div class="draft-action-btns">
-                              <button type="button" class="btn-mail" onclick={openInMailClient}>Open in Mail</button>
-                              <button type="button" class="btn-copy" onclick={copyDraft}>Copy</button>
-                              <button type="button" class="btn-close" onclick={() => (draftOpenFor = '')}>Close</button>
+                              <button
+                                type="button"
+                                class="btn-mail"
+                                onclick={openInMailClient}>Open in Mail</button
+                              >
+                              <button
+                                type="button"
+                                class="btn-copy"
+                                onclick={copyDraft}>Copy</button
+                              >
+                              <button
+                                type="button"
+                                class="btn-close"
+                                onclick={() => (draftOpenFor = "")}
+                                >Close</button
+                              >
                             </div>
                           </div>
                         {/if}
@@ -827,24 +1036,24 @@
                 {/if}
               </div>
 
-            <!-- ── TAB 3: Reasoning Trace ── -->
-            {:else if activeEvalTab === 'reasoning'}
+              <!-- ── TAB 3: Reasoning Trace ── -->
+            {:else if activeEvalTab === "reasoning"}
               <div class="trace-inspector">
                 <div class="trace-sub-toolbar">
                   <div class="trace-toggle-buttons">
                     <button
                       type="button"
                       class="btn-trace-sub"
-                      class:active={activeReviewTimelineTab === 'reasoning'}
-                      onclick={() => (activeReviewTimelineTab = 'reasoning')}
+                      class:active={activeReviewTimelineTab === "reasoning"}
+                      onclick={() => (activeReviewTimelineTab = "reasoning")}
                     >
                       Milestones ({reasoningNodes.length})
                     </button>
                     <button
                       type="button"
                       class="btn-trace-sub"
-                      class:active={activeReviewTimelineTab === 'activity'}
-                      onclick={() => (activeReviewTimelineTab = 'activity')}
+                      class:active={activeReviewTimelineTab === "activity"}
+                      onclick={() => (activeReviewTimelineTab = "activity")}
                     >
                       Log ({activityNodes.length})
                     </button>
@@ -860,44 +1069,46 @@
                 </div>
 
                 <div class="trace-timeline-area">
-                  {#if activeReviewTimelineTab === 'reasoning'}
+                  {#if activeReviewTimelineTab === "reasoning"}
                     {#if reasoningNodes.length === 0}
-                      <p class="tab-empty-msg">No reasoning milestones logged yet.</p>
+                      <p class="tab-empty-msg">
+                        No reasoning milestones logged yet.
+                      </p>
                     {:else}
                       <ThinkingTimeline
                         nodes={reasoningNodes}
                         expandedNodeIndex={expandedReasoningNode}
                         onToggleNode={(idx) => {
-                          expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
+                          expandedReasoningNode =
+                            expandedReasoningNode === idx ? -1 : idx;
                         }}
                       />
                     {/if}
+                  {:else if activityNodes.length === 0}
+                    <p class="tab-empty-msg">No activity events logged.</p>
                   {:else}
-                    {#if activityNodes.length === 0}
-                      <p class="tab-empty-msg">No activity events logged.</p>
-                    {:else}
-                      <ThinkingTimeline
-                        nodes={activityNodes}
-                        expandedNodeIndex={expandedActivityNode}
-                        onToggleNode={(idx) => {
-                          expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
-                        }}
-                      />
-                    {/if}
+                    <ThinkingTimeline
+                      nodes={activityNodes}
+                      expandedNodeIndex={expandedActivityNode}
+                      onToggleNode={(idx) => {
+                        expandedActivityNode =
+                          expandedActivityNode === idx ? -1 : idx;
+                      }}
+                    />
                   {/if}
                 </div>
               </div>
             {/if}
-
           </div>
         </aside>
       {/if}
-
     </div>
   {/if}
 
   {#if notice}<div class="toast-notice success">{notice}</div>{/if}
-  {#if error && queue.length > 0}<div class="toast-notice error">{error}</div>{/if}
+  {#if error && queue.length > 0}<div class="toast-notice error">
+      {error}
+    </div>{/if}
 </div>
 
 <style>
@@ -1497,9 +1708,21 @@
     color: var(--color-slate-muted);
   }
 
-  .empty-hero-icon { font-size: 40px; margin-bottom: 8px; }
-  .hero-empty-state h3 { font-size: 15px; color: var(--color-heading); margin: 0 0 6px; }
-  .hero-empty-state p { max-width: 360px; font-size: 12px; margin: 0; line-height: 1.5; }
+  .empty-hero-icon {
+    font-size: 40px;
+    margin-bottom: 8px;
+  }
+  .hero-empty-state h3 {
+    font-size: 15px;
+    color: var(--color-heading);
+    margin: 0 0 6px;
+  }
+  .hero-empty-state p {
+    max-width: 360px;
+    font-size: 12px;
+    margin: 0;
+    line-height: 1.5;
+  }
 
   /* ── 3. RIGHT SIDEBAR: Evaluator Workbench Gutter ────────────── */
   .canvas-workbench-gutter {
@@ -1726,22 +1949,65 @@
     padding: 24px 0;
   }
 
-  /* Rubric Matrix */
+  /* Rubric Matrix with Bloom's Taxonomy Cognitive Hierarchy */
   .rubric-matrix-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
+  .bloom-framework-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+  }
+
+  .bloom-strip-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+    white-space: nowrap;
+  }
+
+  .bloom-strip-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .bloom-strip-pill {
+    font-size: 8.5px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+  }
+
+  .bloom-strip-pill.l2 { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
+  .bloom-strip-pill.l3 { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; }
+  .bloom-strip-pill.l4 { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .bloom-strip-pill.l5 { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+  .bloom-strip-pill.l6 { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+
   .criterion-chip-card {
-    background: #fafaf8;
+    background: #ffffff;
     border: 1px solid var(--color-graphite-border);
-    border-left: 3px solid #d97706;
-    border-radius: 4px;
-    padding: 10px 12px;
+    border-left: 3.5px solid #d97706;
+    border-radius: 6px;
+    padding: 11px 13px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    transition: all 0.15s ease;
   }
 
   .criterion-chip-card.met {
@@ -1749,46 +2015,104 @@
     background: #ffffff;
   }
 
+  .criterion-chip-card.unassessed {
+    border-left-color: #cbd5e1;
+    background: #fafaf9;
+  }
+
   .criterion-chip-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
+  }
+
+  .criterion-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .criterion-header-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
   }
 
   .criterion-tag {
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.03em;
     color: #92400e;
+    background: #fef3c7;
+    padding: 2px 6px;
+    border-radius: 3px;
   }
 
   .criterion-tag.met {
     color: #047857;
+    background: #d1fae5;
   }
 
-  .criterion-conf-pill {
+  .criterion-tag.unassessed {
+    color: #475569;
+    background: #f1f5f9;
+  }
+
+  .bloom-badge.target {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--b-color, #7c3aed);
+    background: var(--b-bg, #f5f3ff);
+    border: 1px solid var(--b-border, #ddd6fe);
+    padding: 1.5px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .criterion-weight-pill {
     font-size: 9.5px;
     color: var(--color-slate-muted);
     font-weight: 600;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
   }
 
   .criterion-label {
-    font-size: 12px;
+    font-size: 12.5px;
+    font-weight: 600;
     color: var(--color-heading);
+    line-height: 1.35;
   }
 
   .criterion-explanation-text {
     font-size: 11px;
     color: var(--color-slate-light);
     margin: 0;
-    line-height: 1.4;
+    line-height: 1.45;
   }
 
   .criterion-quote-block {
-    background: #f4f5f0;
-    padding: 6px 8px;
-    border-radius: 4px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 8px 10px;
+    border-radius: 5px;
     margin-top: 2px;
+  }
+
+  .quote-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   .quote-header {
@@ -1796,15 +2120,69 @@
     font-weight: 700;
     text-transform: uppercase;
     color: var(--color-slate-muted);
-    display: block;
-    margin-bottom: 2px;
+    letter-spacing: 0.03em;
+  }
+
+  .bloom-demonstrated-pill {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1.5px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+  }
+
+  .bloom-demonstrated-pill.met {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .bloom-demonstrated-pill.below {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
   }
 
   .quote-text {
     font-size: 11px;
     font-family: var(--font-mono, monospace);
     color: var(--color-slate-bright);
-    line-height: 1.4;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  .criterion-unassessed-box {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin-top: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .unassessed-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    color: #64748b;
+  }
+
+  .unassessed-dot {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .unassessed-text {
+    font-style: italic;
+  }
+
+  .unassessed-cognitive-demand {
+    font-size: 10px;
+    color: #475569;
+    line-height: 1.35;
   }
 
   .criterion-note {
@@ -1812,6 +2190,7 @@
     color: var(--color-slate-muted);
     font-style: italic;
     display: block;
+    margin-top: 2px;
   }
 
   /* Traps Inspector */
@@ -1828,7 +2207,9 @@
     gap: 6px;
   }
 
-  .trap-scan-icon { font-size: 28px; }
+  .trap-scan-icon {
+    font-size: 28px;
+  }
   .clean-check-icon {
     width: 28px;
     height: 28px;
@@ -1869,7 +2250,10 @@
     margin-top: 4px;
   }
 
-  .btn-trigger-scan:disabled { opacity: 0.55; cursor: default; }
+  .btn-trigger-scan:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
 
   .scan-running-note {
     font-size: 10.5px;
@@ -2160,7 +2544,11 @@
     width: 22px;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   .load-error {
     display: flex;
@@ -2176,8 +2564,14 @@
     text-align: center;
   }
 
-  .load-error strong { color: #991b1b; }
-  .load-error p { color: var(--color-slate-light); font-size: 12px; margin: 0; }
+  .load-error strong {
+    color: #991b1b;
+  }
+  .load-error p {
+    color: var(--color-slate-light);
+    font-size: 12px;
+    margin: 0;
+  }
 
   .toast-notice {
     position: absolute;
