@@ -330,7 +330,7 @@
             title="Choose a student in cohort to view their reasoning workspace"
           >
             {#each COHORT_STUDENTS as st}
-              <option value={st.id}>{st.name} ({st.trap})</option>
+              <option value={st.id} title="{st.name} — {st.trap}">{st.name}</option>
             {/each}
           </select>
           <span class="student-select-arrow">▾</span>

@@ -122,39 +122,36 @@
 <div class="portal-page">
   <main class="portal-main">
 
-    <!-- Top Greeting Header -->
-    <header class="greeting-banner">
-      <div class="welcome-block">
-        <span class="welcome-eyebrow">YOUR LEARNING SPACE</span>
-        <h1 class="portal-heading">Student Courses &amp; Milestone Roadmap</h1>
-        <p class="portal-subheading">
-          A calmer place to develop judgement. Work from authentic assignment context, explore uncertainty in your own words, and return to writing without losing the thread of your thinking.
-        </p>
+    <!-- Clean, Calm Dashboard Header -->
+    <header class="portal-header">
+      <div class="portal-header-left">
+        <h1 class="portal-title">Courses &amp; Milestones</h1>
+        <p class="portal-subtitle">Continue your active reasoning investigations or explore available courses.</p>
       </div>
-
-      <div class="term-pill">
-        <span>🏛️ Fall 2026 Academic Term</span>
+      <div class="term-badge">
+        <span class="term-dot"></span>
+        Fall 2026 Term
       </div>
     </header>
 
-    <!-- 2-COLUMN BALANCED DASHBOARD: ENROLLED COURSES + ACADEMIC OVERVIEW -->
+    <!-- 2-Column Balanced Dashboard Grid -->
     <div class="dashboard-grid">
 
-      <!-- LEFT COLUMN: ENROLLED COURSES (Handles 1 or multiple courses gracefully) -->
+      <!-- LEFT COLUMN: ENROLLED COURSES -->
       <section class="dashboard-main-col">
-        <div class="section-header">
+        <div class="section-heading-row">
           <div class="section-title-wrap">
-            <span class="section-eyebrow">📚 MY ENROLLED COURSES</span>
-            <span class="section-badge-count">{enrolledCourses.length} Enrolled</span>
+            <h2 class="section-title">Active Enrollments</h2>
+            <span class="count-pill">{enrolledCourses.length}</span>
           </div>
         </div>
 
         <div class="enrolled-stack">
           {#if isLoading}
             <div class="student-course-card skeleton-card">
-              <div style="height: 18px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
-              <div style="height: 24px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
-              <div style="height: 60px; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 12px;"></div>
+              <div style="height: 16px; width: 100px; background: #e2e8f0; border-radius: 4px;"></div>
+              <div style="height: 22px; width: 70%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
+              <div style="height: 50px; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 12px;"></div>
             </div>
           {:else if enrolledCourses.length > 0}
             {#each enrolledCourses as c (c.course_id)}
@@ -163,143 +160,141 @@
               {@const totalAssigns = mods.reduce((sum, m) => sum + (m.assignments ? m.assignments.length : 0), 0) || c.assignments_count || 1}
 
               <div class="student-course-card enrolled-card">
-                <!-- Header with Title and Status -->
-                <div class="card-top-row">
-                  <div class="card-titles">
-                    <div class="meta-badge-strip">
-                      <span class="course-meta-code">{c.domain || 'BUSINESS & MANAGEMENT'}</span>
-                      <span class="badge badge-success">Active Enrolled</span>
+                <!-- Course Header -->
+                <div class="card-header-row">
+                  <div class="card-headings">
+                    <div class="meta-strip">
+                      <span class="domain-tag">{c.domain || 'Business & Management'}</span>
+                      <span class="status-tag active">
+                        <span class="status-dot"></span>
+                        Enrolled
+                      </span>
                     </div>
-                    <h2 class="course-title">{c.title}</h2>
-                    <div class="instructor-line">
+                    <h3 class="course-name">{c.title}</h3>
+                    <div class="course-meta">
                       Faculty: <strong>{c.created_by || 'Prof. Somerville'}</strong>
-                      <span class="meta-dot">•</span>
-                      <strong>{mods.length} Modules</strong>
-                      <span class="meta-dot">•</span>
-                      <strong>{totalAssigns} Assignments</strong>
+                      <span class="meta-sep">•</span>
+                      <span>{mods.length} Modules</span>
+                      <span class="meta-sep">•</span>
+                      <span>{totalAssigns} Assignments</span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Clean Light Active Task Callout (No dark grey!) -->
-                <div class="active-task-box">
-                  <span class="active-task-label">CURRENT ACTIVE REASONING MILESTONE</span>
-                  <div class="active-task-title">
-                    {firstAssign ? firstAssign.title : 'Primary Source Inquiries & Epistemic Reasoning'}
+                <!-- Sleek Next Milestone Strip -->
+                <div class="milestone-strip">
+                  <div class="milestone-badge-col">
+                    <span class="milestone-badge">Next Milestone</span>
                   </div>
-                  <div class="active-task-meta">
-                    ⏱️ Module 1 • Sectional Scaffold Active • 5 Rubric Criteria Tracked • ~400 Words Target
+                  <div class="milestone-content">
+                    <div class="milestone-title">
+                      {firstAssign ? firstAssign.title : 'Primary Source Inquiries & Epistemic Reasoning'}
+                    </div>
+                    <div class="milestone-sub">
+                      Module 1 · 5 Rubric Criteria · ~400 Words Target
+                    </div>
                   </div>
                 </div>
 
-                <!-- Balanced Action Footer -->
+                <!-- Clean Actions Row -->
                 <div class="card-footer">
                   <div class="card-footer-left">
-                    <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
-                      View Course Map &amp; Modules →
-                    </a>
-                    <button
-                      class="link-drop"
-                      onclick={() => dropCourse(c.course_id)}
-                      disabled={droppingId === c.course_id}
+                    <a
+                      href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`}
+                      class="btn-primary"
                     >
-                      {droppingId === c.course_id ? 'Dropping...' : 'Drop Course'}
-                    </button>
+                      Resume Reasoning Canvas →
+                    </a>
+                    <a href="#/student/home?course_id={c.course_id}" class="link-outline">
+                      Course Outline
+                    </a>
                   </div>
-
-                  <a
-                    href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`}
-                    class="btn btn-primary"
+                  <button
+                    class="btn-drop"
+                    onclick={() => dropCourse(c.course_id)}
+                    disabled={droppingId === c.course_id}
                   >
-                    Resume Reasoning Canvas →
-                  </a>
+                    {droppingId === c.course_id ? 'Dropping...' : 'Drop'}
+                  </button>
                 </div>
               </div>
             {/each}
           {:else}
             <div class="empty-state-card">
-              <div class="empty-icon">📭</div>
-              <h3 class="empty-title">No Active Course Enrollments</h3>
-              <p class="empty-desc">You are not enrolled in any courses yet. Select a course from the academic catalog below to get started.</p>
+              <div class="empty-symbol">📭</div>
+              <h3 class="empty-title">No Active Enrollments</h3>
+              <p class="empty-desc">You are not currently enrolled in any courses. Browse the catalog below to enroll.</p>
             </div>
           {/if}
         </div>
       </section>
 
-      <!-- RIGHT COLUMN: ACADEMIC OVERVIEW & PROGRESSION -->
+      <!-- RIGHT COLUMN: UNIFIED ACADEMIC STANDING & PROGRESS -->
       <aside class="dashboard-sidebar-col">
-        <!-- Autonomy & Epistemic Standing Card -->
-        <div class="sidebar-card autonomy-widget">
-          <div class="widget-header">
-            <span class="widget-icon">🛡️</span>
-            <span class="widget-label">Academic Standing</span>
+        <div class="sidebar-card standing-card">
+          <div class="standing-top-row">
+            <span class="sidebar-eyebrow">Academic Standing</span>
+            <span class="level-badge">Level 4 Independent</span>
           </div>
 
-          <div class="autonomy-score-block">
-            <span class="score-number">88.4%</span>
-            <span class="score-tier">Level 4 Independent</span>
+          <div class="standing-score-row">
+            <span class="score-large">88.4%</span>
+            <span class="score-status-text">Autonomous Synthesis</span>
           </div>
 
-          <div class="score-progress-bar">
-            <div class="score-progress-fill" style="width: 88.4%;"></div>
+          <div class="standing-progress-track">
+            <div class="standing-progress-fill" style="width: 88.4%;"></div>
           </div>
 
-          <p class="widget-desc">
+          <p class="standing-narrative">
             Demonstrates rigorous primary source synthesis with minimal hint dependency.
           </p>
 
-          <a href="#/student/timeline" class="sidebar-cta-btn">
-            📈 Longitudinal Progression Timeline →
+          <div class="standing-stats-grid">
+            <div class="stat-box">
+              <span class="stat-val">{enrolledCourses.length}</span>
+              <span class="stat-lbl">Active Course</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val">5</span>
+              <span class="stat-lbl">Criteria Evaluated</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val">0.91</span>
+              <span class="stat-lbl">Epistemic Depth</span>
+            </div>
+          </div>
+
+          <a href="#/student/timeline" class="sidebar-timeline-link">
+            View Progression Timeline →
           </a>
-        </div>
-
-        <!-- Academic Milestones & Term Overview -->
-        <div class="sidebar-card term-widget">
-          <div class="widget-header">
-            <span class="widget-icon">🗓️</span>
-            <span class="widget-label">Fall 2026 Overview</span>
-          </div>
-
-          <div class="term-stats-list">
-            <div class="term-stat-item">
-              <span class="stat-name">Active Courses:</span>
-              <span class="stat-value">{enrolledCourses.length} Enrolled</span>
-            </div>
-            <div class="term-stat-item">
-              <span class="stat-name">Current Task:</span>
-              <span class="stat-value highlight-text">
-                {enrolledCourses.length > 0 && getFirstAssignment(enrolledCourses[0]) ? getFirstAssignment(enrolledCourses[0]).title : 'Dara\'s Coffee Cart'}
-              </span>
-            </div>
-            <div class="term-stat-item">
-              <span class="stat-name">Evaluation Rubrics:</span>
-              <span class="stat-value">5 Criteria Tracked</span>
-            </div>
-          </div>
         </div>
       </aside>
 
     </div>
 
-    <!-- SECTION 2: ACADEMIC CATALOG & ENROLLMENT (CLEAR SEPARATION) -->
-    <section class="section-block catalog-section">
-      <div class="section-header catalog-header">
+    <!-- SECTION 2: ACADEMIC CATALOG & ENROLLMENT -->
+    <section class="catalog-section">
+      <div class="catalog-header-bar">
         <div class="section-title-wrap">
-          <span class="section-eyebrow">🔍 EXPLORE ACADEMIC CATALOG &amp; ENROLLMENT</span>
-          <span class="section-badge-count">{filteredAvailableCourses.length} Available</span>
+          <h2 class="section-title">Course Catalog</h2>
+          <span class="count-pill">{filteredAvailableCourses.length} Available</span>
         </div>
 
-        <!-- Live Search Bar -->
-        <div class="search-wrap">
-          <span class="search-icon">🔎</span>
+        <!-- Sleek Search Input -->
+        <div class="search-box">
+          <svg class="search-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
           <input
             type="text"
-            placeholder="Search courses, topics, faculty..."
+            placeholder="Search catalog by title, faculty, topic..."
             bind:value={searchQuery}
-            class="catalog-search-input"
+            class="search-input"
           />
           {#if searchQuery}
-            <button class="clear-search-btn" onclick={() => (searchQuery = '')}>✕</button>
+            <button class="clear-btn" onclick={() => (searchQuery = '')} aria-label="Clear search">✕</button>
           {/if}
         </div>
       </div>
@@ -308,35 +303,35 @@
       <div class="category-tabs-bar">
         <button
           type="button"
-          class="cat-tab-btn"
+          class="cat-tab"
           class:active={selectedCategory === 'all'}
           onclick={() => (selectedCategory = 'all')}
         >
-          All Subjects ({categoryCounts.all})
+          All Subjects <span class="tab-count">{categoryCounts.all}</span>
         </button>
         <button
           type="button"
-          class="cat-tab-btn"
+          class="cat-tab"
           class:active={selectedCategory === 'business'}
           onclick={() => (selectedCategory = 'business')}
         >
-          Business &amp; Management ({categoryCounts.business})
+          Business &amp; Management <span class="tab-count">{categoryCounts.business}</span>
         </button>
         <button
           type="button"
-          class="cat-tab-btn"
+          class="cat-tab"
           class:active={selectedCategory === 'humanities'}
           onclick={() => (selectedCategory = 'humanities')}
         >
-          History &amp; Humanities ({categoryCounts.humanities})
+          History &amp; Humanities <span class="tab-count">{categoryCounts.humanities}</span>
         </button>
         <button
           type="button"
-          class="cat-tab-btn"
+          class="cat-tab"
           class:active={selectedCategory === 'sciences'}
           onclick={() => (selectedCategory = 'sciences')}
         >
-          Sciences &amp; Physics ({categoryCounts.sciences})
+          Sciences &amp; Physics <span class="tab-count">{categoryCounts.sciences}</span>
         </button>
       </div>
 
@@ -344,38 +339,44 @@
       <div class="catalog-grid">
         {#if isLoading}
           <div class="student-course-card skeleton-card">
-            <div style="height: 18px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
-            <div style="height: 24px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
+            <div style="height: 16px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
+            <div style="height: 22px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
           </div>
         {:else if filteredAvailableCourses.length > 0}
           {#each filteredAvailableCourses as c (c.course_id)}
             <div class="student-course-card available-card">
-              <div class="card-top-row">
-                <div>
-                  <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
-                  <h2 class="course-title">{c.title}</h2>
+              <div class="card-header-row">
+                <div class="card-headings">
+                  <div class="meta-strip">
+                    <span class="domain-tag">{c.domain || 'Academic'}</span>
+                    <span class="status-tag open">Open</span>
+                  </div>
+                  <h3 class="course-name">{c.title}</h3>
                 </div>
-                <span class="badge badge-open">Open</span>
               </div>
 
-              <div class="instructor-line">
-                Faculty: {c.created_by || 'Faculty'} • {c.modules ? c.modules.length : 0} Modules • {c.assignments_count || 0} Tasks
+              <div class="course-meta">
+                Faculty: <strong>{c.created_by || 'Faculty'}</strong>
+                <span class="meta-sep">•</span>
+                <span>{c.modules ? c.modules.length : 0} Modules</span>
+                <span class="meta-sep">•</span>
+                <span>{c.assignments_count || 0} Tasks</span>
               </div>
 
               {#if c.syllabus_context}
                 <p class="course-synopsis">
-                  {c.syllabus_context.slice(0, 140)}{c.syllabus_context.length > 140 ? '...' : ''}
+                  {c.syllabus_context.slice(0, 130)}{c.syllabus_context.length > 130 ? '...' : ''}
                 </p>
               {:else}
                 <p class="course-synopsis">
-                  Curriculum syllabus with foundational primary sources, epistemic reasoning scaffolds, and assessment rubrics.
+                  Structured curriculum with primary evidence grounding, epistemic inquiry scaffolds, and assessment rubrics.
                 </p>
               {/if}
 
-              <div class="card-footer">
-                <span class="term-tag">Fall 2026</span>
+              <div class="catalog-card-footer">
+                <span class="term-lbl">Fall 2026</span>
                 <button
-                  class="btn btn-enroll"
+                  class="btn-enroll"
                   onclick={() => enrollInCourse(c.course_id)}
                   disabled={enrollingId === c.course_id}
                 >
@@ -385,11 +386,11 @@
             </div>
           {/each}
         {:else}
-          <div class="empty-state-card">
-            <div class="empty-icon">🔎</div>
-            <h3 class="empty-title">No Matching Courses</h3>
+          <div class="empty-state-card full-width">
+            <div class="empty-symbol">🔍</div>
+            <h3 class="empty-title">No Matching Courses Found</h3>
             <p class="empty-desc">
-              {searchQuery ? `No courses found matching "${searchQuery}".` : 'No courses are available in this category.'} Try selecting "All Subjects" or clearing your search.
+              {searchQuery ? `No courses matching "${searchQuery}".` : 'No courses currently available in this category.'}
             </p>
           </div>
         {/if}
@@ -409,59 +410,66 @@
   }
 
   .portal-main {
-    max-width: 1240px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 30px 24px 80px 24px;
+    padding: 28px 24px 72px 24px;
     display: flex;
     flex-direction: column;
     gap: 32px;
   }
 
-  /* Top Greeting Header */
-  .greeting-banner {
+  /* Clean, Uncluttered Page Header */
+  .portal-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    background: var(--surface, #ffffff);
-    border: 1px solid var(--border, #DDDCD5);
-    border-radius: 12px;
-    padding: 22px 28px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    align-items: flex-end;
     gap: 16px;
     flex-wrap: wrap;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border, #DDDCD5);
   }
 
-  .greeting-left {
+  .portal-header-left {
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
 
-  .greeting-name {
+  .portal-title {
     font-size: 24px;
     font-weight: 700;
     color: var(--color-heading, #111315);
-    font-family: var(--font-brand, inherit);
     margin: 0;
+    letter-spacing: -0.02em;
   }
 
-  .greeting-sub {
+  .portal-subtitle {
     font-size: 13.5px;
     color: var(--color-slate, #6D7378);
     margin: 0;
   }
 
-  .term-pill {
-    font-size: 12.5px;
+  .term-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--color-slate, #6D7378);
-    background: var(--color-cloud-subtle, #F0EFEA);
+    background: var(--surface, #ffffff);
     border: 1px solid var(--border, #DDDCD5);
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 999px;
   }
 
-  /* 2-Column Balanced Dashboard Grid */
+  .term-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-signal-green, #5FAF7A);
+  }
+
+  /* 2-Column Dashboard Grid */
   .dashboard-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 340px;
@@ -469,7 +477,7 @@
     align-items: start;
   }
 
-  @media (max-width: 990px) {
+  @media (max-width: 960px) {
     .dashboard-grid {
       grid-template-columns: 1fr;
     }
@@ -478,162 +486,13 @@
   .dashboard-main-col {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
   }
 
-  .enrolled-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-
-  /* Sidebar Column */
-  .dashboard-sidebar-col {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-
-  .sidebar-card {
-    background: var(--surface, #ffffff);
-    border: 1px solid var(--border, #DDDCD5);
-    border-radius: 10px;
-    padding: 20px 22px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .autonomy-widget {
-    border-left: 4px solid var(--color-signal-green, #5FAF7A);
-  }
-
-  .term-widget {
-    border-left: 4px solid var(--color-horizon-blue, #4F6BFF);
-  }
-
-  .widget-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .widget-icon {
-    font-size: 16px;
-  }
-
-  .widget-label {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: var(--color-slate-muted, #6D7378);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .autonomy-score-block {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-
-  .score-number {
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--color-signal-green, #5FAF7A);
-  }
-
-  .score-tier {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-signal-green-text, #2D6340);
-    background: var(--color-signal-green-bg, #EBF7F0);
-    padding: 2px 8px;
-    border-radius: 999px;
-  }
-
-  .score-progress-bar {
-    height: 6px;
-    background: var(--color-cloud, #E9E8E3);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .score-progress-fill {
-    height: 100%;
-    background: var(--color-signal-green, #5FAF7A);
-    border-radius: 999px;
-  }
-
-  .widget-desc {
-    font-size: 12px;
-    color: var(--color-slate, #6D7378);
-    line-height: 1.45;
-    margin: 0;
-  }
-
-  .sidebar-cta-btn {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-signal-green-text, #2D6340);
-    background: var(--color-signal-green-bg, #EBF7F0);
-    border: 1px solid rgba(95, 175, 122, 0.3);
-    padding: 8px 12px;
-    border-radius: 6px;
-    text-align: center;
-    text-decoration: none;
-    transition: all 0.15s ease;
-  }
-
-  .sidebar-cta-btn:hover {
-    background: #dcfce7;
-  }
-
-  .term-stats-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .term-stat-item {
+  .section-heading-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12.5px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--color-cloud-subtle, #F0EFEA);
-  }
-
-  .term-stat-item:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  .stat-name {
-    color: var(--color-slate, #6D7378);
-  }
-
-  .stat-value {
-    font-weight: 600;
-    color: var(--color-heading, #111315);
-    text-align: right;
-  }
-
-  .highlight-text {
-    color: var(--color-horizon-blue, #4F6BFF);
-    max-width: 170px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* Section Header */
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
   }
 
   .section-title-wrap {
@@ -642,149 +501,167 @@
     gap: 8px;
   }
 
-  .section-eyebrow {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: var(--color-slate-muted, #6D7378);
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-heading, #111315);
+    margin: 0;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.04em;
   }
 
-  .section-badge-count {
-    font-size: 11.5px;
+  .count-pill {
+    font-size: 11px;
     font-weight: 600;
     color: var(--color-slate, #6D7378);
     background: var(--color-cloud-subtle, #F0EFEA);
     border: 1px solid var(--border, #DDDCD5);
-    padding: 2px 8px;
+    padding: 1px 7px;
     border-radius: 999px;
   }
 
-  /* Enrolled Course Card (Clean, Proportional, Light) */
+  .enrolled-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Clean Enrolled & Available Course Cards */
   .student-course-card {
     background: var(--surface, #ffffff);
     border: 1px solid var(--border, #DDDCD5);
     border-radius: 10px;
-    padding: 22px 24px;
+    padding: 20px 22px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .student-course-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border-color: #cbcaa;
   }
 
-  .enrolled-card {
-    border-left: 4px solid var(--color-horizon-blue, #4F6BFF);
-  }
-
-  .available-card {
-    border-left: 3px solid var(--color-cloud, #E9E8E3);
-  }
-
-  .available-card:hover {
-    border-color: var(--color-horizon-blue, #4F6BFF);
-  }
-
-  .card-top-row {
+  .card-header-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 12px;
   }
 
-  .card-titles {
+  .card-headings {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     flex: 1;
-    min-width: 240px;
   }
 
-  .meta-badge-strip {
+  .meta-strip {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .course-meta-code {
+  .domain-tag {
     font-size: 10.5px;
-    font-weight: 800;
+    font-weight: 700;
     color: var(--color-horizon-blue, #4F6BFF);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.04em;
   }
 
-  .course-title {
-    font-size: 18px;
+  .status-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .status-tag.active {
+    background: var(--color-signal-green-bg, #EBF7F0);
+    color: var(--color-signal-green-text, #2D6340);
+  }
+
+  .status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-signal-green, #5FAF7A);
+  }
+
+  .status-tag.open {
+    background: var(--color-cloud-subtle, #F0EFEA);
+    color: var(--color-slate, #6D7378);
+  }
+
+  .course-name {
+    font-size: 17px;
     font-weight: 700;
     color: var(--color-heading, #111315);
     margin: 0;
-    line-height: 1.3;
+    line-height: 1.35;
   }
 
-  .instructor-line {
+  .course-meta {
     font-size: 12.5px;
     color: var(--color-slate, #6D7378);
   }
 
-  .meta-dot {
-    margin: 0 4px;
-    color: var(--color-cloud, #E9E8E3);
+  .meta-sep {
+    margin: 0 5px;
+    color: var(--border, #DDDCD5);
   }
 
-  .badge-success {
-    background: var(--color-signal-green-bg, #EBF7F0);
-    color: var(--color-signal-green-text, #2D6340);
-    border: 1px solid rgba(95, 175, 122, 0.3);
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  .badge-open {
-    background: var(--color-cloud-subtle, #F0EFEA);
-    color: var(--color-slate, #6D7378);
-    border: 1px solid var(--border, #DDDCD5);
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  /* Light Active Task Box */
-  .active-task-box {
+  /* Sleek Next Milestone Strip */
+  .milestone-strip {
     background: var(--color-cloud-subtle, #F0EFEA);
     border: 1px solid var(--border, #DDDCD5);
-    border-radius: 6px;
-    padding: 14px 16px;
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .milestone-badge-col {
+    flex-shrink: 0;
+  }
+
+  .milestone-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-horizon-blue, #4F6BFF);
+    background: var(--surface, #ffffff);
+    border: 1px solid rgba(79, 107, 255, 0.2);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .milestone-content {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    min-width: 0;
   }
 
-  .active-task-label {
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: var(--color-slate-muted, #6D7378);
-    letter-spacing: 0.5px;
-  }
-
-  .active-task-title {
-    font-size: 14px;
-    font-weight: 700;
+  .milestone-title {
+    font-size: 13.5px;
+    font-weight: 600;
     color: var(--color-heading, #111315);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .active-task-meta {
-    font-size: 12px;
+  .milestone-sub {
+    font-size: 11.5px;
     color: var(--color-slate, #6D7378);
   }
 
@@ -793,10 +670,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-top: 1px solid var(--border, #DDDCD5);
-    padding-top: 14px;
-    margin-top: auto;
-    gap: 16px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-cloud-subtle, #F0EFEA);
+    gap: 12px;
     flex-wrap: wrap;
   }
 
@@ -807,52 +683,178 @@
     flex-wrap: wrap;
   }
 
-  .link-subtle {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--color-horizon-blue, #4F6BFF);
-    text-decoration: none;
-    transition: opacity 0.15s ease;
-  }
-
-  .link-subtle:hover {
-    color: var(--color-horizon-bright, #3D5AFE);
-    text-decoration: underline;
-  }
-
-  .link-drop {
-    font-size: 11.5px;
-    font-weight: 500;
-    color: var(--color-slate-subtle, #8A9096);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    transition: color 0.15s ease;
-  }
-
-  .link-drop:hover {
-    color: var(--color-rose, #B74C4C);
-  }
-
   .btn-primary {
     background: var(--color-horizon-blue, #4F6BFF);
     color: #ffffff;
-    border: 1px solid var(--color-horizon-bright, #3D5AFE);
-    padding: 8px 18px;
+    padding: 7px 16px;
     border-radius: 6px;
     font-size: 12.5px;
     font-weight: 600;
     text-decoration: none;
     transition: all 0.15s ease;
     white-space: nowrap;
-    box-shadow: 0 1px 3px var(--color-horizon-glow, rgba(79, 107, 255, 0.2));
+    border: 1px solid rgba(61, 90, 254, 0.2);
   }
 
   .btn-primary:hover {
     background: var(--color-horizon-bright, #3D5AFE);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px var(--color-horizon-glow, rgba(79, 107, 255, 0.3));
+    box-shadow: 0 2px 6px rgba(79, 107, 255, 0.25);
+  }
+
+  .link-outline {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-slate, #6D7378);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  .link-outline:hover {
+    color: var(--color-heading, #111315);
+    text-decoration: underline;
+  }
+
+  .btn-drop {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--color-slate-subtle, #8A9096);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    transition: color 0.15s ease;
+  }
+
+  .btn-drop:hover {
+    color: var(--color-rose, #B74C4C);
+  }
+
+  /* Unified Right Sidebar Card */
+  .dashboard-sidebar-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar-card {
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, #DDDCD5);
+    border-radius: 10px;
+    padding: 20px 22px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .standing-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .sidebar-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-slate, #6D7378);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .level-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-signal-green-text, #2D6340);
+    background: var(--color-signal-green-bg, #EBF7F0);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .standing-score-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .score-large {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--color-heading, #111315);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .score-status-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-signal-green, #5FAF7A);
+  }
+
+  .standing-progress-track {
+    height: 5px;
+    background: var(--color-cloud-subtle, #F0EFEA);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .standing-progress-fill {
+    height: 100%;
+    background: var(--color-signal-green, #5FAF7A);
+    border-radius: 999px;
+  }
+
+  .standing-narrative {
+    font-size: 12px;
+    color: var(--color-slate, #6D7378);
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .standing-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-cloud-subtle, #F0EFEA);
+  }
+
+  .stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--color-cloud-subtle, #F0EFEA);
+    padding: 8px 4px;
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-heading, #111315);
+  }
+
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--color-slate, #6D7378);
+    margin-top: 1px;
+  }
+
+  .sidebar-timeline-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-horizon-blue, #4F6BFF);
+    text-align: center;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--color-cloud-subtle, #F0EFEA);
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .sidebar-timeline-link:hover {
+    background: #EBF0FF;
+    color: var(--color-horizon-bright, #3D5AFE);
   }
 
   /* Catalog Section */
@@ -864,7 +866,15 @@
     gap: 16px;
   }
 
-  .search-wrap {
+  .catalog-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -873,108 +883,125 @@
     border-radius: 8px;
     padding: 6px 12px;
     min-width: 280px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
     transition: border-color 0.15s ease;
   }
 
-  .search-wrap:focus-within {
+  .search-box:focus-within {
     border-color: var(--color-horizon-blue, #4F6BFF);
-    box-shadow: 0 0 0 2px var(--color-horizon-glow, rgba(79, 107, 255, 0.15));
+    box-shadow: 0 0 0 2px rgba(79, 107, 255, 0.12);
   }
 
-  .search-icon {
-    font-size: 13px;
+  .search-svg {
     color: var(--color-slate-subtle, #8A9096);
+    flex-shrink: 0;
   }
 
-  .catalog-search-input {
+  .search-input {
     border: none;
     background: transparent;
     outline: none;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--color-heading, #111315);
     width: 100%;
   }
 
-  .clear-search-btn {
+  .clear-btn {
     background: none;
     border: none;
     color: var(--color-slate-subtle, #8A9096);
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     padding: 0;
-  }
-
-  .clear-search-btn:hover {
-    color: var(--color-heading, #111315);
   }
 
   .category-tabs-bar {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    border-bottom: 1px solid var(--border, #DDDCD5);
-    padding-bottom: 8px;
   }
 
-  .cat-tab-btn {
+  .cat-tab {
     background: var(--surface, #ffffff);
     border: 1px solid var(--border, #DDDCD5);
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 12.5px;
-    font-weight: 600;
+    border-radius: 999px;
+    padding: 5px 13px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--color-slate, #6D7378);
     cursor: pointer;
     transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
-  .cat-tab-btn:hover {
+  .cat-tab:hover {
     border-color: var(--color-horizon-blue, #4F6BFF);
     color: var(--color-heading, #111315);
-    background: var(--color-cloud-subtle, #F0EFEA);
   }
 
-  .cat-tab-btn.active {
-    background: var(--color-horizon-blue, #4F6BFF);
+  .cat-tab.active {
+    background: var(--color-heading, #111315);
     color: #ffffff;
-    border-color: var(--color-horizon-blue, #4F6BFF);
+    border-color: var(--color-heading, #111315);
+  }
+
+  .tab-count {
+    font-size: 11px;
+    opacity: 0.75;
   }
 
   .catalog-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 18px;
+    gap: 16px;
+  }
+
+  .available-card {
+    border-top: 2px solid transparent;
+  }
+
+  .available-card:hover {
+    border-top-color: var(--color-horizon-blue, #4F6BFF);
   }
 
   .course-synopsis {
-    font-size: 12.5px;
+    font-size: 12px;
     color: var(--color-slate, #6D7378);
     line-height: 1.5;
     margin: 0;
   }
 
+  .catalog-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-cloud-subtle, #F0EFEA);
+  }
+
+  .term-lbl {
+    font-size: 11.5px;
+    color: var(--color-slate-subtle, #8A9096);
+  }
+
   .btn-enroll {
-    background: var(--color-horizon-blue, #4F6BFF);
-    color: #ffffff;
-    border: none;
-    padding: 7px 15px;
+    background: var(--surface, #ffffff);
+    color: var(--color-horizon-blue, #4F6BFF);
+    border: 1px solid rgba(79, 107, 255, 0.3);
+    padding: 6px 13px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
-    white-space: nowrap;
   }
 
   .btn-enroll:hover {
-    background: var(--color-horizon-bright, #3D5AFE);
-  }
-
-  .term-tag {
-    font-size: 11.5px;
-    color: var(--color-slate-subtle, #8A9096);
-    font-weight: 500;
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
   }
 
   /* Empty state */
@@ -982,25 +1009,29 @@
     background: var(--surface, #ffffff);
     border: 1px dashed var(--border, #DDDCD5);
     border-radius: 8px;
-    padding: 32px 20px;
+    padding: 28px 20px;
     text-align: center;
     color: var(--color-slate, #6D7378);
   }
 
-  .empty-icon {
-    font-size: 28px;
+  .empty-state-card.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .empty-symbol {
+    font-size: 24px;
     margin-bottom: 6px;
   }
 
   .empty-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--color-heading, #111315);
     margin: 0 0 4px 0;
   }
 
   .empty-desc {
-    font-size: 12.5px;
+    font-size: 12px;
     margin: 0;
   }
 </style>
