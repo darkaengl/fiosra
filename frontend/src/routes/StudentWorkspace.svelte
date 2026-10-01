@@ -3,16 +3,14 @@
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
   import RightWorkbenchGutter from '../lib/RightWorkbenchGutter.svelte';
   import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
-  import TutorChatDrawer from '../lib/TutorChatDrawer.svelte';
+  import WorkspaceFlyoutPanel from '../lib/workspace/WorkspaceFlyoutPanel.svelte';
   import { fiosraContext } from '../lib/contextStore.svelte.js';
   import {
-    formatDate,
     getStudentId,
     responseError,
     routeParams,
     sessionAccessTokenStorageKey,
     sessionStorageKey,
-    COHORT_STUDENTS,
   } from '../lib/session.js';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
   import {
@@ -20,13 +18,16 @@
     loadStoredChatSessions,
     persistChatSessions,
   } from '../lib/workspace/workspaceConsultations';
-  import WorkspaceFlyoutPanel from '../lib/workspace/WorkspaceFlyoutPanel.svelte';
+  import {
+    canonicalBlockAnalysis,
+    computeGraphMetrics,
+    normalizeAssignmentSources,
+  } from '../lib/workspace/workspaceBlockUtils';
 
   let isSourcesCollapsed = $state(true);
   let isSourcesExpanded = $state(false);
   let isGutterCollapsed = $state(true);
   let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
-  let isTutorChatDrawerOpen = $state(false);
   let isMacroBusy = $state(false);
   let isZenFullscreen = $state(false);
   let savedLayoutState = $state(null);
@@ -118,18 +119,30 @@
       id: `chat_${crypto.randomUUID().slice(0, 8)}`,
       title: `Consultation ${nextNum}`,
       startedAt: new Date().toISOString(),
-      turns: [],
+      turns: [
+        {
+          role: 'tutor',
+          text: `Welcome to Consultation ${nextNum}. How can I assist your critical inquiry today?`,
+          thoughts: 'Fresh session initialization',
+          hint_rung: 1,
+          is_adversarial: false,
+          action_capsules: [],
+          radar: null,
+          prompt_launchers: [
+            { text: "Help me evaluate my evidence", category: "evidence" },
+            { text: "Check my argument structure", category: "reasoning" }
+          ]
+        }
+      ]
     };
-    chatSessions = [newSession, ...chatSessions];
+    chatSessions = [...chatSessions, newSession];
     activeChatSessionId = newSession.id;
     saveCurrentChatSessions();
   }
 
   function handleSwitchChatSession(id) {
-    if (chatSessions.some((cs) => cs.id === id)) {
-      activeChatSessionId = id;
-      saveCurrentChatSessions();
-    }
+    activeChatSessionId = id;
+    saveCurrentChatSessions();
   }
 
   let courseId = $state('');
@@ -147,18 +160,13 @@
   let documentHeadings = $state([]);
   let isLoading = $state(true);
 
-  let isSidebarOpen = $state(true);
-  let activeSidebarTab = $state('scope'); // 'scope' | 'outline' | 'graph' | 'trace'
-  let activeWorkspaceTab = $state('canvas'); // 'materials' | 'canvas' | 'trace'
   let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
   let currentProbe = $derived(probes.find((p) => p.probe_id === activeProbeId) || probes[0] || null);
   let probeResponse = $state('');
   let probeNotice = $state('');
   let isProbeBusy = $state(false);
-  let sourceSearchQuery = $state('');
   let error = $state('');
-  let probeTimer;
   let editorRef = $state(null);
   let supportResult = $state(null);
   let isSupportBusy = $state(false);
@@ -174,7 +182,6 @@
   let selectedSourceId = $state('');
   let sourceActionNotice = $state('');
   let sourceActionError = $state(null);
-  let sourceLookupResults = $state({});
   let sourceActionBusy = $state(false);
 
   function handleToggleSourcesCollapse(val) {
@@ -187,11 +194,9 @@
 
   function handleToggleSourcesExpand() {
     if (isSourcesExpanded && !isSourcesCollapsed) {
-      // It is currently expanded. Collapse it back to sidebar completely so canvas is visible!
       isSourcesExpanded = false;
       isSourcesCollapsed = true;
     } else {
-      // Expand fully to 40% width, and collapse gutter to right!
       isSourcesExpanded = true;
       isSourcesCollapsed = false;
       isGutterCollapsed = true;
@@ -206,7 +211,6 @@
     } else if ((tab === 'engagement' || tab === 'reasoning' || tab === 'activity') && gutterWidth < 480) {
       gutterWidth = 500;
     }
-    // When opening right gutter (40% width), collapse sources so canvas remains roomy!
     if (isSourcesExpanded) {
       isSourcesExpanded = false;
       isSourcesCollapsed = true;
@@ -234,142 +238,16 @@
     }));
   });
 
-  function canonicalBlockAnalysis(block) {
-    const text = (block.plaintext || '').trim();
-    if (block.block_type === 'heading') return { ...block, text, canonical_type: 'heading', has_premature: false };
-    const suppliedType = block.semantic_type || block.content?.attrs?.semanticType;
-    const validTypes = new Set(['claim', 'evidence', 'reasoning', 'assumption', 'counter', 'conclusion']);
-    let canonicalType = validTypes.has(suppliedType) ? suppliedType : '';
-    if (!canonicalType) {
-      const likelyEvidence = /\b(?:the|this) (?:source|report|text|record|excavation|material)\s+(?:describes|states|shows|records|notes|documents)\b/i.test(text);
-      const likelyReasoning = /\b(?:because|therefore|thus|consequently|which means|this suggests|as a result|leads? to)\b/i.test(text);
-      const likelyAssumption = /\b(?:assumes?|taken for granted|must have|obviously)\b/i.test(text);
-      canonicalType = likelyAssumption ? 'assumption'
-        : likelyReasoning ? 'reasoning'
-          : likelyEvidence ? 'evidence'
-            : 'claim';
-    }
-    const hasPremature = /(?:therefore|thus|hence|in conclusion|consequently)\b/i.test(text)
-      && !/\b(?:source|evidence|data|table|figure|report)\b/i.test(text);
-    return { ...block, text, canonical_type: canonicalType, has_premature: hasPremature };
-  }
-
   let canonicalBlocks = $derived.by(() => allDocumentBlocks.map(canonicalBlockAnalysis));
 
-  let graphMetrics = $derived.by(() => {
-    let c = 0, e = 0, w = 0, a = 0, p = 0;
-    for (const b of canonicalBlocks) {
-      const sem = b.canonical_type;
-      if (sem === 'claim') c++;
-      else if (sem === 'evidence') e++;
-      else if (sem === 'reasoning') w++;
-      else if (sem === 'assumption') a++;
-      if (probes.some((pr) => pr.block_id === b.block_id && pr.status !== 'superseded')) p++;
-    }
-    return { claims: c, evidence: e, warrants: w, assumptions: a, probes: p };
-  });
-
-  let graphSections = $derived.by(() => {
-    const sections = [];
-    let currentSec = {
-      heading: { text: 'Provisional Claims & Thesis', level: 2, pos: 0 },
-      blocks: [],
-    };
-
-    for (const b of canonicalBlocks) {
-      if (b.block_type === 'heading') {
-        if (currentSec.blocks.length > 0) {
-          sections.push(currentSec);
-        }
-        currentSec = {
-          heading: { text: b.plaintext || 'Section', level: 2, pos: b.position },
-          blocks: [],
-        };
-      } else {
-        const text = b.text;
-        if (text.length > 3) {
-          const sem = b.canonical_type;
-          const hasProbe = probes.some((pr) => pr.block_id === b.block_id && pr.status !== 'superseded');
-          const icon = sem === 'evidence' ? '📜' : sem === 'reasoning' ? '⚡' : sem === 'assumption' ? '⚠️' : sem === 'counter' ? '🔄' : sem === 'conclusion' ? '🏁' : '🎯';
-          const label = sem.charAt(0).toUpperCase() + sem.slice(1);
-          currentSec.blocks.push({
-            block_id: b.block_id,
-            text: text.slice(0, 110),
-            semanticType: sem,
-            icon,
-            label,
-            hasProbe,
-            hasPremature: b.has_premature,
-          });
-        }
-      }
-    }
-    if (currentSec.blocks.length > 0 || sections.length === 0) {
-      sections.push(currentSec);
-    }
-    return sections;
-  });
+  let graphMetrics = $derived.by(() => computeGraphMetrics(canonicalBlocks, probes));
 
   let published = $derived(assignment?.published || null);
-  let assignmentSources = $derived.by(() => {
-    const list = published?.source_pack
-      || assignment?.grounding_sources
-      || published?.sources
-      || assignment?.sources
-      || [];
-    return list.map((s, idx) => ({
-      source_id: s.source_id || s.id || `src_${idx + 1}`,
-      author: s.author || s.citation || s.title || 'Primary Source',
-      title: s.title || s.source_title || `Primary Source ${idx + 1}`,
-      date: s.date || 'Assigned Document',
-      provenance: s.provenance || s.citation || '',
-      passage: s.passage || s.excerpt || s.text || '',
-      hidden_context: s.hidden_context || s.synopsis || s.relevance_guidance || '',
-      target_kc: s.target_kc || s.kc || 'KC_EVIDENCE',
-      source_url: s.source_url || s.url || s.download_url || null,
-      relevance_guidance: s.relevance_guidance || '',
-      resource_type: s.resource_type || 'Primary Source',
-      excerpt: s.passage || s.excerpt || s.text || '',
-      citation: s.provenance || s.citation || '',
-    }));
-  });
-  let publicSources = $derived(assignmentSources);
-  let activeSourceReference = $derived.by(() => {
-    const references = learningDocument?.source_references || [];
-    return references.find((reference) => reference.source_id === selectedSourceId)
-      || references.at(-1)
-      || null;
-  });
+  let assignmentSources = $derived.by(() => normalizeAssignmentSources(assignment));
+
   let activeSourceExhibit = $derived(
     assignmentSources.find((s) => s.source_id === selectedSourceId) || assignmentSources[0] || null
   );
-  let readinessItems = $derived.by(() => {
-    const allText = canonicalBlocks.map((block) => block.text).join(' ');
-    const linkedClaims = new Set(
-      (learningDocument?.source_references || []).flatMap((reference) => reference.linked_block_ids || [])
-    );
-    const hasLinkedEvidence = linkedClaims.size > 0 || graphMetrics.evidence > 0;
-    const hasClaim = graphMetrics.claims > 0 || graphMetrics.warrants > 0;
-    const hasReasoning = graphMetrics.warrants > 0 || /\b(?:because|this suggests|therefore|however|although|but)\b/i.test(allText);
-    const hasQualification = /\b(?:may|might|could|however|although|limit(?:ation)?|uncertain|does not establish)\b/i.test(allText);
-    return (published?.public_rubric || []).map((criterion) => {
-      const descriptor = `${criterion.title || ''} ${criterion.description || ''}`.toLowerCase();
-      const asksForEvidence = /evidence|source|material|citation|ground/.test(descriptor);
-      const asksForReasoning = /reason|explain|warrant|analysis|interpret/.test(descriptor);
-      const asksForQualification = /alternative|revision|limit|uncertain|qualification/.test(descriptor);
-      const met = asksForEvidence ? hasLinkedEvidence : asksForQualification ? hasQualification
-        : asksForReasoning ? hasReasoning : hasClaim;
-      const nextStep = asksForEvidence ? 'Link an assigned passage beside the claim it helps you test.'
-        : asksForQualification ? 'Name a limitation, alternative, or uncertainty in your interpretation.'
-          : asksForReasoning ? 'Explain how your evidence supports, complicates, or limits the claim.'
-            : 'Draft a clear, bounded claim that responds to the task.';
-      return { criterion, met, nextStep };
-    });
-  });
-  let readinessSummary = $derived.by(() => {
-    const met = readinessItems.filter((item) => item.met).length;
-    return { met, total: readinessItems.length };
-  });
 
   function sessionHeaders() {
     return {
@@ -678,17 +556,7 @@
       if (!activeProbeId && probes[0]) activeProbeId = probes[0].probe_id;
       if (result.availability_notice) probeNotice = result.availability_notice;
     } catch (err) {
-      // Saving has already completed; an optional background offer must never interrupt writing.
       console.warn('Offering concept-aware Socratic question:', err);
-    }
-  }
-
-  function toggleTutorPanel() {
-    isTutorPanelOpen = !isTutorPanelOpen;
-    if (isTutorPanelOpen) {
-      const current = activeProbe();
-      if (current) activeProbeId = current.probe_id;
-      probeNotice = '';
     }
   }
 
@@ -719,21 +587,6 @@
     }
   }
 
-  function sourceReferenceForBlock(blockId) {
-    return (learningDocument?.source_references || []).filter((reference) =>
-      reference.linked_block_ids?.includes(blockId)
-    );
-  }
-
-  function openAssignedSource(source) {
-    if (!source?.source_url) {
-      sourceActionNotice = 'This assigned source has no external link. Use the excerpt and citation supplied in the evidence pack.';
-      sourceActionError = null;
-      return;
-    }
-    window.open(source.source_url, '_blank', 'noopener,noreferrer');
-  }
-
   async function writeWithSource(source) {
     if (!sessionId || !source || sessionStatus !== 'active') return;
     sourceActionBusy = true;
@@ -752,7 +605,6 @@
       }
       learningDocument = await response.json();
       selectedSourceId = source.source_id;
-      activeWorkspaceTab = 'canvas';
       sourceActionNotice = `Writing with ${source.title}. This reference does not change your draft.`;
     } catch (err) {
       sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
@@ -783,76 +635,6 @@
       learningDocument = await response.json();
       selectedSourceId = source.source_id;
       sourceActionNotice = `${source.title} is linked beside this claim for your review.`;
-      sourceLookupResults = { ...sourceLookupResults, [blockId]: null };
-    } catch (err) {
-      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
-      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
-    } finally {
-      sourceActionBusy = false;
-    }
-  }
-
-  async function useLocatedEvidenceForClaim(source, blockId) {
-    if (!sessionId || !source || !blockId || sessionStatus !== 'active') return;
-    sourceActionBusy = true;
-    sourceActionError = null;
-    try {
-      const alreadySelected = (learningDocument?.source_references || [])
-        .some((reference) => reference.source_id === source.source_id);
-      if (!alreadySelected) {
-        const addResponse = await fetch(`/learning-documents/sessions/${sessionId}/source-references`, {
-          method: 'POST',
-          headers: sessionHeaders(),
-          body: JSON.stringify({ source_id: source.source_id }),
-        });
-        if (!addResponse.ok) {
-          sourceActionError = await responseErrorDetails(addResponse, 'This source could not be selected.');
-          sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
-          return;
-        }
-        learningDocument = await addResponse.json();
-      }
-      const linkResponse = await fetch(
-        `/learning-documents/sessions/${sessionId}/source-references/${encodeURIComponent(source.source_id)}/links`,
-        {
-          method: 'POST',
-          headers: sessionHeaders(),
-          body: JSON.stringify({ block_id: blockId }),
-        },
-      );
-      if (!linkResponse.ok) {
-        sourceActionError = await responseErrorDetails(linkResponse, 'This source could not be linked to the claim.');
-        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
-        return;
-      }
-      learningDocument = await linkResponse.json();
-      selectedSourceId = source.source_id;
-      sourceActionNotice = `${source.title} is linked beside this claim for your review.`;
-      sourceLookupResults = { ...sourceLookupResults, [blockId]: null };
-    } catch (err) {
-      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
-      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
-    } finally {
-      sourceActionBusy = false;
-    }
-  }
-
-  async function findAssignedEvidence(blockId, claimText) {
-    if (!sessionId || !blockId || !claimText) return;
-    sourceActionBusy = true;
-    sourceActionError = null;
-    try {
-      const response = await fetch(`/learning-documents/sessions/${sessionId}/assigned-evidence`, {
-        method: 'POST',
-        headers: sessionHeaders(),
-        body: JSON.stringify({ block_id: blockId, claim_text: claimText }),
-      });
-      if (!response.ok) {
-        sourceActionError = await responseErrorDetails(response, 'Assigned evidence could not be located right now.');
-        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
-        return;
-      }
-      sourceLookupResults = { ...sourceLookupResults, [blockId]: await response.json() };
     } catch (err) {
       sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
       sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
@@ -894,30 +676,6 @@
     await changeProbe(probe.probe_id, 'responses', { response_text: probeResponse.trim() });
   }
 
-  async function handleInlineProbeResponse(probeId, responseText) {
-    const existing = probes.find((p) => p.probe_id === probeId);
-    if (existing) {
-      await changeProbe(probeId, 'responses', { response_text: responseText });
-    } else {
-      if (sessionId) {
-        try {
-          await fetch(`/events/session/${sessionId}`, {
-            method: 'POST',
-            headers: sessionHeaders(),
-            body: JSON.stringify({
-              event_type: 'socratic_inquiry_answered',
-              payload: { block_id: probeId, response_text: responseText, pressure: oraclePressure },
-            }),
-          });
-        } catch (e) {
-          console.warn('Logging inline inquiry answer:', e);
-        }
-        await loadSessionEvents();
-        await loadProbes();
-      }
-    }
-  }
-
   function handleFocusedBlockChange({ blockId, semanticType, text, offsetTop }) {
     fiosraContext.setFocusedBlock(blockId, semanticType, text, offsetTop);
     const matchingProbe = probes.find((p) => p.block_id === blockId && p.status !== 'dismissed');
@@ -952,7 +710,6 @@
     if (sessionIdx < 0 && chatSessions.length > 0) {
       sessionIdx = 0;
     }
-    // Render student message immediately in chat
     if (sessionIdx >= 0) {
       chatSessions[sessionIdx].turns = [
         ...chatSessions[sessionIdx].turns,
@@ -1041,35 +798,6 @@
     }
   }
 
-  function handlePressureChange() {
-    const msgs = {
-      silent: 'Oracle is in Silent Observer mode: Questions only on request.',
-      socratic: 'Oracle is in Socratic Inquirer mode: Balanced inquiries into warrants and causal mechanisms.',
-      challenger: 'Oracle is in Adversarial Challenger mode: Actively pushing counter-hypotheses.',
-      ruthless: 'Oracle is in Ruthless Pressure mode: Stress-testing every unexamined premise and closure leap.',
-    };
-    probeNotice = msgs[oraclePressure] || 'Oracle mode updated.';
-    setTimeout(() => { if (probeNotice === msgs[oraclePressure]) probeNotice = ''; }, 6000);
-  }
-
-  function insertSourceFromSidebar(source) {
-    if (editorRef?.insertSourceQuote) {
-      editorRef.insertSourceQuote(source);
-    }
-  }
-
-  function addSectionFromSidebar(type) {
-    if (editorRef?.insertWritingFrame) {
-      editorRef.insertWritingFrame(type);
-    }
-  }
-
-  function handleHeadingJump(pos) {
-    if (editorRef?.scrollToHeading) {
-      editorRef.scrollToHeading(pos);
-    }
-  }
-
   async function submitSession() {
     if (!sessionId || sessionStatus !== 'active' || isSubmitting) return;
     const documentRevision = learningDocument?.document_revision;
@@ -1120,18 +848,6 @@
     }
   }
 
-  let cognitivePivots = $derived(
-    sessionEvents
-      .filter((e) => e.event_type === 'epistemic_pivot_captured' || e.payload?.before_text)
-      .map((e) => ({
-        timestamp: e.created_at,
-        kc_label: e.payload?.kc_label || e.payload?.kc_id || 'Conceptual Pivot',
-        before_text: e.payload?.before_text || e.payload?.prior_claim || 'Previous premise',
-        after_text: e.payload?.after_text || e.payload?.grounded_claim || e.payload?.text || 'Grounded claim',
-        grounding_source: e.payload?.grounding_source || e.payload?.source_title || '',
-      }))
-  );
-
   async function handleCommitActionCapsule(capsule) {
     if (!capsule) return;
     const textToInsert = capsule.suggested_student_text || capsule.text_payload || '';
@@ -1178,21 +894,14 @@
   function handleEscalateToAgent(probe) {
     activeGutterTab = 'agent';
     if (isGutterCollapsed) isGutterCollapsed = false;
-    if (probe?.question) {
+    if (probe) {
       handleMacroSendMessage(`Regarding paragraph "${probe.claim_text || 'my claim'}": ${probe.question}. How can I best ground this in the evidence?`);
     }
   }
 
-  let filteredSources = $derived(
-    publicSources.filter((s) => {
-      if (!sourceSearchQuery) return true;
-      const q = sourceSearchQuery.toLowerCase();
-      return (s.title || '').toLowerCase().includes(q) || (s.excerpt || '').toLowerCase().includes(q);
-    })
-  );
-
   function enterZenFullscreen() {
     if (isZenFullscreen) return;
+    isZenFullscreen = true;
     savedLayoutState = {
       isSourcesCollapsed,
       isSourcesExpanded,
@@ -1201,17 +910,14 @@
     isSourcesCollapsed = true;
     isSourcesExpanded = false;
     isGutterCollapsed = true;
-    isZenFullscreen = true;
 
     if (typeof document !== 'undefined') {
       document.body.classList.add('fiosra-zen-mode');
-      const rootEl = document.documentElement;
-      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        if (rootEl.requestFullscreen) {
-          rootEl.requestFullscreen().catch(() => {});
-        } else if (rootEl.webkitRequestFullscreen) {
-          rootEl.webkitRequestFullscreen();
-        }
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(() => {});
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
       }
       window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: true } }));
     }
@@ -1337,7 +1043,6 @@
       }
     }
   });
-
 </script>
 
 <svelte:window onkeydown={handleWorkspaceKeyDown} />
@@ -1377,9 +1082,7 @@
   <div class="workspace-viewport" class:zen-mode={isZenFullscreen}>
     <!-- Workspace Content Body -->
     <div class="workspace-content-body">
-      <!-- ============================================================ -->
-      <!-- REASONING CANVAS & INTEGRATED DOC READER (Always preserved)  -->
-      <!-- ============================================================ -->
+      <!-- Zone 1, 2, 3 Grid -->
       <div class="canvas-tab-wrapper">
         <div
           class="in-situ-workbench-grid"
@@ -1605,239 +1308,12 @@
     flex: 1 1 100%;
   }
 
-
-  /* Top Control Bar */
-  .workspace-topbar {
-    background: var(--color-graphite);
-    border-bottom: 1px solid var(--color-graphite-border);
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 52px;
-    flex-shrink: 0;
-    z-index: 10;
-  }
-
-  .topbar-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-width: 0;
-  }
-
-  .sidebar-toggle-btn {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-light);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 6px 10px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .sidebar-toggle-btn:hover {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
-  }
-
-  .sidebar-toggle-btn.active {
-    background: rgba(217, 119, 6, 0.12);
-    border-color: var(--color-horizon-blue);
-    color: var(--color-horizon-blue);
-  }
-
-  .assignment-headline {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .eyebrow {
-    font-size: 9px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--color-horizon-blue);
-  }
-
-  .assignment-headline h1 {
-    margin: 0;
-    font-family: var(--font-brand);
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--color-heading);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-
-  .tutor-toggle-btn {
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: var(--radius-sm);
-    color: #8b5cf6;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 6px 11px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .tutor-toggle-btn:hover, .tutor-toggle-btn.active {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: #8b5cf6;
-  }
-
-  .concept-inquiry-notice {
-    align-self: center;
-    background: transparent;
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-slate-light);
-    cursor: pointer;
-    font-size: 11px;
-    margin: 8px 0 0;
-    padding: 7px 10px;
-  }
-
-  .concept-inquiry-notice:hover {
-    color: var(--color-heading);
-  }
-
-  .probe-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #8b5cf6;
-  }
-
-  .probe-dot.has-probes {
-    animation: pulseGlow 2s infinite;
-  }
-
-  .probe-count-pill {
-    background: #8b5cf6;
-    color: #fff;
-    border-radius: 99px;
-    padding: 1px 6px;
-    font-size: 10px;
-    font-weight: 800;
-  }
-
-  .session-badge {
-    background: var(--color-signal-green-bg);
-    border: 1px solid rgba(5, 150, 105, 0.25);
-    border-radius: 99px;
-    color: var(--color-signal-green);
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 9px;
-    text-transform: capitalize;
-  }
-
-  .session-badge.submitted {
-    background: var(--color-amber-bg);
-    color: var(--color-amber);
-    border-color: rgba(217, 119, 6, 0.25);
-  }
-
-  /* Horizontal Tabs in Top Control Bar */
-  .workspace-horizontal-tabs {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--pill-bg, rgba(0, 0, 0, 0.04));
-    border: 1px solid var(--pill-border, rgba(0, 0, 0, 0.08));
-    border-radius: 99px;
-    padding: 3px 5px;
-  }
-
-  .tab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border-radius: 99px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-slate-light);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .tab-btn:hover {
-    color: var(--color-heading);
-    background: var(--pill-hover, rgba(0, 0, 0, 0.05));
-  }
-
-  .tab-btn.active {
-    color: var(--color-heading);
-    background: var(--color-bone-surface, #ffffff);
-    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
-    font-weight: 700;
-  }
-
-  .tab-icon {
-    font-size: 13px;
-  }
-
-  .tab-label {
-    letter-spacing: 0.1px;
-  }
-
-  .tab-pill {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 7px;
-    border-radius: 99px;
-    background: var(--pill-bg, rgba(0, 0, 0, 0.06));
-    color: var(--color-slate-muted);
-  }
-
-  .tab-btn.active .tab-pill {
-    background: rgba(139, 92, 246, 0.15);
-    color: #7c3aed;
-  }
-
-  .tab-pill.canvas-pill {
-    background: rgba(59, 130, 246, 0.15);
-    color: #93c5fd;
-  }
-
-  .tab-pill.alert-pill {
-    background: rgba(245, 158, 11, 0.25);
-    color: #fcd34d;
-  }
-
-  /* Workspace Content Body Container */
   .workspace-content-body {
     flex: 1;
     min-height: 0;
+    display: flex;
     position: relative;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
   }
 
   /* Canvas Tab Wrapper (Always mounted to preserve cursor/undo/state) */
@@ -1849,10 +1325,6 @@
     display: flex;
     flex-direction: column;
     position: relative;
-  }
-
-  .canvas-tab-wrapper.tab-hidden {
-    display: none !important;
   }
 
   .in-situ-workbench-grid {
@@ -1997,197 +1469,6 @@
     }
   }
 
-  .canvas-main-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Canvas Top Assignment Bar & Direct Submission Hub */
-  .canvas-assignment-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 24px;
-    background: #ffffff;
-    border-bottom: 1px solid var(--color-graphite-border, #e2e8f0);
-    flex-shrink: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  }
-
-  :global([data-theme="dark"]) .canvas-assignment-header {
-    background: #0f172a;
-    border-color: #334155;
-  }
-
-  .assignment-header-left {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .assignment-header-kicker {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-slate-subtle, #64748b);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .assignment-header-title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--color-slate-bright, #0f172a);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  :global([data-theme="dark"]) .assignment-header-title {
-    color: #f8fafc;
-  }
-
-  .assignment-header-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-
-  .canvas-submission-action-group,
-  .canvas-submission-status-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .canvas-draft-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 9999px;
-    font-size: 11.5px;
-    font-weight: 600;
-    color: #475569;
-  }
-
-  .canvas-draft-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #eab308;
-    box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.2);
-  }
-
-  .btn-canvas-submit-primary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 16px;
-    background: #0284c7;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
-    transition: all 0.15s ease;
-  }
-
-  .btn-canvas-submit-primary:hover:not(:disabled) {
-    background: #0369a1;
-    box-shadow: 0 3px 6px rgba(2, 132, 199, 0.35);
-    transform: translateY(-1px);
-  }
-
-  .btn-canvas-submit-primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .canvas-submitted-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 12px;
-    background: #ecfdf5;
-    border: 1px solid #a7f3d0;
-    border-radius: 9999px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #059669;
-  }
-
-  .canvas-submitted-date {
-    font-size: 11.5px;
-    color: #64748b;
-    font-weight: 500;
-  }
-
-  .btn-canvas-dl-pdf {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 12px;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    color: #0284c7;
-    font-size: 12.5px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.15s ease;
-  }
-
-  .btn-canvas-dl-pdf:hover {
-    background: #f0f9ff;
-    border-color: #0284c7;
-  }
-
-  .canvas-submission-alert {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 8px 24px 0;
-    padding: 9px 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .canvas-submission-alert.error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-  }
-
-  .canvas-submission-alert.success {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    color: #15803d;
-  }
-
-  .btn-canvas-alert-action {
-    background: #b91c1c;
-    color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
   .error-banner {
     margin: 12px 24px 0;
     padding: 10px 14px;
@@ -2234,983 +1515,6 @@
     font-size: 10px;
   }
 
-  .writing-source-context {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 18px;
-    margin: 12px 24px 0;
-    padding: 11px 14px;
-    background: rgba(59, 130, 246, 0.09);
-    border: 1px solid rgba(59, 130, 246, 0.28);
-    border-radius: 8px;
-  }
-
-  .writing-source-copy > span {
-    display: block;
-    color: #93c5fd;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .writing-source-copy strong {
-    display: block;
-    margin-top: 2px;
-    color: var(--color-heading);
-    font-size: 12px;
-  }
-
-  .writing-source-copy p {
-    margin: 4px 0 0;
-    color: var(--color-slate-light);
-    font-size: 11px;
-    line-height: 1.4;
-  }
-
-  .writing-source-copy small {
-    display: block;
-    margin-top: 4px;
-    color: var(--color-slate-muted);
-    font-size: 10px;
-  }
-
-  .writing-source-actions {
-    display: flex;
-    gap: 10px;
-    flex: 0 0 auto;
-  }
-
-  .writing-source-actions button,
-  .claim-source-links button,
-  .assigned-evidence-results button {
-    border: 0;
-    background: transparent;
-    color: #93c5fd;
-    cursor: pointer;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 0;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  /* ============================================================ */
-  /* TAB 1: MATERIALS & ASSIGNMENT VIEWPORT                       */
-  /* ============================================================ */
-  .materials-tab-viewport {
-    flex: 1;
-    height: 100%;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 28px 36px;
-    background: var(--color-obsidian);
-  }
-
-  .materials-grid-container {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 28px;
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .materials-main-col, .materials-side-col {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .materials-card {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 12px;
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  }
-
-  .hero-prompt-card {
-    border-top: 3px solid var(--color-horizon-blue);
-  }
-
-  .task-prompt-heading {
-    margin: 0;
-    font-family: var(--font-brand);
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--color-heading);
-    line-height: 1.45;
-  }
-
-  .purpose-callout {
-    background: rgba(59, 130, 246, 0.08);
-    border-left: 3px solid #3b82f6;
-    padding: 12px 16px;
-    border-radius: var(--radius-xs);
-    font-size: 13px;
-    line-height: 1.55;
-    color: var(--color-slate-light);
-  }
-
-  .purpose-callout strong {
-    color: #93c5fd;
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  .purpose-callout p {
-    margin: 0;
-  }
-
-  .scope-tags-row {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .scope-tag {
-    background: var(--color-bone-muted);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .scope-tag .tag-label {
-    color: var(--color-slate-muted);
-  }
-
-  .scope-tag strong {
-    color: var(--color-heading);
-  }
-
-  /* Sources Deck in Materials */
-  .sources-header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--color-graphite-border);
-  }
-
-  .sources-header-bar h3 {
-    margin: 2px 0 0;
-    font-size: 16px;
-    color: var(--color-heading);
-  }
-
-  .sources-search-box {
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    color: var(--color-heading);
-    font-size: 12.5px;
-    width: 260px;
-    outline: none;
-    transition: border-color 0.15s ease;
-  }
-
-  .sources-search-box:focus {
-    border-color: var(--color-horizon-blue);
-  }
-
-  .sources-deck-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 18px;
-  }
-
-  .source-reader-item {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 10px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    transition: all 0.15s ease;
-  }
-
-  .source-reader-item:hover {
-    border-color: rgba(59, 130, 246, 0.4);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  }
-
-  .source-reader-header {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .source-reader-header h4 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--color-heading);
-    line-height: 1.35;
-  }
-
-  .source-type-pill {
-    align-self: flex-start;
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #6ee7b7;
-    background: rgba(16, 185, 129, 0.12);
-    padding: 2px 8px;
-    border-radius: 99px;
-  }
-
-  .source-excerpt-content {
-    font-size: 12.5px;
-    line-height: 1.6;
-    color: var(--color-slate-light);
-    max-height: 180px;
-    overflow-y: auto;
-    background: rgba(0, 0, 0, 0.25);
-    padding: 12px;
-    border-radius: 6px;
-    font-style: italic;
-  }
-
-  .source-excerpt-content p {
-    margin: 0;
-  }
-
-  .source-reader-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: auto;
-  }
-
-  .relevance-guidance-box {
-    font-size: 11.5px;
-    line-height: 1.45;
-    color: var(--color-slate-muted);
-  }
-
-  .relevance-guidance-box strong {
-    color: #93c5fd;
-  }
-
-  .source-citation {
-    margin: 0;
-    color: var(--color-slate-muted);
-    font-size: 10px;
-    line-height: 1.4;
-  }
-
-  .btn-cite-to-canvas {
-    align-self: flex-start;
-    background: rgba(59, 130, 246, 0.12);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    color: #93c5fd;
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-cite-to-canvas:hover {
-    background: rgba(59, 130, 246, 0.22);
-    border-color: #3b82f6;
-    color: #fff;
-  }
-
-  .empty-sources-msg {
-    color: var(--color-slate-muted);
-    font-size: 13px;
-    text-align: center;
-    padding: 24px;
-    grid-column: 1 / -1;
-  }
-
-  /* Side Column: Goals, Rubric & Checklist */
-  .materials-goals-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 12.5px;
-    color: var(--color-slate-light);
-  }
-
-  .materials-goals-list li {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    line-height: 1.45;
-  }
-
-  .rubric-overview-card h3 {
-    margin: 0;
-    font-size: 15px;
-    color: var(--color-heading);
-  }
-
-  .rubric-items-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .rubric-overview-item {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 8px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .rubric-item-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .rubric-item-header strong {
-    font-size: 12.5px;
-    color: var(--color-heading);
-  }
-
-  .rubric-weight-chip {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-horizon-blue);
-    background: rgba(217, 119, 6, 0.12);
-    padding: 1px 6px;
-    border-radius: 99px;
-  }
-
-  .rubric-item-desc {
-    margin: 0;
-    font-size: 11.5px;
-    line-height: 1.45;
-    color: var(--color-slate-light);
-  }
-
-  .rubric-levels-mini-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .level-mini-box {
-    background: var(--color-bone-muted);
-    border-left: 2px solid var(--color-horizon-blue);
-    padding: 5px 8px;
-    border-radius: 2px;
-  }
-
-  .level-title {
-    font-size: 10.5px;
-    font-weight: 700;
-    color: var(--color-heading);
-    display: block;
-  }
-
-  .level-mini-box small {
-    font-size: 10px;
-    color: var(--color-slate-muted);
-    line-height: 1.35;
-    display: block;
-  }
-
-  .rubric-self-review {
-    margin: 0;
-    font-size: 10.5px;
-    color: #93c5fd;
-    line-height: 1.4;
-  }
-
-  .checklist-items-stack {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--color-slate-light);
-  }
-
-  .integrity-notice-box {
-    padding-top: 10px;
-    border-top: 1px dashed var(--color-graphite-border);
-    color: var(--color-slate-muted);
-  }
-
-  /* TAB 3: TRACE & PORTFOLIO VIEWPORT */
-  .trace-tab-viewport {
-    flex: 1;
-    height: 100%;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 28px 36px;
-    background: var(--color-obsidian);
-  }
-
-  .trace-dashboard-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .trace-metrics-banner {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-  }
-
-  .trace-stat-tile {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 10px;
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  .stat-num {
-    font-size: 26px;
-    font-weight: 800;
-    font-family: var(--font-mono, monospace);
-    line-height: 1.1;
-  }
-
-  .stat-num.claims { color: #93c5fd; }
-  .stat-num.evidence { color: #6ee7b7; }
-  .stat-num.warrants { color: #c4b5fd; }
-  .stat-num.assumptions { color: #fcd34d; }
-  .stat-num.probes { color: #f87171; }
-
-  .stat-lbl {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-slate-muted);
-  }
-
-  .trace-two-col-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    align-items: flex-start;
-  }
-
-  .trace-panel-card {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 12px;
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  }
-
-  .panel-card-header h3 {
-    margin: 2px 0 0;
-    font-size: 16px;
-    color: var(--color-heading);
-  }
-
-  .trace-graph-tree-body {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    max-height: 600px;
-    overflow-y: auto;
-    padding-right: 6px;
-  }
-
-  .empty-trace-state {
-    text-align: center;
-    padding: 32px 16px;
-    color: var(--color-slate-muted);
-    font-size: 13px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .trace-dossier-body {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    max-height: 600px;
-    overflow-y: auto;
-    padding-right: 6px;
-  }
-
-  .readiness-self-review {
-    padding: 15px;
-    background: rgba(59, 130, 246, 0.06);
-    border: 1px solid rgba(59, 130, 246, 0.22);
-    border-radius: 10px;
-  }
-
-  .readiness-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  .readiness-header h4 {
-    margin: 3px 0 0;
-    color: var(--color-heading);
-    font-size: 14px;
-  }
-
-  .readiness-header > span {
-    color: #93c5fd;
-    font-family: var(--font-mono, monospace);
-    font-size: 10px;
-    white-space: nowrap;
-  }
-
-  .readiness-self-review > p {
-    margin: 7px 0 10px;
-    color: var(--color-slate-muted);
-    font-size: 10.5px;
-    line-height: 1.4;
-  }
-
-  .readiness-self-review ul {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .readiness-self-review li {
-    display: flex;
-    align-items: flex-start;
-    gap: 7px;
-    color: var(--color-slate-light);
-    font-size: 11px;
-  }
-
-  .readiness-self-review li > span {
-    color: #fbbf24;
-    font-weight: 800;
-  }
-
-  .readiness-self-review li.met > span {
-    color: #6ee7b7;
-  }
-
-  .readiness-self-review li strong,
-  .readiness-self-review li small {
-    display: block;
-  }
-
-  .readiness-self-review li small {
-    margin-top: 2px;
-    color: var(--color-slate-muted);
-    font-size: 10px;
-    line-height: 1.35;
-  }
-
-  .milestone-submission-banner {
-    background: linear-gradient(135deg, rgba(30, 27, 75, 0.7), rgba(17, 24, 39, 0.85));
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 10px;
-    padding: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .submission-meta h4 {
-    margin: 6px 0 4px;
-    font-size: 15px;
-    color: var(--color-heading);
-  }
-
-  .submission-meta p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--color-slate-light);
-  }
-
-  .sub-badge {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 99px;
-    background: rgba(245, 158, 11, 0.18);
-    color: #fcd34d;
-    border: 1px solid rgba(245, 158, 11, 0.4);
-  }
-
-  .sub-badge.submitted {
-    background: rgba(16, 185, 129, 0.18);
-    color: #6ee7b7;
-    border-color: rgba(16, 185, 129, 0.4);
-  }
-
-  .submission-complete-pill {
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    color: #6ee7b7;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .submission-action-stack {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .submission-status-note {
-    margin: 0;
-    color: var(--color-slate-light);
-    font-size: 12px;
-    line-height: 1.4;
-  }
-
-  .submission-status-note.submission-error {
-    color: #fbbf24;
-  }
-
-  .submission-correlation {
-    display: block;
-    margin-top: 3px;
-    color: var(--color-slate-muted);
-    font-family: var(--font-mono);
-    font-size: 10px;
-  }
-
-  .btn-submit-milestone {
-    background: linear-gradient(135deg, #7c3aed, #4f46e5);
-    border: 1px solid #8b5cf6;
-    color: #fff;
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    align-self: flex-start;
-  }
-
-  .btn-submit-milestone:hover:not(:disabled) {
-    background: linear-gradient(135deg, #8b5cf6, #6366f1);
-    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
-  }
-
-  .btn-submit-milestone:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .dossier-section-title {
-    margin: 0;
-    font-size: 13px;
-    color: var(--color-heading);
-    border-bottom: 1px solid var(--color-graphite-border);
-    padding-bottom: 8px;
-  }
-
-  .dossier-events-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .dossier-event-item {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 8px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .event-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .event-type-pill {
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    padding: 2px 7px;
-    border-radius: 99px;
-    background: rgba(139, 92, 246, 0.18);
-    color: #c4b5fd;
-  }
-
-  .event-time {
-    font-size: 10px;
-    color: var(--color-slate-muted);
-  }
-
-  .event-text {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--color-slate-light);
-  }
-
-  .event-student-note {
-    background: rgba(139, 92, 246, 0.1);
-    border-left: 2px solid #8b5cf6;
-    padding: 8px 10px;
-    border-radius: 4px;
-    font-size: 11.5px;
-    line-height: 1.45;
-    color: #e2e8f0;
-  }
-
-  .event-move-tag {
-    font-size: 10px;
-    color: #93c5fd;
-    font-weight: 600;
-  }
-
-  .empty-dossier-state {
-    text-align: center;
-    padding: 24px;
-    color: var(--color-slate-muted);
-    font-size: 12px;
-  }
-
-  /* Optional Flyout Mode for Socratic Writing Support Panel */
-  .socratic-tutor-column.flyout-mode {
-    position: fixed;
-    top: 52px;
-    right: 0;
-    bottom: 0;
-    width: 380px;
-    background: var(--color-graphite);
-    border-left: 1px solid var(--color-graphite-border);
-    box-shadow: -6px 0 28px rgba(0, 0, 0, 0.5);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    animation: slideInRight 0.2s ease-out;
-  }
-
-  @keyframes slideInRight {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
-  }
-
-  .tutor-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--color-graphite-border);
-  }
-
-  .tutor-header h3 {
-    margin: 0;
-    font-size: 15px;
-    color: var(--color-heading);
-  }
-
-  .close-panel-btn {
-    background: transparent;
-    border: none;
-    color: var(--color-slate-muted);
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-  }
-
-  .close-panel-btn:hover {
-    color: var(--color-heading);
-    background: var(--color-graphite-hover);
-  }
-
-  .tutor-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .probe-card {
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 8px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .probe-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .section-tag {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-horizon-blue);
-  }
-
-  .focus-pill {
-    font-size: 9.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    background: rgba(139, 92, 246, 0.2);
-    color: #c4b5fd;
-    padding: 1px 6px;
-    border-radius: 99px;
-  }
-
-  .probe-question {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.45;
-    color: var(--color-heading);
-  }
-
-  .probe-pedagogy-tip {
-    font-size: 10.5px;
-    line-height: 1.4;
-    color: var(--color-slate-muted);
-  }
-
-  .probe-pedagogy-tip p {
-    margin: 0;
-  }
-
-  .probe-input-label {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--color-slate-light);
-  }
-
-  .probe-textarea {
-    width: 100%;
-    min-height: 80px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 6px;
-    padding: 10px;
-    color: var(--color-heading);
-    font-size: 12px;
-    resize: vertical;
-    outline: none;
-    font-family: inherit;
-  }
-
-  .probe-textarea:focus {
-    border-color: #8b5cf6;
-  }
-
-  .probe-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .save-evidence-btn {
-    flex: 1;
-    background: #8b5cf6;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 7px 12px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .defer-btn, .dismiss-btn {
-    background: transparent;
-    border: 1px solid var(--color-graphite-border);
-    border-radius: 6px;
-    padding: 7px 10px;
-    font-size: 11.5px;
-    color: var(--color-slate-muted);
-    cursor: pointer;
-  }
-
-  .defer-btn:hover, .dismiss-btn:hover {
-    color: var(--color-heading);
-    background: var(--color-graphite-hover);
-  }
-
-  .empty-probe-state {
-    text-align: center;
-    padding: 24px 12px;
-    color: var(--color-slate-muted);
-    font-size: 12px;
-  }
-
-  .empty-probe-state h4 {
-    margin: 0 0 6px;
-    font-size: 14px;
-    color: var(--color-heading);
-  }
-
-  .evidence-badge {
-    display: inline-block;
-    margin-top: 10px;
-    padding: 4px 10px;
-    border-radius: 99px;
-    background: rgba(16, 185, 129, 0.15);
-    color: #6ee7b7;
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 16px 0;
-    color: var(--color-slate-muted);
-    font-size: 11px;
-  }
-
   .loading-view, .empty-view {
     display: flex;
     flex-direction: column;
@@ -3221,6 +1525,22 @@
     color: var(--color-slate-light);
     padding: 24px;
     text-align: center;
+  }
+
+  .empty-view h1 {
+    font-family: var(--font-brand);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-heading);
+    margin: 0 0 8px;
+  }
+
+  .empty-view p {
+    font-size: 13px;
+    color: var(--color-slate-muted);
+    max-width: 480px;
+    margin: 0 0 16px;
+    line-height: 1.5;
   }
 
   .spinner {
@@ -3234,422 +1554,37 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .scope-text { color: var(--color-slate-light); font-size: 11px; line-height: 1.45; margin: 0; }
-  .scope-text strong { color: var(--color-heading); }
-  .goal-list { color: var(--color-slate-light); display: flex; flex-direction: column; font-size: 11px; gap: 6px; line-height: 1.45; margin: 0; padding-left: 17px; }
-  .source-guidance { color: var(--color-slate-muted); font-size: 10px; line-height: 1.45; margin: 0; }
-  .source-link { color: var(--color-horizon-blue); display: inline-block; font-size: 10px; font-weight: 700; margin-top: 7px; text-decoration: none; }
-  .rubric-list { display: flex; flex-direction: column; gap: 10px; }
-  .rubric-card { background: var(--color-bone-surface, var(--color-graphite)); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 7px; padding: 11px; }
-  .rubric-heading { align-items: center; display: flex; justify-content: space-between; }
-  .rubric-heading strong { color: var(--color-heading); font-size: 12px; }
-  .rubric-heading span { color: var(--color-horizon-blue); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
-  .rubric-card > p { color: var(--color-slate-light); font-size: 11px; line-height: 1.45; margin: 0; }
-  .rubric-levels { display: flex; flex-direction: column; gap: 5px; }
-  .rubric-levels > div { background: var(--color-bone-muted); border-left: 2px solid var(--color-horizon-blue); padding: 6px 7px; }
-  .rubric-levels strong { color: var(--color-heading); display: block; font-size: 10px; }
-  .rubric-levels small { color: var(--color-slate-light); display: block; font-size: 10px; line-height: 1.4; margin-top: 2px; }
-  .rubric-card .self-review { color: #93c5fd; font-size: 10px; }
-  .completion-support-menu { border-bottom: 1px solid var(--color-graphite-border); display: flex; flex-direction: column; gap: 7px; padding: 0 0 14px; }
-  .completion-support-action { background: var(--color-bone-surface, var(--color-graphite)); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-sm); color: var(--color-slate-light); cursor: pointer; padding: 9px 10px; text-align: left; }
-  .completion-support-action:hover { border-color: var(--color-horizon-blue); background: rgba(59,130,246,.08); }
-  .completion-support-action:disabled { cursor: wait; opacity: .65; }
-  .completion-support-action strong { color: var(--color-heading); display: block; font-size: 11px; }
-  .completion-support-action small { color: var(--color-slate-muted); display: block; font-size: 10px; line-height: 1.4; margin-top: 3px; }
-  .support-result-card { background: rgba(59,130,246,.07); border: 1px solid rgba(96,165,250,.25); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 9px; padding: 12px; }
-  .support-result-card h4 { color: var(--color-heading); font-size: 14px; margin: 0; }
-  .support-result-card p,.support-result-card li { color: var(--color-slate-light); font-size: 11px; line-height: 1.5; margin: 0; }
-  .support-result-card ol { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 17px; }
-
-  /* Socratic Enquirer Tactile Trigger Button (Not a dropdown) */
-  .socratic-enquirer-btn {
+  .btn {
     display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--color-surface, #ffffff);
-    border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: var(--radius-sm, 6px);
-    padding: 5px 12px;
-    font-family: var(--font-ui, sans-serif);
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--color-heading, #121418);
-    cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-  .socratic-enquirer-btn:hover {
-    background: var(--color-graphite-hover, #f8f9fa);
-    border-color: var(--color-aurora, #0284c7);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12);
-  }
-  .socratic-enquirer-btn.active {
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.09), rgba(99, 102, 241, 0.09));
-    border-color: var(--color-aurora, #0284c7);
-    color: var(--color-aurora, #0284c7);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
-  }
-  .enquirer-icon-wrap {
-    position: relative;
-    display: flex;
     align-items: center;
     justify-content: center;
-  }
-  .enquirer-symbol {
-    font-size: 13.5px;
-    font-weight: 800;
-    color: var(--color-aurora, #0284c7);
-    transition: transform 0.2s ease;
-  }
-  .socratic-enquirer-btn:hover .enquirer-symbol {
-    transform: scale(1.15);
-  }
-  .enquirer-pulse-dot {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #10b981;
-    box-shadow: 0 0 6px #10b981;
-  }
-  .enquirer-label {
-    letter-spacing: -0.01em;
-  }
-  .enquirer-mode-pill {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: capitalize;
-    background: rgba(2, 132, 199, 0.09);
-    color: var(--color-aurora, #0284c7);
-    padding: 2px 7px;
-    border-radius: 10px;
-    border: 1px solid rgba(2, 132, 199, 0.2);
-  }
-  .socratic-enquirer-btn.active .enquirer-mode-pill {
-    background: var(--color-aurora, #0284c7);
-    color: #ffffff;
-    border-color: var(--color-aurora, #0284c7);
-  }
-
-  /* Reasoning Graph & Claim Tree Panel */
-  .graph-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding: 2px 0;
-  }
-  .graph-header-card {
-    background: linear-gradient(135deg, rgba(30, 27, 75, 0.8), rgba(17, 24, 39, 0.9));
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 8px 16px;
     border-radius: var(--radius-sm);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .graph-title-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .graph-icon {
-    font-size: 20px;
-  }
-  .graph-title-row h6 {
-    margin: 0 0 2px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #fff;
-  }
-  .graph-title-row p {
-    margin: 0;
-    font-size: 11px;
-    color: var(--color-slate-muted);
-  }
-  .graph-stat-pills {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .g-pill {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 99px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: var(--color-slate-light);
-  }
-  .g-pill.claims { color: #93c5fd; border-color: rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.1); }
-  .g-pill.evidence { color: #6ee7b7; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); }
-  .g-pill.warrants { color: #c4b5fd; border-color: rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.1); }
-  .g-pill.assumptions { color: #fcd34d; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); }
-  .g-pill.probes { color: #a78bfa; border-color: #8b5cf6; background: rgba(139, 92, 246, 0.2); font-weight: 800; }
-
-  .graph-tree-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .empty-graph-box {
-    background: var(--color-bone-muted);
-    border: 1px dashed var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    text-align: center;
-    color: var(--color-slate-muted);
-    font-size: 11px;
-    line-height: 1.5;
-  }
-  .graph-root-node {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    border-left: 3px solid var(--color-horizon-blue);
-  }
-  .node-badge-chip.root {
-    font-size: 9px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: var(--color-horizon-blue);
-    margin-bottom: 4px;
-    letter-spacing: 0.5px;
-  }
-  .graph-root-node h5 {
-    margin: 0;
     font-size: 12px;
-    font-weight: 700;
-    color: var(--color-heading);
-    line-height: 1.4;
-  }
-
-  .graph-section-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-left: 6px;
-    border-left: 1px dashed rgba(139, 92, 246, 0.3);
-    margin-left: 8px;
-  }
-  .section-branch-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .branch-connector {
-    color: rgba(139, 92, 246, 0.6);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .section-node-btn {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.15s ease;
-  }
-  .section-node-btn:hover {
-    border-color: var(--color-horizon-blue);
-    background: var(--color-graphite-hover);
-  }
-  .sec-num {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-horizon-blue);
-  }
-  .sec-title {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .section-children-tree {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-left: 14px;
-  }
-  .graph-claim-node {
-    background: var(--color-bone-surface, var(--color-graphite));
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 9px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-  .graph-claim-node:hover {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: var(--color-graphite-hover);
-  }
-  .graph-claim-node.claim { border-left: 3px solid #3b82f6; }
-  .graph-claim-node.evidence { border-left: 3px solid #10b981; }
-  .graph-claim-node.reasoning { border-left: 3px solid #8b5cf6; }
-  .graph-claim-node.assumption { border-left: 3px solid #f59e0b; }
-  .graph-claim-node.counter { border-left: 3px solid #ec4899; }
-  .graph-claim-node.conclusion { border-left: 3px solid #14b8a6; }
-  .graph-claim-node.has-probe {
-    border-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.08);
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.2);
-  }
-
-  .claim-node-top {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .claim-badge-icon { font-size: 13px; }
-  .claim-type-label { font-size: 10.5px; font-weight: 700; color: var(--color-heading); }
-  .claim-status-tag {
-    font-size: 9px;
-    font-weight: 800;
-    padding: 1px 5px;
-    border-radius: 99px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .claim-status-tag.probe {
-    background: rgba(139, 92, 246, 0.25);
-    color: #c4b5fd;
-    border: 1px solid rgba(139, 92, 246, 0.5);
-  }
-  .claim-status-tag.grounded {
-    background: rgba(16, 185, 129, 0.2);
-    color: #6ee7b7;
-  }
-  .claim-status-tag.premature {
-    background: rgba(239, 68, 68, 0.25);
-    color: #fca5a5;
-    border: 1px solid rgba(239, 68, 68, 0.4);
-  }
-  .claim-status-tag.ungrounded {
-    background: rgba(245, 158, 11, 0.15);
-    color: #fcd34d;
-  }
-
-  .claim-excerpt {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--color-slate-light);
-    font-style: italic;
-  }
-  .claim-source-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 3px;
-  }
-  .claim-node-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 2px;
-  }
-  .node-jump-btn, .node-probe-btn, .node-source-btn {
-    background: transparent;
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    padding: 2px 6px;
-    font-size: 10px;
     font-weight: 600;
-    color: var(--color-slate-muted);
+    text-decoration: none;
+    transition: all 0.15s ease;
     cursor: pointer;
-    transition: all 0.12s ease;
   }
-  .node-jump-btn:hover {
-    color: var(--color-heading);
-    border-color: var(--color-horizon-blue);
+
+  .btn-primary {
+    background: var(--color-horizon-blue);
+    color: #fff;
+    border: 1px solid var(--color-horizon-blue);
   }
-  .node-probe-btn:hover {
-    color: #c4b5fd;
-    border-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.15);
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
   }
-  .node-source-btn:hover {
-    color: #6ee7b7;
-    border-color: #10b981;
-    background: rgba(16, 185, 129, 0.12);
-  }
-  .assigned-evidence-results {
-    margin-top: 8px;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 8px;
-  }
-  .assigned-evidence-results > p {
-    margin: 0 0 7px;
-    color: var(--color-slate-muted);
-    font-size: 10px;
-    line-height: 1.4;
-  }
-  .assigned-evidence-results article {
-    margin-top: 6px;
-    padding: 7px 8px;
-    background: rgba(16, 185, 129, 0.07);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-    border-radius: 5px;
-  }
-  .assigned-evidence-results article strong {
-    color: #a7f3d0;
-    font-size: 10px;
-  }
-  .assigned-evidence-results article p {
-    margin: 3px 0;
+
+  .btn-secondary {
+    background: var(--color-graphite);
     color: var(--color-slate-light);
-    font-size: 10px;
-    line-height: 1.35;
-  }
-  .assigned-evidence-results article small {
-    color: var(--color-slate-muted);
-    font-size: 9px;
-  }
-  .assigned-evidence-results article > div {
-    display: flex;
-    gap: 10px;
-    margin-top: 6px;
-  }
-  .empty-sec-leaf {
-    font-size: 10px;
-    color: var(--color-slate-muted);
-    padding: 4px 0;
+    border: 1px solid var(--color-graphite-border);
   }
 
-  @media (max-width: 1024px) {
-    .workspace-grid {
-      grid-template-columns: 280px 1fr;
-    }
-    .workspace-grid.tutor-open {
-      grid-template-columns: 280px 1fr 320px;
-    }
-  }
-
-  @media (max-width: 800px) {
-    .workspace-grid {
-      grid-template-columns: 1fr;
-    }
-    .workspace-grid.tutor-open {
-      grid-template-columns: 1fr;
-    }
-    .workspace-sidebar {
-      display: none;
-    }
-    .socratic-tutor-column {
-      position: fixed;
-      inset: 52px 0 0 0;
-      z-index: 50;
-    }
+  .btn-secondary:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
   }
 </style>
