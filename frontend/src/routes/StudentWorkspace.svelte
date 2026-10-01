@@ -15,6 +15,12 @@
     COHORT_STUDENTS,
   } from '../lib/session.js';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
+  import {
+    buildDefaultChatForStudent,
+    loadStoredChatSessions,
+    persistChatSessions,
+  } from '../lib/workspace/workspaceConsultations';
+  import WorkspaceFlyoutPanel from '../lib/workspace/WorkspaceFlyoutPanel.svelte';
 
   let isSourcesCollapsed = $state(true);
   let isSourcesExpanded = $state(false);
@@ -87,164 +93,12 @@
     window.addEventListener('pointerup', onPointerUp);
   }
 
-  // Pre-configured Socratic Consultation Threads for Cohort Learners
-  const DEFAULT_CONSULTATIONS = {
-    julian_hayes: {
-      student: "Should Dara locate right outside the library main doors? Footfall is over 1,200 students per hour, so volume will be guaranteed.",
-      tutor: "Consider the operational reality of library traffic: students entering are rushing to quiet study spaces or have 5-minute passing periods. What percentage of that footfall actually has the dwell time to purchase handcrafted pour-overs, and what does the case exhibit say about campus administration permits near library steps?",
-      concept: "Place & Operational Footfall Quality",
-      capsule: "Examine Footfall Dwell Time & Permits"
-    },
-    elena_rostova: {
-      student: "To maximize revenue, Dara should offer 14 flavored syrups, smoothies, matcha lattes, and fresh pastries alongside espresso.",
-      tutor: "Examine Dara's operational bottleneck: a single-group espresso cart with one operator. What happens to customer queue wait times when preparing a 5-step blended smoothie versus pulling an espresso? How does inventory spoilage on 14 perishables affect unit net contribution?",
-      concept: "Product Depth & Throughput Constraints",
-      capsule: "Analyze Prep Bottlenecks & Spoilage"
-    },
-    marcus_chen: {
-      student: "The cart needs to hit 400 cups daily at $2.25 to make the $600 weekly campus licensing fee manageable.",
-      tutor: "Let's check the throughput physics: in an 8-hour operating window, 400 cups requires preparing, brewing, and transacting a cup every 72 seconds without pause. Is that sustainable for a solo barista, or should Dara adjust Price to capture higher margin on lower, sustainable volume?",
-      concept: "Price Margin vs Unit Volume Physics",
-      capsule: "Calculate Realistic Peak Limits"
-    },
-    priya_patel: {
-      student: "I've settled on premium fair-trade beans and a luxury artisan brand identity, priced at $2.00 per 16oz cup with flyers posted around freshman dorms.",
-      tutor: "Look closely at the alignment across the 4Ps: if Product is luxury artisan, does a bargain-basement $2.00 Price signal quality or cheapness? And do paper flyers in dorms reach graduate researchers and faculty with higher willingness-to-pay?",
-      concept: "4Ps Interlocking Consistency",
-      capsule: "Audit Premium Signaling Across All 4Ps"
-    },
-    david_kim: {
-      student: "I calculated $3,000 monthly profit by placing at the library plaza and selling 250 iced drinks daily.",
-      tutor: "Have you factored in weather seasonality and the semester break schedule? During winter exams and rain, outdoor library plaza footfall drops 65%. How does your financial model absorb fixed cart amortization during slow months?",
-      concept: "Place Weather Vulnerability & Fixed Costs",
-      capsule: "Stress-Test Model for Rain Volume"
-    },
-    maya_lin: {
-      student: "Can we sell cold brew kegs and light roast single origins while keeping the menu under 5 core items?",
-      tutor: "A focused 5-item menu drastically reduces preparation time and waste! How does offering batch-tapped cold brew solve the morning rush peak bottleneck compared to custom steam-wand drinks?",
-      concept: "Product Streamlining & Service Velocity",
-      capsule: "Evaluate Tapped Batch vs Manual Steam Yield"
-    },
-    liam_oconnor: {
-      student: "Everyone says the engineering quad has fewer students than the library, but engineering students spend longer hours on campus.",
-      tutor: "Excellent observation. Look at the survey data in Exhibit 2: engineering and STEM graduate students have 3.2x higher afternoon repeat purchase rates and prioritize specialty roast caffeine over budget drip coffee. How does this reframe the Place decision?",
-      concept: "Place Targeting & Repeat Frequency",
-      capsule: "Review Exhibit 2 Afternoon Repeat Purchase Data"
-    },
-    sofia_rodriguez: {
-      student: "If Dara offers pre-ordered digital pickup via a mobile app, can we eliminate queue friction completely?",
-      tutor: "Mobile pickup streamlines ordering, but think about cart space: where do finished drinks sit without getting cold while waiting for pickup on a 4-foot outdoor cart? How can Promotion communicate specific pickup windows?",
-      concept: "Promotion & Cart Staging Capacity",
-      capsule: "Assess Physical Counter Space for Orders"
-    },
-    aisha_almansoor: {
-      student: "I want to align Price and Place by setting up next to the graduate business school at a $4.75 price point.",
-      tutor: "Notice how well that aligns: high discretionary budget, appreciation for single-origin sourcing, and willingness to pay premium prices. What promotional strategy best matches this demographic without seeming intrusive?",
-      concept: "Target Market Alignment & Margin Capture",
-      capsule: "Design Targeted B-School Promotional Channel"
-    },
-    lucas_bennett: {
-      student: "Should Dara negotiate a revenue-share permit with the Student Center instead of paying a fixed $600 weekly fee?",
-      tutor: "A revenue-share fee converts fixed overhead into variable costs, protecting Dara against rainy days and exam breaks. How does this lower break-even risk and allow more flexible pricing?",
-      concept: "Overhead Structure & Downside Risk Hedging",
-      capsule: "Model Fixed vs Variable Permit Sensitivity"
-    },
-    clara_oswald: {
-      student: "I'm starting my initial analysis of Dara's Coffee Cart. What should I prioritize first?",
-      tutor: "Start by examining the 4Ps foundation: Product, Price, Place, and Promotion. Review the primary source exhibits on the left, then outline your core thesis on this fresh canvas.",
-      concept: "4Ps Foundations & Inquiry Scaffolding",
-      capsule: "Examine 4Ps Case Exhibits to Formulate Thesis"
-    },
-  };
-
-  function buildDefaultChatForStudent(sid) {
-    const thread = DEFAULT_CONSULTATIONS[sid] || {
-      student: "Can you help me evaluate the 4Ps trade-offs in my marketing plan?",
-      tutor: "Look closely at how each P interacts with the others. If Product is positioned as premium handcrafted coffee, how does that constrain your choices for Price, Place, and Promotion?",
-      concept: "4Ps Strategic Synthesis",
-      capsule: "Check Coherence of the 4Ps"
-    };
-
-    return [
-      {
-        id: `chat_${sid || 'init'}_1`,
-        title: thread.concept.slice(0, 24) + '…',
-        startedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        turns: [
-          {
-            role: 'student',
-            text: thread.student,
-          },
-          {
-            role: 'tutor',
-            text: thread.tutor,
-            thoughts: {
-              pedagogical_goal: `Challenge student assumptions regarding ${thread.concept}`,
-              identified_misconception: thread.concept,
-            },
-            hint_rung: 1,
-            is_adversarial: false,
-            action_capsules: [],
-            prompt_launchers: [
-              {
-                title: thread.capsule,
-                prompt: `Can you help me test my assumptions about ${thread.concept.toLowerCase()}?`,
-              }
-            ],
-          }
-        ],
-      }
-    ];
-  }
-
-  function getChatStorageKey(aid, sid) {
-    return `fiosra_chat_${aid || 'daras'}_${sid || 'default'}`;
-  }
-
   function saveCurrentChatSessions() {
-    if (studentId && typeof localStorage !== 'undefined') {
-      try {
-        localStorage.setItem(getChatStorageKey(assignmentId, studentId), JSON.stringify(chatSessions));
-      } catch (e) {
-        console.warn('Failed to save chat sessions to localStorage:', e);
-      }
-    }
+    persistChatSessions(chatSessions, assignmentId, studentId);
   }
 
   function loadChatSessionsForStudent(aid, sid) {
-    if (typeof localStorage === 'undefined') return;
-    const key = getChatStorageKey(aid, sid);
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out transient connection error messages and empty action capsules
-          const sanitized = parsed.map((cs) => ({
-            ...cs,
-            turns: (cs.turns || [])
-              .filter(
-                (t) => !(t.role === 'tutor' && typeof t.text === 'string' && t.text.includes('Socratic Tutor is currently unavailable'))
-              )
-              .map((t) => ({
-                ...t,
-                action_capsules: (t.action_capsules || []).filter(
-                  (c) => Boolean((c.suggested_student_text || c.text_payload)?.trim())
-                ),
-              })),
-          })).filter((cs) => cs.turns.length > 0);
-
-          if (sanitized.length > 0) {
-            chatSessions = sanitized;
-            activeChatSessionId = chatSessions[0]?.id || `chat_${sid}_1`;
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to parse stored chat sessions:', e);
-      }
-    }
-    chatSessions = buildDefaultChatForStudent(sid);
+    chatSessions = loadStoredChatSessions(aid, sid);
     activeChatSessionId = chatSessions[0]?.id || `chat_${sid}_1`;
     saveCurrentChatSessions();
   }
@@ -298,6 +152,7 @@
   let activeWorkspaceTab = $state('canvas'); // 'materials' | 'canvas' | 'trace'
   let isTutorPanelOpen = $state(false);
   let activeProbeId = $state('');
+  let currentProbe = $derived(probes.find((p) => p.probe_id === activeProbeId) || probes[0] || null);
   let probeResponse = $state('');
   let probeNotice = $state('');
   let isProbeBusy = $state(false);
@@ -1686,84 +1541,22 @@
       </div>
 
       <!-- Optional Flyout Support Panel (Toggleable from Top Bar) -->
-      {#if isTutorPanelOpen}
-        <aside class="socratic-tutor-column flyout-mode" aria-label="Optional writing support">
-          <header class="tutor-header">
-            <div>
-              <span class="eyebrow">Optional support</span>
-              <h3>Writing support</h3>
-            </div>
-            <button class="close-panel-btn" onclick={() => isTutorPanelOpen = false} title="Close Panel (Esc)">✕</button>
-          </header>
-
-          <div class="tutor-body">
-            {#if published?.support_menu?.length}
-              <div class="completion-support-menu">
-                <span class="card-eyebrow">Choose what would help now</span>
-                {#each published.support_menu as item}
-                  <button class="completion-support-action" disabled={isSupportBusy} onclick={() => requestCompletionSupport(item.action_id)}>
-                    <strong>{item.title}</strong><small>{item.description}</small>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-
-            {#if supportResult}
-              <div class="support-result-card">
-                <div class="probe-meta"><span class="section-tag">Next useful step</span></div>
-                <h4>{supportResult.title}</h4>
-                <p>{supportResult.guidance}</p>
-                <ol>{#each supportResult.next_steps as step}<li>{step}</li>{/each}</ol>
-                <button class="defer-btn" onclick={() => supportResult = null}>Choose another support option</button>
-              </div>
-            {:else if currentProbe}
-              <div class="probe-card">
-                <div class="probe-meta">
-                  <span class="section-tag">{currentProbe.section_label || 'Active paragraph'}</span>
-                  <span class="focus-pill">{currentProbe.focus_type.replace(/_/g, ' ')}</span>
-                </div>
-
-                <p class="probe-question">{currentProbe.question}</p>
-
-                <div class="probe-pedagogy-tip">
-                  <p>Use this optional question only if it helps you develop or revise your response. Your educator evaluates the final work.</p>
-                </div>
-
-                <label for="probe-input" class="probe-input-label">Your working note</label>
-                <textarea 
-                  id="probe-input"
-                  bind:value={probeResponse}
-                  disabled={isProbeBusy}
-                  placeholder="Write a note that helps you continue your own draft."
-                  class="probe-textarea"
-                ></textarea>
-
-                {#if probeNotice}<p class="probe-status-msg" role="status">{probeNotice}</p>{/if}
-
-                <div class="probe-actions">
-                  <button class="save-evidence-btn" onclick={submitProbeResponse} disabled={isProbeBusy || probeResponse.trim().length < 10}>
-                    {isProbeBusy ? 'Saving…' : 'Save note'}
-                  </button>
-                  <button class="defer-btn" onclick={() => changeProbe(currentProbe.probe_id, 'defer')} disabled={isProbeBusy}>
-                    Later
-                  </button>
-                  <button class="dismiss-btn" onclick={() => changeProbe(currentProbe.probe_id, 'dismiss')} disabled={isProbeBusy}>
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            {:else}
-              <div class="empty-probe-state">
-                <h4>No Pending Probes</h4>
-                <p>Use the assignment, materials, and rubric to continue your draft. Optional support will be available when it can help you take a next step.</p>
-                {#if evidenceSummary.evidence_submitted}
-                  <span class="evidence-badge">✓ {evidenceSummary.evidence_submitted} evidence response{evidenceSummary.evidence_submitted === 1 ? '' : 's'} recorded</span>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </aside>
-      {/if}
+      <WorkspaceFlyoutPanel
+        isOpen={isTutorPanelOpen}
+        published={published || assignment}
+        {isSupportBusy}
+        {supportResult}
+        {currentProbe}
+        bind:probeResponse
+        {isProbeBusy}
+        {probeNotice}
+        {evidenceSummary}
+        onRequestSupport={requestCompletionSupport}
+        onClearSupportResult={() => supportResult = null}
+        onSubmitProbeResponse={submitProbeResponse}
+        onChangeProbe={changeProbe}
+        onClose={() => isTutorPanelOpen = false}
+      />
     </div>
   </div>
 {/if}
