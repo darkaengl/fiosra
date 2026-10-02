@@ -1,14 +1,17 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
-  import { getStudentId, routeParams } from '../lib/session.js';
+  import { getStudentId } from '../lib/session.js';
+  import TimelineKpiRibbon from '../lib/timeline/TimelineKpiRibbon.svelte';
+  import TimelinePathwayCard from '../lib/timeline/TimelinePathwayCard.svelte';
+  import TimelineMilestoneEntry from '../lib/timeline/TimelineMilestoneEntry.svelte';
+  import TimelineEndorsementSection from '../lib/timeline/TimelineEndorsementSection.svelte';
 
-  let enrolledCourses = $state([]);
+  let enrolledCourses = $state<any[]>([]);
   let selectedCourseFilter = $state('all');
   let selectedTypeFilter = $state('all');
   let isLoading = $state(true);
   let studentId = '';
 
-  // Realistic longitudinal milestone data representing the student's growth trajectory over the term
   const progressionMilestones = [
     {
       id: 'm-4',
@@ -145,7 +148,6 @@
 
 <div class="timeline-page">
   <main class="timeline-container">
-
     <!-- Header & Progression Overview -->
     <header class="progression-header">
       <div class="header-main">
@@ -177,108 +179,10 @@
     </header>
 
     <!-- Progression Summary KPIs -->
-    <section class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-icon">📈</span>
-        <div class="kpi-meta">
-          <span class="kpi-label">Autonomy Index</span>
-          <div class="kpi-value-row">
-            <span class="kpi-value highlight-accent">88.4%</span>
-            <span class="kpi-badge badge-green">Top Decile</span>
-          </div>
-          <span class="kpi-sub">Grew from 62.0% at baseline</span>
-        </div>
-      </div>
-
-      <div class="kpi-card">
-        <span class="kpi-icon">💡</span>
-        <div class="kpi-meta">
-          <span class="kpi-label">Socratic Hint Dependency</span>
-          <div class="kpi-value-row">
-            <span class="kpi-value highlight-green">0.18</span>
-            <span class="kpi-badge badge-green">Decreased 78%</span>
-          </div>
-          <span class="kpi-sub">Minimal tutor scaffolding required</span>
-        </div>
-      </div>
-
-      <div class="kpi-card">
-        <span class="kpi-icon">🛡️</span>
-        <div class="kpi-meta">
-          <span class="kpi-label">Verifiable Claims Entailment</span>
-          <div class="kpi-value-row">
-            <span class="kpi-value">18 / 20</span>
-            <span class="kpi-badge badge-blue">90% Entailed</span>
-          </div>
-          <span class="kpi-sub">Verified via DeBERTa-v3 model</span>
-        </div>
-      </div>
-
-      <div class="kpi-card">
-        <span class="kpi-icon">🔄</span>
-        <div class="kpi-meta">
-          <span class="kpi-label">Autonomous Self-Corrections</span>
-          <div class="kpi-value-row">
-            <span class="kpi-value highlight-purple">4 Major</span>
-            <span class="kpi-badge badge-purple">Zero Penalty</span>
-          </div>
-          <span class="kpi-sub">Pivots made upon examining primary data</span>
-        </div>
-      </div>
-    </section>
+    <TimelineKpiRibbon />
 
     <!-- Trajectory Pathway Visualization -->
-    <section class="pathway-card">
-      <div class="pathway-header">
-        <div>
-          <h2 class="pathway-title">Longitudinal Autonomy Stages</h2>
-          <p class="pathway-desc">Progressive shift from guided scaffolding to authentic autonomous scholarship</p>
-        </div>
-        <button class="btn btn-secondary" onclick={exportCredentials} style="font-size: 12px; padding: 7px 14px;">
-          📄 Export Verifiable Proof (.json-ld)
-        </button>
-      </div>
-
-      <div class="stage-track">
-        <div class="stage-step completed">
-          <div class="stage-indicator">✓</div>
-          <div class="stage-info">
-            <span class="stage-name">Stage 1: Guided Inquiries</span>
-            <span class="stage-detail">Initial baseline • High hint dependency</span>
-          </div>
-        </div>
-
-        <div class="stage-connector active"></div>
-
-        <div class="stage-step completed">
-          <div class="stage-indicator">✓</div>
-          <div class="stage-info">
-            <span class="stage-name">Stage 2: Socratic Probing</span>
-            <span class="stage-detail">Defending claims against counter-evidence</span>
-          </div>
-        </div>
-
-        <div class="stage-connector active"></div>
-
-        <div class="stage-step completed">
-          <div class="stage-indicator">✓</div>
-          <div class="stage-info">
-            <span class="stage-name">Stage 3: Evidence Synthesis</span>
-            <span class="stage-detail">Primary text citation & self-correction</span>
-          </div>
-        </div>
-
-        <div class="stage-connector active"></div>
-
-        <div class="stage-step active">
-          <div class="stage-indicator">★</div>
-          <div class="stage-info">
-            <span class="stage-name">Stage 4: Autonomous Reasoner</span>
-            <span class="stage-detail">Active level • Top decile independence</span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <TimelinePathwayCard onExport={exportCredentials} />
 
     <!-- Filters and Timeline Stream -->
     <section class="stream-section">
@@ -311,114 +215,17 @@
       <!-- Vertical Timeline List -->
       <div class="timeline-stream">
         {#each filteredMilestones as item, idx (item.id)}
-          <div class="milestone-entry">
-            <!-- Left Rail: Marker & Line -->
-            <div class="rail-column">
-              <div class="rail-node {item.type === 'baseline' ? 'baseline-node' : 'active-node'}">
-                {filteredMilestones.length - idx}
-              </div>
-              {#if idx < filteredMilestones.length - 1}
-                <div class="rail-line"></div>
-              {/if}
-            </div>
-
-            <!-- Right Content Card -->
-            <div class="milestone-card">
-              <div class="card-top">
-                <div class="card-title-col">
-                  <div class="meta-row">
-                    <span class="course-chip">{item.courseId}</span>
-                    <span class="date-chip">{item.date}</span>
-                    <span class="badge {item.badgeClass}">{item.status}</span>
-                  </div>
-                  <h3 class="milestone-title">{item.title}</h3>
-                </div>
-
-                <div class="score-pill">
-                  <span class="score-label">Evaluation</span>
-                  <span class="score-val">{item.score}</span>
-                </div>
-              </div>
-
-              <!-- Growth Insight Box -->
-              <div class="growth-insight-box">
-                <div class="insight-header">
-                  <span class="insight-tag">🌱 KEY EPISTEMIC GROWTH</span>
-                  <span class="autonomy-tag">{item.autonomyLevel} • {item.autonomyScore}% Autonomy</span>
-                </div>
-                <p class="growth-text">{item.growthNote}</p>
-                {#if item.evidenceQuote}
-                  <blockquote class="milestone-quote">
-                    "{item.evidenceQuote}"
-                  </blockquote>
-                {/if}
-              </div>
-
-              <!-- Metrics & Verification Footer -->
-              <div class="milestone-footer">
-                <div class="footer-metrics">
-                  <span class="footer-stat">
-                    <strong>{item.hintsUsed}</strong> {item.hintsUsed === 1 ? 'hint' : 'hints'} used
-                  </span>
-                  <span class="stat-bullet">•</span>
-                  <span class="footer-stat">
-                    <strong>{item.selfCorrections}</strong> {item.selfCorrections === 1 ? 'self-correction' : 'self-corrections'}
-                  </span>
-                  <span class="stat-bullet">•</span>
-                  <span class="footer-stat verification-stat">
-                    🛡️ {item.verifiedProtocol}
-                  </span>
-                </div>
-
-                <div class="footer-actions">
-                  <a href="#/student/portal" class="btn btn-secondary" style="font-size: 11.5px; padding: 6px 12px;">
-                    View Course →
-                  </a>
-                  <a href="#/student" class="btn btn-primary" style="font-size: 11.5px; padding: 6px 14px;">
-                    Resume Canvas →
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
+          <TimelineMilestoneEntry
+            {item}
+            index={idx}
+            totalCount={filteredMilestones.length}
+          />
         {/each}
       </div>
     </section>
 
     <!-- Faculty Endorsement & Verifiable Record -->
-    <section class="endorsement-section">
-      <div class="endorsement-card">
-        <div class="endorsement-header">
-          <div class="endorser-info">
-            <div class="faculty-avatar">DV</div>
-            <div>
-              <h3 class="faculty-name">Dr. Vance • Department of History</h3>
-              <p class="faculty-title">Longitudinal Epistemic Assessment & Endorsement</p>
-            </div>
-          </div>
-          <div class="crypto-seal">
-            <span class="seal-icon">🔏</span>
-            <span>Cryptographically Endorsed</span>
-          </div>
-        </div>
-
-        <blockquote class="endorsement-body">
-          "Elena demonstrated exceptional conceptual maturity during her reasoning progression across the French Revolutionary fiscal inquiries. When initially tempted by the moralized 'luxury spending' trope, she autonomously revised her claim upon inspecting Necker's Compte Rendu data, framing the crisis around systemic debt servicing and fiscal exemption. Her reasoning trace reflects authentic scholarly discipline and genuine independent synthesis."
-        </blockquote>
-
-        <div class="endorsement-footer">
-          <div class="proof-hash">
-            <span>Evidence Packet: Z-HIST201-STU081-REV24</span>
-            <span class="hash-bullet">•</span>
-            <span>Verified via AAAI-2026 AutoSCORE Protocol</span>
-          </div>
-          <button class="btn btn-secondary" onclick={exportCredentials} style="font-size: 12px; padding: 6px 14px;">
-            📄 Export W3C Verifiable Credential
-          </button>
-        </div>
-      </div>
-    </section>
-
+    <TimelineEndorsementSection onExport={exportCredentials} />
   </main>
 </div>
 
@@ -550,210 +357,26 @@
     justify-content: space-between;
     font-size: 11px;
     color: var(--color-slate-muted);
-    font-weight: 500;
   }
 
   .growth-delta {
     color: var(--color-signal-green);
-    font-weight: 700;
-  }
-
-  /* KPI Grid */
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-  }
-
-  .kpi-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 18px 20px;
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .kpi-icon {
-    font-size: 24px;
-    line-height: 1;
-  }
-
-  .kpi-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-  }
-
-  .kpi-label {
-    font-size: 11.5px;
     font-weight: 600;
-    color: var(--color-slate-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
-  .kpi-value-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .kpi-value {
-    font-family: var(--font-brand);
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--color-heading);
-  }
-
-  .highlight-accent {
-    color: var(--color-horizon-blue);
-  }
-
-  .highlight-green {
-    color: var(--color-signal-green);
-  }
-
-  .highlight-purple {
-    color: #8b5cf6;
-  }
-
-  .kpi-badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: var(--radius-full);
-  }
-
-  .badge-green {
-    background: var(--color-signal-green-bg);
-    color: var(--color-signal-green-text);
-  }
-
-  .badge-blue {
-    background: var(--color-aurora-glow);
-    color: var(--color-aurora-bright);
-  }
-
-  .badge-purple {
-    background: rgba(139, 92, 246, 0.12);
-    color: #7c3aed;
-  }
-
-  .kpi-sub {
-    font-size: 11px;
-    color: var(--color-slate-subtle);
-  }
-
-  /* Pathway / Stages */
-  .pathway-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 24px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .pathway-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .pathway-title {
-    font-family: var(--font-brand);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0;
-  }
-
-  .pathway-desc {
-    font-size: 12.5px;
-    color: var(--color-slate-muted);
-    margin: 3px 0 0;
-  }
-
-  .stage-track {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .stage-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-  }
-
-  .stage-indicator {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 800;
-    flex-shrink: 0;
-  }
-
-  .stage-step.completed .stage-indicator {
-    background: var(--color-signal-green);
-    color: white;
-  }
-
-  .stage-step.active .stage-indicator {
-    background: var(--color-horizon-blue);
-    color: white;
-    box-shadow: 0 0 10px var(--color-horizon-glow);
-  }
-
-  .stage-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .stage-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .stage-detail {
-    font-size: 11px;
-    color: var(--color-slate-muted);
-  }
-
-  .stage-connector {
-    height: 2px;
-    width: 32px;
-    background: var(--color-graphite-border);
-    flex-shrink: 0;
-  }
-
-  .stage-connector.active {
-    background: var(--color-signal-green);
-  }
-
-  /* Timeline Stream */
+  /* Stream Section */
   .stream-section {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 24px;
   }
 
   .stream-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
   }
 
   .stream-title-group {
@@ -764,7 +387,7 @@
 
   .stream-title {
     font-family: var(--font-brand);
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
     color: var(--color-heading);
     margin: 0;
@@ -773,13 +396,11 @@
   .stream-count {
     font-size: 12px;
     color: var(--color-slate-muted);
-    font-weight: 600;
   }
 
   .stream-controls {
     display: flex;
-    gap: 16px;
-    align-items: center;
+    gap: 12px;
   }
 
   .filter-group {
@@ -787,367 +408,21 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: var(--color-slate-muted);
-    font-weight: 600;
+    color: var(--color-slate-light);
   }
 
   .select-filter {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
     color: var(--color-slate-bright);
-    font-size: 12px;
-    padding: 4px 10px;
+    padding: 6px 12px;
     border-radius: var(--radius-sm);
-    font-family: var(--font-ui);
+    font-size: 12px;
     cursor: pointer;
   }
 
   .timeline-stream {
     display: flex;
     flex-direction: column;
-  }
-
-  .milestone-entry {
-    display: flex;
-    gap: 20px;
-  }
-
-  .rail-column {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 36px;
-    flex-shrink: 0;
-  }
-
-  .rail-node {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-brand);
-    font-size: 13px;
-    font-weight: 800;
-    z-index: 2;
-  }
-
-  .active-node {
-    background: var(--color-horizon-blue);
-    color: white;
-    box-shadow: 0 0 10px var(--color-horizon-glow);
-  }
-
-  .baseline-node {
-    background: var(--color-slate-muted);
-    color: white;
-  }
-
-  .rail-line {
-    width: 2px;
-    flex: 1;
-    background: var(--color-graphite-border);
-    margin: 4px 0;
-  }
-
-  .milestone-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 22px 24px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 24px;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.15s ease, border-color 0.15s ease;
-  }
-
-  .milestone-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--color-horizon-blue);
-  }
-
-  .card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .card-title-col {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .meta-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .course-chip {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 7px;
-    background: var(--pill-bg);
-    border-radius: var(--radius-xs);
-    color: var(--color-horizon-bright);
-    letter-spacing: 0.5px;
-  }
-
-  .date-chip {
-    font-size: 12px;
-    color: var(--color-slate-muted);
-  }
-
-  .milestone-title {
-    font-family: var(--font-brand);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0;
-  }
-
-  .score-pill {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 6px 12px;
-    flex-shrink: 0;
-  }
-
-  .score-label {
-    font-size: 9.5px;
-    text-transform: uppercase;
-    color: var(--color-slate-muted);
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
-
-  .score-val {
-    font-family: var(--font-brand);
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--color-signal-green);
-  }
-
-  /* Growth Insight Box */
-  .growth-insight-box {
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    border-left: 3px solid var(--color-horizon-blue);
-    border-radius: var(--radius-sm);
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .insight-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .insight-tag {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-horizon-bright);
-    letter-spacing: 0.6px;
-  }
-
-  .autonomy-tag {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-signal-green);
-  }
-
-  .growth-text {
-    font-size: 13px;
-    color: var(--color-slate-light);
-    line-height: 1.5;
-    margin: 0;
-  }
-
-  .milestone-quote {
-    font-size: 12.5px;
-    font-style: italic;
-    color: var(--color-slate-muted);
-    margin: 4px 0 0;
-    padding-left: 12px;
-    border-left: 2px solid var(--color-graphite-border);
-    line-height: 1.5;
-  }
-
-  /* Milestone Footer */
-  .milestone-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 12px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .footer-metrics {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--color-slate-muted);
-  }
-
-  .stat-bullet {
-    color: var(--color-slate-subtle);
-  }
-
-  .verification-stat {
-    color: var(--color-slate-light);
-    font-size: 11px;
-    font-family: var(--font-mono);
-  }
-
-  .footer-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  /* Endorsement Card */
-  .endorsement-section {
-    margin-top: 8px;
-  }
-
-  .endorsement-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-left: 4px solid var(--color-signal-green);
-    border-radius: var(--radius-lg);
-    padding: 28px 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .endorsement-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .endorser-info {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .faculty-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #1e293b, #334155);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 13.5px;
-  }
-
-  .faculty-name {
-    font-family: var(--font-brand);
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0;
-  }
-
-  .faculty-title {
-    font-size: 12px;
-    color: var(--color-slate-muted);
-    margin: 2px 0 0;
-  }
-
-  .crypto-seal {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: var(--color-signal-green-bg);
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: var(--radius-full);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-signal-green);
-  }
-
-  .endorsement-body {
-    font-size: 13.5px;
-    color: var(--color-slate-light);
-    line-height: 1.6;
-    margin: 0;
-    font-style: italic;
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    padding: 16px 20px;
-    border-radius: var(--radius-sm);
-  }
-
-  .endorsement-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 14px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .proof-hash {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--color-slate-muted);
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .hash-bullet {
-    color: var(--color-slate-subtle);
-  }
-
-  /* Responsive */
-  @media (max-width: 900px) {
-    .progression-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .autonomy-status-card {
-      width: 100%;
-    }
-    .kpi-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    .stage-track {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .stage-connector {
-      display: none;
-    }
-  }
-
-  @media (max-width: 600px) {
-    .kpi-grid {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
