@@ -7,6 +7,9 @@
     forceCenter,
     forceCollide
   } from 'd3-force';
+  import { PALETTES, neighbourhoodIds } from './graph/graphCanvasTheme';
+  import GraphSettingsHud from './graph/GraphSettingsHud.svelte';
+  import GraphNodeTooltip from './graph/GraphNodeTooltip.svelte';
 
   let {
     graph = { nodes: [], edges: [], probes: [] },
@@ -66,56 +69,7 @@
   let nodeCount = $state(0);
   let linkCount = $state(0);
 
-  // Authentic Obsidian Color Palettes (Light matching screenshot, Dark as classic Obsidian)
-  const PALETTES = {
-    light: {
-      bg: '#ffffff',
-      gridDot: 'rgba(0, 0, 0, 0.04)',
-      link: 'rgba(0, 0, 0, 0.16)',
-      linkHighlight: '#222222',
-      linkFade: 'rgba(0, 0, 0, 0.03)',
-      text: '#4a4a4a',
-      textHighlight: '#0a0a0a',
-      textHalo: 'rgba(255, 255, 255, 0.92)',
-      selectRing: '#2563eb',
-      hoverRing: 'rgba(0, 0, 0, 0.35)',
-      // Node colors matching the user's Obsidian graph screenshot
-      module: '#242424',            // Major Course Modules / Hubs
-      course_theme: '#242424',
-      hub_kc: '#444444',            // Prominent Hub Knowledge Components
-      pedagogical_kc: '#5c5c5c',    // Standard KCs
-      atomic_concept: '#707070',    // Concepts
-      topic: '#5c5c5c',
-      subtopic: '#787878',
-      leaf: '#a3a3a3',              // Small peripheral notes
-      misconception: '#e05252',     // Coral Red (matches red nodes in screenshot)
-      socratic_probe: '#e59b2c',    // Warm Amber Gold (matches amber nodes in screenshot)
-      default: '#707070'
-    },
-    dark: {
-      bg: '#161616',
-      gridDot: 'rgba(255, 255, 255, 0.04)',
-      link: 'rgba(255, 255, 255, 0.16)',
-      linkHighlight: '#f4f4f5',
-      linkFade: 'rgba(255, 255, 255, 0.03)',
-      text: '#a1a1aa',
-      textHighlight: '#ffffff',
-      textHalo: 'rgba(22, 22, 22, 0.92)',
-      selectRing: '#60a5fa',
-      hoverRing: 'rgba(255, 255, 255, 0.55)',
-      module: '#f4f4f5',
-      course_theme: '#f4f4f5',
-      hub_kc: '#d4d4d8',
-      pedagogical_kc: '#a1a1aa',
-      atomic_concept: '#71717a',
-      topic: '#a1a1aa',
-      subtopic: '#71717a',
-      leaf: '#52525b',
-      misconception: '#ef5350',
-      socratic_probe: '#f59e0b',
-      default: '#a1a1aa'
-    }
-  };
+
 
   function getNodeColor(node, currentTheme) {
     const palette = PALETTES[currentTheme] || PALETTES.light;
@@ -157,29 +111,7 @@
     return true;
   }
 
-  // Ids within `depth` hops of `rootId`, walking the raw edges so the result
-  // does not depend on what the simulation happens to hold right now.
-  function neighbourhoodIds(rootId, edges, depth) {
-    const adjacency = new Map();
-    const link = (a, b) => {
-      if (!adjacency.has(a)) adjacency.set(a, []);
-      adjacency.get(a).push(b);
-    };
-    for (const edge of edges) { link(edge.source, edge.target); link(edge.target, edge.source); }
-    const seen = new Set([rootId]);
-    let frontier = [rootId];
-    for (let hop = 0; hop < depth; hop++) {
-      const next = [];
-      for (const id of frontier) {
-        for (const other of adjacency.get(id) || []) {
-          if (!seen.has(other)) { seen.add(other); next.push(other); }
-        }
-      }
-      frontier = next;
-      if (!frontier.length) break;
-    }
-    return seen;
-  }
+
 
   function getNeighborIds(nodeId) {
     const set = new Set([nodeId]);
@@ -716,162 +648,29 @@
   ></canvas>
 
   <!-- Obsidian Graph Settings HUD Panel -->
-  <div class="obsidian-hud" class:collapsed={!hudOpen}>
-    <header class="hud-header">
-      <div class="hud-title">
-        <span class="hud-icon">✦</span>
-        <span>Graph View</span>
-      </div>
-      <div class="hud-header-actions">
-        <!-- Theme Switcher: Light (Screenshot) vs Dark -->
-        <div class="theme-toggle-group">
-          <button
-            type="button"
-            class="theme-btn"
-            class:active={theme === 'light'}
-            onclick={() => toggleTheme('light')}
-            title="Obsidian Light Mode (as in reference)"
-          >
-            ☀ Light
-          </button>
-          <button
-            type="button"
-            class="theme-btn"
-            class:active={theme === 'dark'}
-            onclick={() => toggleTheme('dark')}
-            title="Obsidian Dark Mode"
-          >
-            ☾ Dark
-          </button>
-        </div>
-        <button type="button" class="hud-toggle-btn" onclick={() => hudOpen = !hudOpen} aria-label="Toggle Controls">
-          {hudOpen ? '−' : '+'}
-        </button>
-      </div>
-    </header>
-
-    {#if hudOpen}
-      <div class="hud-body">
-        <!-- Tab navigation -->
-        <nav class="hud-tabs">
-          <button type="button" class="tab-btn" class:active={activeTab === 'filters'} onclick={() => activeTab = 'filters'}>Filters</button>
-          <button type="button" class="tab-btn" class:active={activeTab === 'display'} onclick={() => activeTab = 'display'}>Display</button>
-          <button type="button" class="tab-btn" class:active={activeTab === 'forces'} onclick={() => activeTab = 'forces'}>Forces</button>
-        </nav>
-
-        {#if activeTab === 'filters'}
-          <!-- Search filter -->
-          <div class="hud-section">
-            <label for="graph-search">Search</label>
-            <input
-              id="graph-search"
-              type="text"
-              placeholder="Search concepts or notes..."
-              bind:value={searchQuery}
-            />
-          </div>
-
-          <div class="hud-section">
-            <span class="section-label">Focus</span>
-            <label class="checkbox-pill focus">
-              <input type="checkbox" bind:checked={focusMode} />
-              <span>Only the selected node</span>
-            </label>
-            {#if focusMode}
-              <div class="focus-depth">
-                <button type="button" class:on={focusDepth === 1} onclick={() => (focusDepth = 1)}>Direct links</button>
-                <button type="button" class:on={focusDepth === 2} onclick={() => (focusDepth = 2)}>Two hops</button>
-              </div>
-              {#if !selectedConceptId}
-                <p class="focus-hint">Click a node to focus on it.</p>
-              {/if}
-            {/if}
-          </div>
-
-          <!-- Color Groups / Toggles (matching the screenshot) -->
-          <div class="hud-section">
-            <span class="section-label">Groups & Categories</span>
-            <div class="toggle-group">
-              <label class="checkbox-pill kc">
-                <input type="checkbox" bind:checked={showKCs} />
-                <span class="dot kc-dot"></span>
-                <span>Concepts & KCs</span>
-              </label>
-              <label class="checkbox-pill misc">
-                <input type="checkbox" bind:checked={showMisconceptions} />
-                <span class="dot misc-dot"></span>
-                <span>Cognitive Traps (Red)</span>
-              </label>
-              <label class="checkbox-pill probe">
-                <input type="checkbox" bind:checked={showProbes} />
-                <span class="dot probe-dot"></span>
-                <span>Diagnostic Probes (Gold)</span>
-              </label>
-              <label class="checkbox-pill module">
-                <input type="checkbox" bind:checked={showModules} />
-                <span class="dot module-dot"></span>
-                <span>Curriculum Modules</span>
-              </label>
-            </div>
-          </div>
-        {:else if activeTab === 'display'}
-          <!-- Display Controls -->
-          <div class="hud-section">
-            <div class="slider-row">
-              <span>Node Size</span>
-              <input type="range" min="0.6" max="2.2" step="0.1" bind:value={nodeSizeMultiplier} />
-            </div>
-            <div class="slider-row">
-              <span>Link Thickness</span>
-              <input type="range" min="0.5" max="3.0" step="0.25" bind:value={linkThickness} />
-            </div>
-            <div class="slider-row">
-              <span>Text Size</span>
-              <input type="range" min="8" max="16" step="1" bind:value={textSize} />
-            </div>
-            <div class="checkbox-row">
-              <label class="toggle-label">
-                <input type="checkbox" bind:checked={showArrows} />
-                <span>Show Directional Arrows</span>
-              </label>
-            </div>
-            <div class="checkbox-row">
-              <label class="toggle-label">
-                <input type="checkbox" bind:checked={showAllLabels} />
-                <span>Show All Text Labels</span>
-              </label>
-            </div>
-          </div>
-        {:else if activeTab === 'forces'}
-          <!-- Force Simulation Controls -->
-          <div class="hud-section">
-            <div class="slider-row">
-              <span>Center Force</span>
-              <input type="range" min="0.01" max="0.25" step="0.01" bind:value={centerGravity} />
-            </div>
-            <div class="slider-row">
-              <span>Repulsion (Charge)</span>
-              <input type="range" min="-550" max="-80" step="20" bind:value={repulsion} />
-            </div>
-            <div class="slider-row">
-              <span>Link Distance</span>
-              <input type="range" min="40" max="200" step="10" bind:value={linkDistance} />
-            </div>
-          </div>
-        {/if}
-
-        <!-- Quick Actions -->
-        <div class="hud-actions">
-          <button type="button" class="btn-hud" onclick={recenterGraph}>
-            ⟲ Reset View
-          </button>
-          <button type="button" class="btn-hud" onclick={() => { if (simulation) simulation.alpha(0.6).restart(); }}>
-            ⚡ Reheat
-          </button>
-        </div>
-      </div>
-    {/if}
-  </div>
+  <GraphSettingsHud
+    bind:hudOpen
+    bind:theme
+    bind:activeTab
+    bind:searchQuery
+    bind:focusMode
+    bind:focusDepth
+    {selectedConceptId}
+    bind:showKCs
+    bind:showMisconceptions
+    bind:showProbes
+    bind:showModules
+    bind:nodeSizeMultiplier
+    bind:linkThickness
+    bind:textSize
+    bind:showArrows
+    bind:showAllLabels
+    bind:centerGravity
+    bind:repulsion
+    bind:linkDistance
+    onRecenter={recenterGraph}
+    onReheat={() => { if (simulation) simulation.alpha(0.6).restart(); }}
+  />
 
   <!-- Zoom & Count badge in bottom left -->
   <div class="zoom-badge">
@@ -880,27 +679,7 @@
   </div>
 
   <!-- Interactive Node Hover Tooltip -->
-  {#if hoveredNode}
-    <div
-      class="node-tooltip"
-      style="left: {mousePos.x + 14}px; top: {mousePos.y - 12}px;"
-    >
-      <div class="tooltip-header">
-        <span
-          class="tooltip-tag"
-          style="background: {hoveredNode.color}22; color: {hoveredNode.color}; border: 1px solid {hoveredNode.color}44;"
-        >
-          {hoveredNode.raw.concept_type || hoveredNode.raw.level}
-        </span>
-        <span class="tooltip-degree">{hoveredNode.degree} {hoveredNode.degree === 1 ? 'connection' : 'connections'}</span>
-      </div>
-      <strong class="tooltip-title">{hoveredNode.raw.label}</strong>
-      {#if hoveredNode.raw.definition}
-        <p class="tooltip-def">{hoveredNode.raw.definition}</p>
-      {/if}
-      <span class="tooltip-hint">Click node to inspect details</span>
-    </div>
-  {/if}
+  <GraphNodeTooltip {hoveredNode} {mousePos} />
 </div>
 
 <style>
@@ -934,334 +713,6 @@
     cursor: grabbing;
   }
 
-  /* Obsidian Graph Settings Floating Panel */
-  .obsidian-hud {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    width: 260px;
-    border-radius: 8px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
-    font-size: 11px;
-    z-index: 20;
-    transition: width 0.2s ease, opacity 0.2s ease;
-  }
-
-  .light-mode .obsidian-hud {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    color: #334155;
-  }
-
-  .dark-mode .obsidian-hud {
-    background: rgba(24, 24, 27, 0.88);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
-    color: #e2e8f0;
-  }
-
-  .obsidian-hud.collapsed {
-    width: auto;
-  }
-
-  .hud-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  }
-  .dark-mode .hud-header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .hud-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-    font-size: 11.5px;
-    letter-spacing: 0.2px;
-  }
-  .hud-icon {
-    font-size: 11px;
-    color: #e59b2c;
-  }
-
-  .hud-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .theme-toggle-group {
-    display: flex;
-    background: rgba(0, 0, 0, 0.06);
-    border-radius: 4px;
-    padding: 2px;
-    gap: 2px;
-  }
-  .dark-mode .theme-toggle-group {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .theme-btn {
-    background: transparent;
-    border: none;
-    border-radius: 3px;
-    font-size: 9.5px;
-    font-weight: 600;
-    padding: 2px 6px;
-    cursor: pointer;
-    color: #64748b;
-    transition: all 0.15s ease;
-  }
-  .dark-mode .theme-btn {
-    color: #94a3b8;
-  }
-  .theme-btn.active {
-    background: #ffffff;
-    color: #0f172a;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  }
-  .dark-mode .theme-btn.active {
-    background: #27272a;
-    color: #f8fafc;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
-
-  .hud-toggle-btn {
-    background: transparent;
-    border: none;
-    color: #64748b;
-    cursor: pointer;
-    font-size: 13px;
-    padding: 0 3px;
-  }
-  .hud-toggle-btn:hover {
-    color: #0f172a;
-  }
-  .dark-mode .hud-toggle-btn:hover {
-    color: #ffffff;
-  }
-
-  .hud-body {
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .hud-tabs {
-    display: flex;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-    gap: 4px;
-    padding-bottom: 6px;
-  }
-  .dark-mode .hud-tabs {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .tab-btn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 4px 8px;
-    cursor: pointer;
-    color: #64748b;
-    transition: all 0.15s ease;
-  }
-  .tab-btn:hover {
-    color: #0f172a;
-  }
-  .dark-mode .tab-btn {
-    color: #94a3b8;
-  }
-  .dark-mode .tab-btn:hover {
-    color: #f8fafc;
-  }
-  .tab-btn.active {
-    background: rgba(0, 0, 0, 0.08);
-    color: #0f172a;
-  }
-  .dark-mode .tab-btn.active {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-  }
-
-  .hud-section {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .section-label,
-  .hud-section label {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    color: #64748b;
-  }
-  .dark-mode .section-label,
-  .dark-mode .hud-section label {
-    color: #94a3b8;
-  }
-
-  .hud-section input[type="text"] {
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    color: #0f172a;
-    font-size: 11px;
-    padding: 5px 8px;
-    outline: none;
-    transition: border-color 0.15s ease;
-  }
-  .hud-section input[type="text"]:focus {
-    border-color: #2563eb;
-  }
-  .dark-mode .hud-section input[type="text"] {
-    background: #18181b;
-    border: 1px solid #3f3f46;
-    color: #f8fafc;
-  }
-  .dark-mode .hud-section input[type="text"]:focus {
-    border-color: #60a5fa;
-  }
-
-  .toggle-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .focus-depth { display: flex; gap: 6px; margin-top: 8px; }
-  .focus-depth button {
-    flex: 1; font: inherit; font-size: 11px; cursor: pointer;
-    padding: 4px 8px; border-radius: 6px;
-    border: 1px solid rgba(148, 163, 184, 0.45);
-    background: transparent; color: inherit; opacity: 0.75;
-  }
-  .focus-depth button.on { opacity: 1; border-color: #38bdf8; background: rgba(56, 189, 248, 0.14); }
-  .focus-hint { margin: 8px 0 0; font-size: 11px; opacity: 0.7; }
-
-  .checkbox-pill {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    cursor: pointer;
-    font-size: 11px;
-    color: #475569;
-    padding: 2px 0;
-  }
-  .checkbox-pill:hover {
-    color: #0f172a;
-  }
-  .dark-mode .checkbox-pill {
-    color: #cbd5e1;
-  }
-  .dark-mode .checkbox-pill:hover {
-    color: #ffffff;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .kc-dot { background: #5c5c5c; }
-  .misc-dot { background: #e05252; }
-  .probe-dot { background: #e59b2c; }
-  .module-dot { background: #242424; }
-  .dark-mode .kc-dot { background: #a1a1aa; }
-  .dark-mode .misc-dot { background: #ef5350; }
-  .dark-mode .probe-dot { background: #f59e0b; }
-  .dark-mode .module-dot { background: #f4f4f5; }
-
-  .slider-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10px;
-    color: #475569;
-  }
-  .dark-mode .slider-row {
-    color: #94a3b8;
-  }
-  .slider-row input[type="range"] {
-    width: 115px;
-    accent-color: #475569;
-    cursor: pointer;
-  }
-  .dark-mode .slider-row input[type="range"] {
-    accent-color: #a1a1aa;
-  }
-
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    padding: 2px 0;
-  }
-  .toggle-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10.5px;
-    color: #475569;
-    cursor: pointer;
-  }
-  .dark-mode .toggle-label {
-    color: #cbd5e1;
-  }
-
-  .hud-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-top: 4px;
-    padding-top: 6px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-  }
-  .dark-mode .hud-actions {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .btn-hud {
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    color: #334155;
-    cursor: pointer;
-    font-size: 10px;
-    font-weight: 500;
-    padding: 5px 8px;
-    text-align: center;
-    transition: all 0.15s ease;
-  }
-  .btn-hud:hover {
-    background: #e2e8f0;
-    border-color: #94a3b8;
-    color: #0f172a;
-  }
-  .dark-mode .btn-hud {
-    background: rgba(39, 39, 42, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #f1f5f9;
-  }
-  .dark-mode .btn-hud:hover {
-    background: rgba(63, 63, 70, 0.9);
-    border-color: #a1a1aa;
-  }
 
   .zoom-badge {
     position: absolute;
@@ -1287,82 +738,4 @@
     color: #94a3b8;
   }
 
-  /* Node Hover Tooltip */
-  .node-tooltip {
-    position: fixed;
-    pointer-events: none;
-    border-radius: 6px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
-    max-width: 270px;
-    padding: 9px 12px;
-    z-index: 50;
-    transition: opacity 0.1s ease;
-  }
-  .light-mode .node-tooltip {
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(0, 0, 0, 0.14);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
-    color: #1e293b;
-  }
-  .dark-mode .node-tooltip {
-    background: rgba(24, 24, 27, 0.94);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
-    color: #f8fafc;
-  }
-
-  .tooltip-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 5px;
-  }
-  .tooltip-tag {
-    border-radius: 3px;
-    font-size: 8.5px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    padding: 2px 5px;
-    text-transform: uppercase;
-  }
-  .tooltip-degree {
-    font-size: 9px;
-    color: #64748b;
-  }
-  .dark-mode .tooltip-degree {
-    color: #94a3b8;
-  }
-
-  .tooltip-title {
-    display: block;
-    font-size: 12px;
-    line-height: 1.35;
-    margin-bottom: 4px;
-    color: #0f172a;
-  }
-  .dark-mode .tooltip-title {
-    color: #ffffff;
-  }
-
-  .tooltip-def {
-    font-size: 10.5px;
-    line-height: 1.4;
-    color: #475569;
-    margin: 0 0 5px 0;
-  }
-  .dark-mode .tooltip-def {
-    color: #cbd5e1;
-  }
-
-  .tooltip-hint {
-    color: #2563eb;
-    font-size: 9px;
-    font-style: italic;
-  }
-  .dark-mode .tooltip-hint {
-    color: #60a5fa;
-  }
 </style>
