@@ -1,7 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { responseError, routeParams } from '../lib/session.js';
+  import AssignmentDesignerHeader from '../lib/authoring/AssignmentDesignerHeader.svelte';
+  import AssignmentTaskSection from '../lib/authoring/AssignmentTaskSection.svelte';
+  import AssignmentSourcesSection from '../lib/authoring/AssignmentSourcesSection.svelte';
   import RubricDesigner from '../lib/authoring/RubricDesigner.svelte';
+  import AssignmentAdvancedSection from '../lib/authoring/AssignmentAdvancedSection.svelte';
+  import AssignmentStudentPreview from '../lib/authoring/AssignmentStudentPreview.svelte';
   import AssignmentBriefHandout from '../lib/sources/AssignmentBriefHandout.svelte';
   import { sourceCards, publicRubric, createContract } from '../lib/authoring/designerUtils.js';
 
@@ -25,8 +30,6 @@
 
   // View & UI state
   let viewMode = $state('editor'); // 'editor' | 'preview' | 'pdf'
-  let previewTab = $state('overview'); // 'overview' | 'sources' | 'rubric' | 'checklist'
-  let showAdvanced = $state(false);
   let activePdfViewer = $state(null); // { title: string, url: string } | null
   let isLoading = $state(true);
   let isProposing = $state(false);
@@ -42,7 +45,6 @@
   const totalRubricWeight = $derived(
     (contract?.public_rubric || []).reduce((acc, curr) => acc + Number(curr.weight || 0), 0)
   );
-
 
   function materializeContract(nextScaffold) {
     const res = createContract(topic, prompt, activeModule, nextScaffold);
@@ -98,45 +100,43 @@
           learning_goals: pub.learning_goals || [],
           source_pack: pub.source_pack || [],
           public_rubric: publicRubric(pub.public_rubric || []),
-          start_options: pub.start_options || [],
-          support_menu: pub.support_menu || [],
-          completion_checklist: pub.completion_checklist || [],
-          integrity_notice: pub.integrity_notice || 'Your educator evaluates the final submission.',
-          version_note: pub.version_note || null,
+          support_menu: pub.support_menu || [
+            { mode: 'source_grounding', title: 'Source Grounding', description: 'Prompts to ground claims directly in primary texts.' },
+            { mode: 'counterargument', title: 'Counterargument Probe', description: 'Challenges student reasoning with historical counter-evidence.' },
+            { mode: 'structural_organization', title: 'Rhetorical Organization', description: 'Guidance on thesis placement, topic sentences, and synthesis.' },
+          ],
+          completion_checklist: pub.completion_checklist || [
+            'All core claims explicitly cite evidence from assigned primary sources.',
+            'Historical counterarguments and institutional complexities are addressed.',
+            'Deliverable satisfies scope and tone requirements before final review.',
+          ],
+          integrity_notice: pub.integrity_notice || 'All primary evidence and quotes must originate from assigned course texts or authenticated sources. External generative synthesis is monitored.',
         };
         evaluationPlan = authoring.evaluation_plan || {
+          evaluator_mode: 'deterministic_rubric_with_critique',
+          rubric_id: 'rubric_published',
+          source_catalog: [],
+          concept_coverage_targets: [],
+          evidence_rules: [],
           public_rubric_map: [],
-          completion_states: [],
-          support_policy: [],
         };
+        draft = { assignment_id: assignmentId, status: authoring.status || 'draft' };
         readiness = authoring.readiness || { is_publishable: true, items: [] };
-        topic = contract.title || '';
-        prompt = contract.task?.prompt || '';
-        draft = {
-          assignment_id: authoring.assignment_id,
-          question_id: authoring.question_id,
-          status: authoring.status,
-          published: contract,
-        };
-        notice = `Loaded assignment: "${contract.title || 'Untitled'}" (${draft.status === 'published' ? 'Published' : 'Draft'})`;
       }
     } catch (err) {
-      console.warn('Could not restore specific assignment authoring:', err);
-      materializeContract(null);
+      console.error('Failed to restore assignment authoring contract', err);
     }
   }
 
   async function proposeAssignment() {
-    if (!courseId || !moduleId) {
-      error = 'Please select a course module before drafting with AI.';
-      return;
-    }
     isProposing = true;
     error = '';
     notice = '';
     try {
       const activeModuleKcs = (activeModule?.knowledge_components || []).map((k) =>
-        typeof k === 'string' ? k : (k.kc_id || k.label || String(k))
+        typeof k === 'string'
+          ? { kc_id: k, label: k.replace(/^KC_[A-Z]+_/, '').replace(/_/g, ' ') }
+          : k
       );
       const res = await fetch('/authoring/assignments/propose', {
         method: 'POST',
@@ -423,108 +423,19 @@
 </svelte:head>
 
 <main class="studio-workspace" class:dark-mode={currentTheme === 'dark'} class:light-mode={currentTheme === 'light'}>
-  <!-- Minimalist Sticky Top Navigation Bar -->
-  <header class="top-nav-bar">
-    <div class="nav-left">
-      <a href={`#/modules?course_id=${encodeURIComponent(courseId)}`} class="back-link" title="Return to course modules">
-        ← Modules
-      </a>
-      <div class="divider"></div>
-      <div class="title-group">
-        <span class="studio-badge">Assignment Studio</span>
-        <h1 class="course-name">{course?.title || 'Course'}</h1>
-      </div>
-      <div class="unit-selector-wrapper">
-        <label for="module-select" class="unit-label">Unit:</label>
-        <select
-          id="module-select"
-          class="unit-select"
-          bind:value={moduleId}
-          onchange={() => {
-            const mod = course?.modules?.find(m => String(m.module_id) === String(moduleId));
-            if (mod && contract) {
-              contract.task.scope = `Chronological and institutional boundaries of Unit ${mod.position}: ${mod.title}`;
-            }
-          }}
-        >
-          {#each (course?.modules || []).slice().sort((a, b) => a.position - b.position) as mod}
-            <option value={mod.module_id}>Unit {mod.position}: {mod.title}</option>
-          {/each}
-        </select>
-      </div>
-    </div>
-
-    <!-- Mode Switcher Pills: Editor | Student Preview | PDF Sheet -->
-    <div class="mode-switch-pills" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        class:active={viewMode === 'editor'}
-        onclick={() => viewMode = 'editor'}
-      >
-        <span>✏️</span> Designer
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class:active={viewMode === 'preview'}
-        onclick={() => viewMode = 'preview'}
-      >
-        <span>👁️</span> Student Canvas
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class:active={viewMode === 'pdf'}
-        onclick={() => viewMode = 'pdf'}
-      >
-        <span>📄</span> Printable PDF Sheet
-      </button>
-    </div>
-
-    <!-- Actions -->
-    <div class="nav-actions">
-      <button
-        type="button"
-        class="btn-ai-draft"
-        disabled={isProposing || !moduleId}
-        onclick={proposeAssignment}
-        title="Synthesize task prompt, primary source pack, and rubric with AI"
-      >
-        <span class="sparkle {isProposing ? 'pulsing' : ''}">✦</span>
-        {isProposing ? 'Drafting…' : 'Draft with AI'}
-      </button>
-
-      <button
-        type="button"
-        class="btn-secondary"
-        disabled={!contract || isSaving}
-        onclick={saveStudio}
-      >
-        {isSaving ? 'Saving…' : draft ? 'Save Changes' : 'Save Draft'}
-      </button>
-
-      <button
-        type="button"
-        class="btn-primary"
-        disabled={!contract || isSaving || draft?.status === 'published'}
-        onclick={publish}
-      >
-        {draft?.status === 'published' ? '✓ Published' : '🚀 Publish'}
-      </button>
-
-      {#if draft?.status === 'published' && draft?.assignment_id}
-        <button
-          type="button"
-          class="btn-student-live"
-          title="Preview student reasoning canvas inside Studio"
-          onclick={() => viewMode = 'preview'}
-        >
-          👁️ Preview Student View
-        </button>
-      {/if}
-    </div>
-  </header>
+  <AssignmentDesignerHeader
+    {courseId}
+    {course}
+    bind:moduleId
+    {contract}
+    bind:viewMode
+    {isProposing}
+    {isSaving}
+    {draft}
+    onPropose={proposeAssignment}
+    onSave={saveStudio}
+    onPublish={publish}
+  />
 
   <!-- Notification Banner -->
   {#if notice}
@@ -559,166 +470,21 @@
   {:else if contract}
     <div class="content-container">
 
-      <!-- ========================================================================= -->
-      <!-- VIEW MODE 1: STREAMLINED SINGLE-CANVAS EDITOR                             -->
-      <!-- ========================================================================= -->
+      <!-- VIEW MODE 1: STREAMLINED SINGLE-CANVAS EDITOR -->
       {#if viewMode === 'editor'}
         <div class="editor-streamlined-canvas">
-
           <!-- Section 1: Core Task & Instructions -->
-          <section class="card-section">
-            <div class="card-header">
-              <div class="header-tag">01 · TASK &amp; DIRECTIVES</div>
-              <h2>Assignment Prompt &amp; Inquiries</h2>
-              <p class="section-desc">Specify what historical question, puzzle, or institutional tension students will investigate.</p>
-            </div>
-
-            <div class="form-group">
-              <label for="task-title">Assignment Title</label>
-              <input
-                id="task-title"
-                class="input-text title-input"
-                bind:value={contract.title}
-                placeholder="e.g. Imperial Bureaucracy and Temple Economy in Medieval South India"
-              />
-            </div>
-
-            <div class="form-group">
-              <label for="task-prompt">Inquiry Prompt (Student Directions)</label>
-              <textarea
-                id="task-prompt"
-                class="input-textarea prompt-area"
-                rows="6"
-                bind:value={contract.task.prompt}
-                placeholder="Write clear instructions detailing what claims, contradictions, or evidence students must analyze..."
-              ></textarea>
-            </div>
-
-            <div class="two-col-grid">
-              <div class="form-group">
-                <label for="task-scope">Historical Scope &amp; Period</label>
-                <input
-                  id="task-scope"
-                  class="input-text"
-                  bind:value={contract.task.scope}
-                  placeholder="e.g. 9th–13th century Chola and Pandyan empires"
-                />
-              </div>
-              <div class="form-group">
-                <label for="task-deliverable">Expected Deliverable</label>
-                <input
-                  id="task-deliverable"
-                  class="input-text"
-                  bind:value={contract.task.deliverable}
-                  placeholder="e.g. Source-grounded analytical essay (750–1000 words)"
-                />
-              </div>
-            </div>
-          </section>
+          <AssignmentTaskSection bind:contract />
 
           <!-- Section 2: Grounded Primary Sources & Course Documents -->
-          <section class="card-section">
-            <div class="card-header space-between">
-              <div>
-                <div class="header-tag">02 · PRIMARY EVIDENCE</div>
-                <h2>Grounded Materials &amp; Assigned Readings</h2>
-                <p class="section-desc">Students analyze these specific documents on their canvas to support their arguments.</p>
-              </div>
-              <button type="button" class="btn-secondary btn-sm" onclick={addSourceCard}>
-                + Add Custom Source
-              </button>
-            </div>
-
-            <!-- Uploaded Course Documents Quick Attach Bar -->
-            {#if courseDocuments.length > 0}
-              <div class="course-docs-bar">
-                <span class="bar-title">Course Documents available for this unit:</span>
-                <div class="docs-chip-list">
-                  {#each courseDocuments as doc}
-                    <div class="doc-chip">
-                      <span class="doc-icon">📕</span>
-                      <span class="doc-name">{doc.title || doc.filename}</span>
-                      <button
-                        type="button"
-                        class="chip-attach-btn"
-                        title="Attach this document to assignment source pack"
-                        onclick={() => attachCourseDocument(doc)}
-                      >
-                        + Attach
-                      </button>
-                      <button
-                        type="button"
-                        class="chip-read-btn"
-                        title="Open PDF reader"
-                        onclick={() => activePdfViewer = { title: doc.title, url: doc.download_url }}
-                      >
-                        Read PDF ↗
-                      </button>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {/if}
-
-            <!-- Source Cards List -->
-            <div class="sources-list">
-              {#each contract.source_pack as source, index}
-                <div class="source-card-item">
-                  <div class="source-card-header">
-                    <span class="source-index">#{index + 1}</span>
-                    <input
-                      class="source-title-input"
-                      bind:value={source.title}
-                      placeholder="Source Title / Inscription / Report"
-                    />
-                    <div class="source-actions">
-                      {#if source.source_url}
-                        <button
-                          type="button"
-                          class="btn-text-action"
-                          onclick={() => activePdfViewer = { title: source.title, url: source.source_url }}
-                        >
-                          View Source ↗
-                        </button>
-                      {/if}
-                      <button
-                        type="button"
-                        class="btn-delete-item"
-                        title="Remove source"
-                        onclick={() => removeSourceCard(index)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="source-card-body">
-                    <div class="form-group">
-                      <label>Relevance &amp; Guidance for Student</label>
-                      <input
-                        class="input-text"
-                        bind:value={source.relevance_guidance}
-                        placeholder="Why is this assigned? What should students look for in this text?"
-                      />
-                    </div>
-                    <div class="form-group">
-                      <label>Authentic Excerpt / Passage</label>
-                      <textarea
-                        class="input-textarea"
-                        rows="3"
-                        bind:value={source.excerpt}
-                        placeholder="Paste key passages, archival excerpts, or translation text..."
-                      ></textarea>
-                    </div>
-                  </div>
-                </div>
-              {:else}
-                <div class="empty-placeholder">
-                  <p>No primary sources attached yet. Click <strong>+ Add Custom Source</strong> or attach an uploaded PDF from the bar above.</p>
-                </div>
-              {/each}
-            </div>
-          </section>
+          <AssignmentSourcesSection
+            bind:contract
+            {courseDocuments}
+            onAddSource={addSourceCard}
+            onRemoveSource={removeSourceCard}
+            onAttachCourseDoc={attachCourseDocument}
+            onViewPdf={(pdf) => activePdfViewer = pdf}
+          />
 
           <!-- Section 3: Transparent Public Rubric -->
           <RubricDesigner
@@ -732,173 +498,19 @@
           />
 
           <!-- Section 4: Collapsible Advanced Settings -->
-          <section class="card-section collapsible-section">
-            <button
-              type="button"
-              class="accordion-toggle"
-              onclick={() => showAdvanced = !showAdvanced}
-            >
-              <span>{showAdvanced ? '▾' : '▸'} Advanced Options: Socratic Guidance &amp; AutoSCORE Policies</span>
-              <span class="pill-auto">Auto-Managed Defaults</span>
-            </button>
-
-            {#if showAdvanced}
-              <div class="advanced-body">
-                <div class="advanced-group">
-                  <h4>Socratic Assistance Modes for Students</h4>
-                  <p class="section-desc">Students can request these scaffolds without receiving direct answers from the AI tutor:</p>
-                  {#each contract.support_menu as menu}
-                    <div class="support-menu-row">
-                      <strong>{menu.title}</strong>
-                      <input class="input-text" bind:value={menu.description} />
-                    </div>
-                  {/each}
-                </div>
-
-                <div class="advanced-group">
-                  <h4>Academic Integrity Statement</h4>
-                  <textarea class="input-textarea" rows="2" bind:value={contract.integrity_notice}></textarea>
-                </div>
-
-                <div class="advanced-group">
-                  <h4>AutoSCORE Alignment Policy</h4>
-                  <p class="policy-note">
-                    AutoSCORE extracts and organizes cited evidence strictly against the <strong>{contract.public_rubric.length} public criteria</strong> above for educator grading. Autonomous final grades are disallowed by system policy.
-                  </p>
-                </div>
-              </div>
-            {/if}
-          </section>
-
+          <AssignmentAdvancedSection bind:contract />
         </div>
 
-      <!-- ========================================================================= -->
-      <!-- VIEW MODE 2: STUDENT REASONING CANVAS PREVIEW                             -->
-      <!-- ========================================================================= -->
+      <!-- VIEW MODE 2: STUDENT REASONING CANVAS PREVIEW -->
       {:else if viewMode === 'preview'}
-        <div class="student-preview-shell">
-          <div class="preview-banner-header">
-            <div>
-              <span class="preview-eyebrow">Student View Simulation</span>
-              <h2>{contract.title || 'Untitled Inquiry'}</h2>
-              <p class="preview-sub">{contract.task.deliverable} · {contract.task.scope}</p>
-            </div>
-            <div class="preview-mode-tag">
-              <span>●</span> Student Interface
-            </div>
-          </div>
+        <AssignmentStudentPreview
+          {contract}
+          onViewPdf={(pdf) => activePdfViewer = pdf}
+        />
 
-          <div class="preview-nav-tabs">
-            <button class:active={previewTab === 'overview'} onclick={() => previewTab = 'overview'}>Task Inquiries</button>
-            <button class:active={previewTab === 'sources'} onclick={() => previewTab = 'sources'}>Assigned Materials ({contract.source_pack.length})</button>
-            <button class:active={previewTab === 'rubric'} onclick={() => previewTab = 'rubric'}>Grading Rubric ({contract.public_rubric.length})</button>
-            <button class:active={previewTab === 'checklist'} onclick={() => previewTab = 'checklist'}>Submission Checklist</button>
-          </div>
-
-          <div class="preview-content-box">
-            {#if previewTab === 'overview'}
-              <div class="preview-overview-pane">
-                <div class="task-box">
-                  <h3>Your Task</h3>
-                  <p class="prompt-text">{contract.task.prompt}</p>
-                </div>
-
-                <div class="meta-grid">
-                  <div class="meta-card">
-                    <span class="meta-label">Scope &amp; Chronology</span>
-                    <p>{contract.task.scope}</p>
-                  </div>
-                  <div class="meta-card">
-                    <span class="meta-label">Deliverable</span>
-                    <p>{contract.task.deliverable}</p>
-                  </div>
-                </div>
-
-                <div class="goals-box">
-                  <h3>Core Learning Objectives</h3>
-                  <ul>
-                    {#each contract.learning_goals as goal}
-                      <li>{goal}</li>
-                    {/each}
-                  </ul>
-                </div>
-              </div>
-
-            {:else if previewTab === 'sources'}
-              <div class="preview-sources-pane">
-                {#each contract.source_pack as src}
-                  <article class="reading-card">
-                    <div class="reading-head">
-                      <h4>{src.title}</h4>
-                      {#if src.source_url}
-                        <button
-                          type="button"
-                          class="btn-read-pdf"
-                          onclick={() => activePdfViewer = { title: src.title, url: src.source_url }}
-                        >
-                          Read Original PDF ↗
-                        </button>
-                      {/if}
-                    </div>
-                    <p class="reading-guide">{src.relevance_guidance}</p>
-                    <blockquote class="reading-quote">{src.excerpt}</blockquote>
-                  </article>
-                {:else}
-                  <p>No primary sources attached.</p>
-                {/each}
-              </div>
-
-            {:else if previewTab === 'rubric'}
-              <div class="preview-rubric-pane">
-                <div class="rubric-table">
-                  {#each contract.public_rubric as crit}
-                    <div class="rubric-row">
-                      <div class="crit-head">
-                        <h4>{crit.title}</h4>
-                        <div class="crit-meta-badges">
-                          <span class="crit-weight">{crit.weight}%</span>
-                          {#if crit.concept_label || crit.concept_id}
-                            <span class="crit-concept-pill">⚡ {crit.concept_label || crit.concept_id}</span>
-                          {/if}
-                        </div>
-                        <p>{crit.description}</p>
-                      </div>
-                      <div class="levels-display">
-                        {#each crit.levels as lvl}
-                          <div class="lvl-col">
-                            <strong>{lvl.label}</strong>
-                            <p>{lvl.description}</p>
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-
-            {:else}
-              <div class="preview-checklist-pane">
-                <h3>Pre-Submission Checklist</h3>
-                <ul class="checklist-items">
-                  {#each contract.completion_checklist as item}
-                    <li><input type="checkbox" disabled /> <span>{item}</span></li>
-                  {/each}
-                </ul>
-                <div class="integrity-box">
-                  <strong>Academic Integrity:</strong>
-                  <p>{contract.integrity_notice}</p>
-                </div>
-              </div>
-            {/if}
-          </div>
-        </div>
-
-      <!-- ========================================================================= -->
-      <!-- VIEW MODE 3: PRINTABLE ACADEMIC PDF SHEET                                 -->
-      <!-- ========================================================================= -->
+      <!-- VIEW MODE 3: PRINTABLE ACADEMIC PDF SHEET -->
       {:else if viewMode === 'pdf'}
         <div class="pdf-sheet-wrapper">
-          <!-- Non-printing Control Bar -->
           <div class="pdf-control-bar no-print">
             <div class="pdf-info">
               <span>📄 Academic Assignment Handout</span>
@@ -951,9 +563,6 @@
 </main>
 
 <style>
-  /* -------------------------------------------------------------
-     Core Layout & Clean Design Tokens (Light Mode Default)
-     ------------------------------------------------------------- */
   .studio-workspace {
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -961,300 +570,15 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Academic Light Mode (Default) */
   .studio-workspace.light-mode {
     background: #f6f8fa;
     color: #1f2328;
   }
 
-  /* Dark Mode */
   .studio-workspace.dark-mode {
     background: #0d1117;
     color: #e6edf3;
   }
-
-  /* Sticky Top Bar */
-  .top-nav-bar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 24px;
-    backdrop-filter: blur(14px);
-    transition: background 0.2s ease, border-color 0.2s ease;
-  }
-  .light-mode .top-nav-bar {
-    background: rgba(255, 255, 255, 0.92);
-    border-bottom: 1px solid #d0d7de;
-  }
-  .dark-mode .top-nav-bar {
-    background: rgba(13, 17, 23, 0.9);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .nav-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .back-link {
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: color 0.15s;
-  }
-  .light-mode .back-link { color: #57606a; }
-  .light-mode .back-link:hover { color: #0969da; }
-  .dark-mode .back-link { color: #8b949e; }
-  .dark-mode .back-link:hover { color: #58a6ff; }
-
-  .divider {
-    width: 1px;
-    height: 22px;
-  }
-  .light-mode .divider { background: #d0d7de; }
-  .dark-mode .divider { background: rgba(255, 255, 255, 0.1); }
-
-  .title-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .studio-badge {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-  }
-  .light-mode .studio-badge { color: #6366f1; }
-  .dark-mode .studio-badge { color: #a5b4fc; }
-
-  .course-name {
-    font-size: 14px;
-    font-weight: 700;
-    margin: 0;
-  }
-  .light-mode .course-name { color: #1f2328; }
-  .dark-mode .course-name { color: #f0f6fc; }
-
-  .unit-selector-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: 12px;
-  }
-
-  .unit-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-  .light-mode .unit-label { color: #57606a; }
-  .dark-mode .unit-label { color: #8b949e; }
-
-  .unit-select {
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 8px;
-    outline: none;
-    cursor: pointer;
-  }
-  .light-mode .unit-select {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-    color: #0969da;
-  }
-  .dark-mode .unit-select {
-    background: #161b22;
-    border: 1px solid #30363d;
-    color: #58a6ff;
-  }
-
-  /* Mode Switcher */
-  .mode-switch-pills {
-    display: flex;
-    border-radius: 8px;
-    padding: 3px;
-    gap: 4px;
-  }
-  .light-mode .mode-switch-pills {
-    background: #eaeef2;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .mode-switch-pills {
-    background: #161b22;
-    border: 1px solid #30363d;
-  }
-
-  .mode-switch-pills button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: transparent;
-    border: 0;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 14px;
-    transition: all 0.15s ease;
-  }
-  .light-mode .mode-switch-pills button { color: #57606a; }
-  .light-mode .mode-switch-pills button:hover { color: #1f2328; }
-  .light-mode .mode-switch-pills button.active {
-    background: #0969da;
-    color: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  }
-  .dark-mode .mode-switch-pills button { color: #8b949e; }
-  .dark-mode .mode-switch-pills button:hover { color: #f0f6fc; }
-  .dark-mode .mode-switch-pills button.active {
-    background: #238636;
-    color: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
-
-  /* Nav Actions & Theme Toggle */
-  .nav-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .btn-ai-draft {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
-    color: #ffffff;
-    border: 0;
-    border-radius: 6px;
-    font-size: 12.5px;
-    font-weight: 700;
-    padding: 7px 14px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
-  }
-  .btn-ai-draft:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
-  }
-  .btn-ai-draft:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-ai-rubric {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: linear-gradient(135deg, #7c3aed, #4f46e5);
-    color: #ffffff;
-    border: 0;
-    border-radius: 6px;
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 5px 12px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
-  }
-  .btn-ai-rubric:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
-  }
-  .btn-ai-rubric:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .sparkle.pulsing {
-    animation: pulse 1s infinite alternate;
-  }
-  @keyframes pulse {
-    from { opacity: 0.4; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1.15); }
-  }
-
-  .btn-secondary {
-    border-radius: 6px;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 7px 13px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .light-mode .btn-secondary {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-    color: #24292f;
-  }
-  .light-mode .btn-secondary:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-  .dark-mode .btn-secondary {
-    background: #21262d;
-    border: 1px solid #30363d;
-    color: #c9d1d9;
-  }
-  .dark-mode .btn-secondary:hover:not(:disabled) {
-    background: #30363d;
-    color: #f0f6fc;
-  }
-
-  .btn-primary {
-    background: #0969da;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 6px;
-    color: #ffffff;
-    font-size: 12.5px;
-    font-weight: 700;
-    padding: 7px 15px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: #1158c7;
-  }
-
-  .btn-student-live {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: #1a7f37;
-    color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 6px;
-    font-size: 12.5px;
-    font-weight: 700;
-    padding: 7px 14px;
-    text-decoration: none;
-    transition: all 0.15s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  }
-  .btn-student-live:hover {
-    background: #1f883d;
-    box-shadow: 0 2px 8px rgba(26, 127, 55, 0.35);
-  }
-
-  .notice-action-link {
-    font-weight: 700;
-    text-decoration: underline;
-    color: inherit;
-    margin-left: 8px;
-    cursor: pointer;
-  }
-  .notice-action-link:hover {
-    opacity: 0.85;
-  }
-
-  .btn-sm { font-size: 11.5px; padding: 5px 10px; }
-  .btn-xs { font-size: 11px; padding: 3px 8px; }
 
   /* Notifications */
   .notice-banner {
@@ -1291,6 +615,15 @@
   .notice-banner p { flex: 1; margin: 0; }
   .close-btn { background: none; border: 0; color: inherit; cursor: pointer; font-size: 13px; }
 
+  .notice-action-link {
+    font-weight: 700;
+    text-decoration: underline;
+    color: inherit;
+    margin-left: 8px;
+    cursor: pointer;
+  }
+  .notice-action-link:hover { opacity: 0.85; }
+
   /* Container */
   .content-container {
     max-width: 1040px;
@@ -1298,832 +631,36 @@
     padding: 0 20px;
   }
 
-  /* Section Cards */
-  .card-section {
-    border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 24px;
-    transition: background 0.2s, border-color 0.2s;
-  }
-  .light-mode .card-section {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.08), 0 8px 24px rgba(66, 74, 83, 0.04);
-  }
-  .dark-mode .card-section {
-    background: #161b22;
-    border: 1px solid #30363d;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  }
-
-  .card-header { margin-bottom: 18px; }
-  .card-header.space-between {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .header-tag {
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.8px;
-    margin-bottom: 4px;
-  }
-  .light-mode .header-tag { color: #57606a; }
-  .dark-mode .header-tag { color: #8b949e; }
-
-  .card-header h2 {
-    font-size: 18px;
-    font-weight: 700;
-    margin: 0 0 4px;
-  }
-  .light-mode .card-header h2 { color: #1f2328; }
-  .dark-mode .card-header h2 { color: #f0f6fc; }
-
-  .section-desc {
-    font-size: 12px;
-    margin: 0;
-  }
-  .light-mode .section-desc { color: #57606a; }
-  .dark-mode .section-desc { color: #8b949e; }
-
-  /* Form Elements */
-  .form-group {
+  .editor-streamlined-canvas {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 14px;
-  }
-  .form-group label {
-    font-size: 11.5px;
-    font-weight: 600;
-  }
-  .light-mode .form-group label { color: #24292f; }
-  .dark-mode .form-group label { color: #c9d1d9; }
-
-  .input-text, .input-textarea {
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 13px;
-    padding: 9px 12px;
-    outline: none;
-    transition: border-color 0.15s ease, background 0.15s ease;
-  }
-  .light-mode .input-text, .light-mode .input-textarea {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-    color: #1f2328;
-  }
-  .light-mode .input-text:focus, .light-mode .input-textarea:focus {
-    border-color: #0969da;
-    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
-  }
-  .dark-mode .input-text, .dark-mode .input-textarea {
-    background: #0d1117;
-    border: 1px solid #30363d;
-    color: #f0f6fc;
-  }
-  .dark-mode .input-text:focus, .dark-mode .input-textarea:focus {
-    border-color: #58a6ff;
+    gap: 24px;
   }
 
-  .title-input { font-size: 16px; font-weight: 600; }
-  .prompt-area { line-height: 1.55; }
-  .two-col-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-  /* Course Documents Quick Bar */
-  .course-docs-bar {
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 18px;
-  }
-  .light-mode .course-docs-bar {
-    background: rgba(9, 105, 218, 0.05);
-    border: 1px solid rgba(9, 105, 218, 0.2);
-  }
-  .dark-mode .course-docs-bar {
-    background: rgba(56, 139, 253, 0.08);
-    border: 1px solid rgba(56, 139, 253, 0.25);
-  }
-
-  .bar-title {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-  .light-mode .bar-title { color: #0969da; }
-  .dark-mode .bar-title { color: #79c0ff; }
-
-  .docs-chip-list { display: flex; flex-wrap: wrap; gap: 10px; }
-
-  .doc-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-  .light-mode .doc-chip {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .doc-chip {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .doc-name {
-    font-weight: 600;
-    max-width: 220px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .light-mode .doc-name { color: #1f2328; }
-  .dark-mode .doc-name { color: #e6edf3; }
-
-  .chip-attach-btn {
-    background: #1a7f37;
-    border: 0;
-    border-radius: 4px;
-    color: #fff;
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 3px 8px;
-    cursor: pointer;
-  }
-  .chip-read-btn {
-    background: transparent;
-    border-radius: 4px;
-    font-size: 10.5px;
-    font-weight: 600;
-    padding: 2px 7px;
-    cursor: pointer;
-  }
-  .light-mode .chip-read-btn {
-    border: 1px solid #0969da;
-    color: #0969da;
-  }
-  .light-mode .chip-read-btn:hover { background: rgba(9, 105, 218, 0.08); }
-  .dark-mode .chip-read-btn {
-    border: 1px solid #388bfd;
-    color: #58a6ff;
-  }
-  .dark-mode .chip-read-btn:hover { background: rgba(56, 139, 253, 0.15); }
-
-  /* Sources List */
-  .sources-list { display: flex; flex-direction: column; gap: 14px; }
-
-  .source-card-item {
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .light-mode .source-card-item {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .source-card-item {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .source-card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-  .source-index {
-    font-size: 11px;
-    font-weight: 800;
-    border-radius: 4px;
-    padding: 3px 6px;
-  }
-  .light-mode .source-index { background: #eaeef2; color: #57606a; }
-  .dark-mode .source-index { background: #21262d; color: #8b949e; }
-
-  .source-title-input {
-    flex: 1;
-    background: transparent;
-    border: 1px solid transparent;
-    font-size: 14px;
-    font-weight: 700;
-    padding: 4px 6px;
-    outline: none;
-  }
-  .light-mode .source-title-input {
-    border-bottom-color: #d0d7de;
-    color: #1f2328;
-  }
-  .light-mode .source-title-input:focus {
-    border-color: #0969da;
-    background: #ffffff;
-    border-radius: 4px;
-  }
-  .dark-mode .source-title-input {
-    border-bottom-color: #30363d;
-    color: #f0f6fc;
-  }
-  .dark-mode .source-title-input:focus {
-    border-color: #58a6ff;
-    background: #161b22;
-    border-radius: 4px;
-  }
-
-  .source-actions { display: flex; align-items: center; gap: 8px; }
-
-  .btn-text-action {
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    font-size: 11.5px;
-    font-weight: 600;
-  }
-  .light-mode .btn-text-action { color: #0969da; }
-  .dark-mode .btn-text-action { color: #58a6ff; }
-  .btn-text-action:hover { text-decoration: underline; }
-
-  .btn-delete-item {
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 3px 6px;
-    border-radius: 4px;
-  }
-  .light-mode .btn-delete-item { color: #57606a; }
-  .light-mode .btn-delete-item:hover { color: #cf222e; background: #ffebe9; }
-  .dark-mode .btn-delete-item { color: #8b949e; }
-  .dark-mode .btn-delete-item:hover { color: #f85149; background: rgba(248, 81, 73, 0.1); }
-
-  /* Rubric Section */
-  .rubric-header-actions { display: flex; align-items: center; gap: 10px; }
-
-  .weight-badge {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 999px;
-  }
-  .light-mode .weight-badge.balanced {
-    background: #dafbe1;
-    color: #116329;
-    border: 1px solid #4ac26b;
-  }
-  .dark-mode .weight-badge.balanced {
-    background: rgba(35, 134, 54, 0.2);
-    color: #3fb950;
-    border: 1px solid rgba(46, 160, 67, 0.4);
-  }
-  .light-mode .weight-badge.unbalanced {
-    background: #fff8c5;
-    color: #9a6700;
-    border: 1px solid #d4a72c;
-  }
-  .dark-mode .weight-badge.unbalanced {
-    background: rgba(210, 153, 34, 0.2);
-    color: #e3b341;
-    border: 1px solid rgba(210, 153, 34, 0.4);
-  }
-
-  /* Module Concepts & Objectives Context Chips */
-  .module-concepts-preview {
-    margin: 12px 0 16px;
-    padding: 10px 14px;
-    border-radius: 6px;
+  .loading-screen {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-  }
-  .light-mode .module-concepts-preview {
-    background: #f0f6ff;
-    border: 1px solid #bfdbfe;
-  }
-  .dark-mode .module-concepts-preview {
-    background: rgba(56, 139, 253, 0.1);
-    border: 1px solid rgba(56, 139, 253, 0.25);
-  }
-
-  .concepts-preview-header {
-    display: flex;
     align-items: center;
-    gap: 6px;
-  }
-  .concepts-icon { font-size: 13px; }
-  .concepts-label {
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-  }
-  .light-mode .concepts-label { color: #1d4ed8; }
-  .dark-mode .concepts-label { color: #58a6ff; }
-
-  .concepts-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .concept-chip {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 4px;
-    line-height: 1.3;
-  }
-  .light-mode .concept-chip {
-    background: #ffffff;
-    border: 1px solid #93c5fd;
-    color: #1e40af;
-  }
-  .dark-mode .concept-chip {
-    background: #161b22;
-    border: 1px solid #1f6feb;
-    color: #79c0ff;
-  }
-  .concept-chip.kc {
-    font-weight: 700;
-  }
-  .light-mode .concept-chip.kc {
-    background: #ede9fe;
-    border-color: #c4b5fd;
-    color: #5b21b6;
-  }
-  .dark-mode .concept-chip.kc {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.4);
-    color: #d8b4fe;
-  }
-
-
-
-  /* Collapsible Section */
-  .collapsible-section { padding: 14px 20px; }
-  .accordion-toggle {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 6px 0;
-    text-align: left;
-  }
-  .light-mode .accordion-toggle { color: #57606a; }
-  .light-mode .accordion-toggle:hover { color: #1f2328; }
-  .dark-mode .accordion-toggle { color: #8b949e; }
-  .dark-mode .accordion-toggle:hover { color: #f0f6fc; }
-
-  .pill-auto {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 999px;
-  }
-  .light-mode .pill-auto { background: #e0e7ff; color: #4338ca; }
-  .dark-mode .pill-auto { background: rgba(165, 180, 252, 0.12); color: #a5b4fc; }
-
-  .advanced-body {
-    margin-top: 14px;
-    padding-top: 16px;
-    display: flex;
-    flex-direction: column;
+    justify-content: center;
+    padding: 80px 20px;
     gap: 16px;
-  }
-  .light-mode .advanced-body { border-top: 1px solid #d0d7de; }
-  .dark-mode .advanced-body { border-top: 1px solid #30363d; }
-
-  .advanced-group h4 {
-    font-size: 13px;
-    margin: 0 0 6px;
-  }
-  .light-mode .advanced-group h4 { color: #1f2328; }
-  .dark-mode .advanced-group h4 { color: #f0f6fc; }
-
-  .support-menu-row {
-    display: grid;
-    grid-template-columns: 180px 1fr;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .support-menu-row strong {
-    font-size: 12px;
-  }
-  .light-mode .support-menu-row strong { color: #24292f; }
-  .dark-mode .support-menu-row strong { color: #c9d1d9; }
-
-  .policy-note {
-    font-size: 12px;
-    line-height: 1.5;
-    border-radius: 6px;
-    padding: 10px 12px;
-  }
-  .light-mode .policy-note {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-    color: #57606a;
-  }
-  .dark-mode .policy-note {
-    background: #0d1117;
-    border: 1px solid #30363d;
-    color: #8b949e;
+    color: var(--color-slate, #6D7378);
   }
 
-  /* -------------------------------------------------------------
-     STUDENT CANVAS PREVIEW STYLES
-     ------------------------------------------------------------- */
-  .student-preview-shell {
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .light-mode .student-preview-shell {
-    background: #ffffff;
-    border: 1px solid #d0d7de;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  }
-  .dark-mode .student-preview-shell {
-    background: #161b22;
-    border: 1px solid #30363d;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(79, 107, 255, 0.2);
+    border-top-color: var(--color-horizon-blue, #4F6BFF);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
-  .preview-banner-header {
-    padding: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-  .light-mode .preview-banner-header {
-    background: linear-gradient(135deg, rgba(9, 105, 218, 0.08), rgba(124, 58, 237, 0.06));
-    border-bottom: 1px solid #d0d7de;
-  }
-  .dark-mode .preview-banner-header {
-    background: linear-gradient(135deg, rgba(31, 111, 235, 0.15), rgba(139, 92, 246, 0.15));
-    border-bottom: 1px solid #30363d;
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
-  .preview-eyebrow {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-  }
-  .light-mode .preview-eyebrow { color: #0969da; }
-  .dark-mode .preview-eyebrow { color: #58a6ff; }
-
-  .preview-banner-header h2 {
-    font-size: 22px;
-    margin: 6px 0;
-  }
-  .light-mode .preview-banner-header h2 { color: #1f2328; }
-  .dark-mode .preview-banner-header h2 { color: #f0f6fc; }
-
-  .preview-sub {
-    font-size: 12.5px;
-    margin: 0;
-  }
-  .light-mode .preview-sub { color: #57606a; }
-  .dark-mode .preview-sub { color: #8b949e; }
-
-  .preview-mode-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 999px;
-  }
-  .light-mode .preview-mode-tag {
-    background: #dafbe1;
-    border: 1px solid #4ac26b;
-    color: #116329;
-  }
-  .dark-mode .preview-mode-tag {
-    background: rgba(35, 134, 54, 0.2);
-    border: 1px solid rgba(46, 160, 67, 0.4);
-    color: #3fb950;
-  }
-
-  .preview-nav-tabs {
-    display: flex;
-    padding: 0 16px;
-    gap: 4px;
-  }
-  .light-mode .preview-nav-tabs {
-    background: #f6f8fa;
-    border-bottom: 1px solid #d0d7de;
-  }
-  .dark-mode .preview-nav-tabs {
-    background: #0d1117;
-    border-bottom: 1px solid #30363d;
-  }
-
-  .preview-nav-tabs button {
-    background: transparent;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 12px 14px;
-  }
-  .light-mode .preview-nav-tabs button { color: #57606a; }
-  .light-mode .preview-nav-tabs button.active {
-    color: #0969da;
-    border-bottom-color: #0969da;
-  }
-  .dark-mode .preview-nav-tabs button { color: #8b949e; }
-  .dark-mode .preview-nav-tabs button.active {
-    color: #58a6ff;
-    border-bottom-color: #58a6ff;
-  }
-
-  .preview-content-box { padding: 24px; }
-
-  .task-box {
-    border-radius: 8px;
-    padding: 18px;
-    margin-bottom: 18px;
-  }
-  .light-mode .task-box {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .task-box {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .task-box h3 {
-    font-size: 14px;
-    margin: 0 0 8px;
-  }
-  .light-mode .task-box h3 { color: #0969da; }
-  .dark-mode .task-box h3 { color: #79c0ff; }
-
-  .prompt-text {
-    font-size: 14px;
-    line-height: 1.6;
-    margin: 0;
-  }
-  .light-mode .prompt-text { color: #1f2328; }
-  .dark-mode .prompt-text { color: #f0f6fc; }
-
-  .meta-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 18px;
-  }
-  .meta-card {
-    border-radius: 8px;
-    padding: 12px 14px;
-  }
-  .light-mode .meta-card {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .meta-card {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .meta-label {
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-  .light-mode .meta-label { color: #57606a; }
-  .dark-mode .meta-label { color: #8b949e; }
-
-  .meta-card p {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 4px 0 0;
-  }
-  .light-mode .meta-card p { color: #1f2328; }
-  .dark-mode .meta-card p { color: #e6edf3; }
-
-  .goals-box h3 {
-    font-size: 13px;
-    margin: 0 0 8px;
-  }
-  .light-mode .goals-box h3 { color: #24292f; }
-  .dark-mode .goals-box h3 { color: #c9d1d9; }
-
-  .goals-box ul {
-    margin: 0;
-    padding-left: 20px;
-    font-size: 13px;
-    line-height: 1.6;
-  }
-  .light-mode .goals-box ul { color: #57606a; }
-  .dark-mode .goals-box ul { color: #8b949e; }
-
-  .reading-card {
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-  .light-mode .reading-card {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .reading-card {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .reading-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-  .reading-head h4 {
-    font-size: 14px;
-    margin: 0;
-  }
-  .light-mode .reading-head h4 { color: #1f2328; }
-  .dark-mode .reading-head h4 { color: #f0f6fc; }
-
-  .btn-read-pdf {
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    cursor: pointer;
-  }
-  .light-mode .btn-read-pdf {
-    background: #e7f3ff;
-    border: 1px solid #0969da;
-    color: #0969da;
-  }
-  .dark-mode .btn-read-pdf {
-    background: rgba(56, 139, 253, 0.12);
-    border: 1px solid #388bfd;
-    color: #58a6ff;
-  }
-
-  .reading-guide {
-    font-size: 12px;
-    margin: 0 0 10px;
-  }
-  .light-mode .reading-guide { color: #57606a; }
-  .dark-mode .reading-guide { color: #8b949e; }
-
-  .reading-quote {
-    font-size: 12.5px;
-    line-height: 1.55;
-    margin: 0;
-    padding: 10px 14px;
-  }
-  .light-mode .reading-quote {
-    background: #ffffff;
-    border-left: 3px solid #0969da;
-    color: #24292f;
-  }
-  .dark-mode .reading-quote {
-    background: #161b22;
-    border-left: 3px solid #388bfd;
-    color: #c9d1d9;
-  }
-
-  .rubric-row {
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 14px;
-  }
-  .light-mode .rubric-row {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-  }
-  .dark-mode .rubric-row {
-    background: #0d1117;
-    border: 1px solid #30363d;
-  }
-
-  .crit-head h4 {
-    font-size: 14px;
-    display: inline-block;
-    margin: 0 8px 4px 0;
-  }
-  .light-mode .crit-head h4 { color: #1f2328; }
-  .dark-mode .crit-head h4 { color: #f0f6fc; }
-
-  .crit-weight {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-  .light-mode .crit-weight { background: #eaeef2; color: #0969da; }
-  .dark-mode .crit-weight { background: #21262d; color: #58a6ff; }
-
-  .crit-meta-badges {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    vertical-align: middle;
-  }
-  .crit-concept-pill {
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 4px;
-  }
-  .light-mode .crit-concept-pill {
-    background: #ede9fe;
-    color: #6d28d9;
-    border: 1px solid #ddd6fe;
-  }
-  .dark-mode .crit-concept-pill {
-    background: rgba(124, 58, 237, 0.2);
-    color: #c4b5fd;
-    border: 1px solid rgba(124, 58, 237, 0.4);
-  }
-
-  .crit-head p {
-    font-size: 12px;
-    margin: 4px 0 0;
-  }
-  .light-mode .crit-head p { color: #57606a; }
-  .dark-mode .crit-head p { color: #8b949e; }
-
-  .levels-display {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
-  }
-  .lvl-col {
-    padding: 8px 10px;
-    border-radius: 4px;
-  }
-  .light-mode .lvl-col { background: #ffffff; border: 1px solid #d0d7de; }
-  .dark-mode .lvl-col { background: #161b22; }
-
-  .lvl-col strong {
-    font-size: 11px;
-  }
-  .light-mode .lvl-col strong { color: #24292f; }
-  .dark-mode .lvl-col strong { color: #c9d1d9; }
-
-  .lvl-col p {
-    font-size: 11.5px;
-    margin: 4px 0 0;
-    line-height: 1.4;
-  }
-  .light-mode .lvl-col p { color: #57606a; }
-  .dark-mode .lvl-col p { color: #8b949e; }
-
-  .checklist-items {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 18px;
-  }
-  .checklist-items li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    padding: 8px 0;
-  }
-  .light-mode .checklist-items li {
-    color: #1f2328;
-    border-bottom: 1px solid #e1e4e8;
-  }
-  .dark-mode .checklist-items li {
-    color: #e6edf3;
-    border-bottom: 1px solid #21262d;
-  }
-
-  .integrity-box {
-    border-radius: 6px;
-    padding: 12px;
-    font-size: 12.5px;
-  }
-  .light-mode .integrity-box {
-    background: #f0fdf4;
-    border: 1px solid #86efac;
-    color: #166534;
-  }
-  .dark-mode .integrity-box {
-    background: rgba(165, 180, 252, 0.08);
-    border: 1px solid rgba(165, 180, 252, 0.2);
-    color: #c9d1d9;
-  }
-
-  /* -------------------------------------------------------------
-     ACADEMIC PRINTABLE PDF SHEET STYLES
-     ------------------------------------------------------------- */
+  /* PDF Sheet */
   .pdf-sheet-wrapper {
     max-width: 900px;
     margin: 0 auto;
@@ -2171,10 +708,7 @@
     cursor: pointer;
   }
 
-
-  /* -------------------------------------------------------------
-     PDF MODAL / DRAWER
-     ------------------------------------------------------------- */
+  /* PDF Modal / Drawer */
   .pdf-modal-backdrop {
     position: fixed;
     top: 0;
@@ -2189,6 +723,7 @@
     justify-content: center;
     padding: 24px;
   }
+
   .pdf-modal-card {
     border-radius: 12px;
     width: 90vw;
@@ -2223,6 +758,24 @@
   .dark-mode .pdf-title-row h3 { color: #f0f6fc; }
 
   .pdf-modal-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-secondary {
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    color: #24292f;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 13px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .dark-mode .btn-secondary {
+    background: #21262d;
+    border-color: #30363d;
+    color: #c9d1d9;
+  }
+  .btn-xs { font-size: 11px; padding: 3px 8px; }
+
   .btn-close-modal {
     background: none;
     border: 0;
@@ -2242,9 +795,6 @@
 
   .pdf-frame { width: 100%; height: 100%; border: 0; }
 
-  /* -------------------------------------------------------------
-     PRINT STYLESHEET (@media print)
-     ------------------------------------------------------------- */
   @media print {
     body, html, .studio-workspace {
       background: #ffffff !important;
@@ -2252,34 +802,13 @@
       padding: 0 !important;
       margin: 0 !important;
     }
-    .no-print, .top-nav-bar, .notice-banner, .pdf-control-bar {
+    .no-print, .notice-banner, .pdf-control-bar {
       display: none !important;
     }
     .content-container, .pdf-sheet-wrapper {
       max-width: 100% !important;
       margin: 0 !important;
       padding: 0 !important;
-    }
-    .academic-sheet {
-      box-shadow: none !important;
-      border: 0 !important;
-      padding: 0 !important;
-    }
-  }
-
-  /* Responsive Adjustments */
-  @media (max-width: 860px) {
-    .top-nav-bar {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 12px;
-    }
-    .nav-actions {
-      width: 100%;
-      justify-content: flex-end;
-    }
-    .two-col-grid, .meta-grid, .levels-grid, .levels-display {
-      grid-template-columns: 1fr;
     }
   }
 </style>
