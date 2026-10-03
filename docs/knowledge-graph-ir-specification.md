@@ -219,8 +219,8 @@ Ingesting the IR into Neo4j connects directly into the existing transaction pipe
 
 ```bash
 # Ingest local IR into Docker container
-docker cp knowledge_graph_ir.json fiosra-app:/app/knowledge_graph_ir.json
-docker cp import_knowledge_graph.py fiosra-app:/app/import_knowledge_graph.py
+docker cp scripts/data/knowledge_graph_ir.json fiosra-app:/app/knowledge_graph_ir.json
+docker cp scripts/import_knowledge_graph.py fiosra-app:/app/import_knowledge_graph.py
 
 # Execute ingestion
 docker exec fiosra-app python import_knowledge_graph.py knowledge_graph_ir.json <COURSE_ID>

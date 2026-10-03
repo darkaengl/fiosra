@@ -30,7 +30,11 @@ def get_pdf_path() -> Path:
         if c.exists():
             return c
     return candidates[0]
-JSON_SOURCE = Path("principles_of_marketing_knowledge_graph.json")
+JSON_SOURCE = (
+    Path(__file__).parent / "data" / "principles_of_marketing_knowledge_graph.json"
+    if (Path(__file__).parent / "data" / "principles_of_marketing_knowledge_graph.json").exists()
+    else Path("principles_of_marketing_knowledge_graph.json")
+)
 
 MODULE_DEFS = [
     {

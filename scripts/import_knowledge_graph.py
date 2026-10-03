@@ -51,6 +51,11 @@ async def main(ir_path: str, course_id: str) -> None:
 
 
 if __name__ == "__main__":
-    ir_file = sys.argv[1] if len(sys.argv) > 1 else "knowledge_graph_ir.json"
+    default_ir = (
+        Path(__file__).parent / "data" / "knowledge_graph_ir.json"
+        if (Path(__file__).parent / "data" / "knowledge_graph_ir.json").exists()
+        else Path("knowledge_graph_ir.json")
+    )
+    ir_file = sys.argv[1] if len(sys.argv) > 1 else str(default_ir)
     cid = sys.argv[2] if len(sys.argv) > 2 else "2bf5b7c4-01ee-4ee5-9c8b-f2066289192a"
     asyncio.run(main(ir_file, cid))
