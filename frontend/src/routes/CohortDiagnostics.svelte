@@ -1,150 +1,455 @@
-<script>
-  const kpis = [
-    { label: 'Students Below 60% Mastery', value: '7', sub: 'Targeted intervention needed', color: 'var(--color-rose)' },
-    { label: 'Most Flagged Misconception', value: 'MISC_HIST_REV_CAUSE', sub: '42% cohort prevalence', color: 'var(--color-amber)', small: true },
-    { label: 'Avg Autonomy Index', value: '62%', sub: 'Target: 80% by Week 6', color: 'var(--color-horizon-bright)' },
-    { label: 'Scaffold Dispatched', value: '3', sub: 'Micro-scaffolds sent this week', color: '#34d399' },
-  ];
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import CohortMasteryGraphCanvas from '../lib/CohortMasteryGraphCanvas.svelte';
+  import CohortOverviewContent from '../lib/diagnostics/CohortOverviewContent.svelte';
+  import ConceptDiagnosticDetail from '../lib/diagnostics/ConceptDiagnosticDetail.svelte';
+  import DiagnosticsFloatingHeader from '../lib/diagnostics/DiagnosticsFloatingHeader.svelte';
+  import {
+    computeScopedGraph,
+    getPrerequisites,
+    getDownstreamDependents,
+    getStrugglingStudentsForConcept,
+    getLinkedProbes,
+  } from '../lib/roster/rosterGraphUtils';
+  import type { CourseDetails, GraphNode, GraphPerspective, MasteryData } from '../lib/roster/rosterTypes';
+  import { responseError } from '../lib/session.js';
 
-  const heatmapData = [
-    { kc: 'KC_HIST_FISCAL_CRISIS_1786', label: 'Royal Fiscal Crisis 1786', scores: [88, 72, 91, 55, 66, 78, 82, 90, 61, 74] },
-    { kc: 'KC_HIST_ESTATE_SYSTEM', label: 'Three Estates & Representation', scores: [75, 68, 85, 48, 72, 55, 79, 88, 52, 65] },
-    { kc: 'KC_HIST_SOCIAL_CONTRACT', label: 'Enlightenment Social Contract', scores: [92, 88, 94, 62, 78, 85, 90, 95, 70, 82] },
-    { kc: 'KC_HIST_POPULAR_SOV', label: 'Transition to Popular Sovereignty', scores: [65, 58, 72, 41, 55, 62, 68, 75, 44, 59] },
-  ];
+  let courses = $state<Array<{ course_id: string; title: string }>>([]);
+  let selectedCourseId = $state('');
+  let course = $state<CourseDetails | null>(null);
+  let masteryData = $state<MasteryData | null>(null);
+  let loading = $state(true);
+  let error = $state('');
 
-  const students = ['A. Chen', 'M. Santos', 'J. Park', 'S. Mitchell', 'T. Rodriguez', 'L. Kim', 'R. Patel', 'E. Nguyen', 'C. Johnson', 'D. Williams'];
+  // Mode and perspective state
+  let graphPerspective = $state<GraphPerspective>('cohort');
+  let selectedStudentId = $state('');
+  let showBottlenecksOnly = $state(false);
+  let selectedConceptId = $state('');
+  let cohortOverviewCollapsed = $state(false);
+  let theme = $state<'light' | 'dark'>(typeof localStorage !== 'undefined' && localStorage.getItem('obsidian_graph_theme') === 'dark' ? 'dark' : 'light');
 
-  function heatColor(score) {
-    if (score >= 85) return 'rgba(16,185,129,0.7)';
-    if (score >= 70) return 'rgba(59,130,246,0.6)';
-    if (score >= 55) return 'rgba(245,158,11,0.6)';
-    return 'rgba(239,68,68,0.7)';
+  // Filter state
+  let selectedModuleId = $state('all');
+  let maxNodesLimit = $state<number | string>('all');
+
+  // Intervention state
+  let isDispatchingIntervention = $state(false);
+  let dispatchSuccessNotice = $state('');
+
+  function hashCourseId() {
+    const queryStart = window.location.hash.indexOf('?');
+    return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('course_id') || '';
+  }
+
+  function hashModuleId() {
+    const queryStart = window.location.hash.indexOf('?');
+    return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('module_id') || '';
+  }
+
+  async function loadCourseDiagnostics(courseId = selectedCourseId) {
+    if (!courseId) return;
+    loading = true;
+    error = '';
+    try {
+      const [courseRes, masteryRes] = await Promise.all([
+        fetch(`/courses/${courseId}`),
+        fetch(`/courses/${courseId}/concept-mastery`)
+      ]);
+      if (!courseRes.ok) throw new Error(await responseError(courseRes, 'Course could not be loaded.'));
+      course = await courseRes.json();
+
+      if (masteryRes.ok) {
+        masteryData = await masteryRes.json();
+      } else {
+        throw new Error(await responseError(masteryRes, 'Cohort mastery data could not be loaded.'));
+      }
+      selectedCourseId = courseId;
+    } catch (err: any) {
+      error = err.message || 'Failed to load cohort diagnostics.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function initialise() {
+    loading = true;
+    error = '';
+    try {
+      const response = await fetch('/courses');
+      if (!response.ok) throw new Error(await responseError(response, 'Course list could not be loaded.'));
+      courses = await response.json();
+      selectedCourseId = hashCourseId() || courses[0]?.course_id || '';
+      const initialMod = hashModuleId();
+      if (initialMod) selectedModuleId = initialMod;
+      if (selectedCourseId) await loadCourseDiagnostics(selectedCourseId);
+    } catch (err: any) {
+      error = err.message || 'Courses could not be loaded.';
+      loading = false;
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      if (selectedConceptId) {
+        selectedConceptId = '';
+      } else if (!cohortOverviewCollapsed) {
+        cohortOverviewCollapsed = true;
+      }
+    }
+  }
+
+  function handleHashChange() {
+    const newCourseId = hashCourseId();
+    if (newCourseId && newCourseId !== selectedCourseId) {
+      selectedCourseId = newCourseId;
+      loadCourseDiagnostics(selectedCourseId);
+    }
+    const newModuleId = hashModuleId();
+    if (newModuleId && newModuleId !== selectedModuleId) {
+      selectedModuleId = newModuleId;
+    }
+  }
+
+  onMount(() => {
+    initialise();
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  });
+
+  // Tree-preserving hierarchical scoping via shared utility
+  let scopedGraph = $derived(
+    computeScopedGraph(masteryData, selectedModuleId, showBottlenecksOnly, maxNodesLimit)
+  );
+
+  let activeStudentObj = $derived(
+    masteryData?.students?.find((s) => s.student_id === selectedStudentId) || null
+  );
+
+  let selectedConcept = $derived(
+    masteryData?.graph?.nodes?.find((n) => (n.concept_id || n.id) === selectedConceptId) || null
+  );
+
+  let prerequisites = $derived(getPrerequisites(masteryData, selectedConceptId));
+  let downstreamDependents = $derived(getDownstreamDependents(masteryData, selectedConceptId));
+  let strugglingStudentsForConcept = $derived(getStrugglingStudentsForConcept(masteryData, selectedConceptId));
+  let linkedProbes = $derived(getLinkedProbes(masteryData, selectedConceptId));
+
+  async function handleBatchDispatchIntervention(concept: GraphNode) {
+    if (!concept) return;
+    isDispatchingIntervention = true;
+    dispatchSuccessNotice = '';
+    try {
+      const targetStudents = strugglingStudentsForConcept;
+      if (targetStudents.length === 0) return;
+
+      let count = 0;
+      for (const stu of targetStudents) {
+        const stuDetails = (masteryData?.students || []).find((s) => s.student_id === stu.student_id);
+        const sessionId = stuDetails?.latest_session_id;
+        if (!sessionId) continue;
+
+        const payload = {
+          session_id: sessionId,
+          student_id: stu.student_id,
+          teacher_id: 'educator',
+          concept_id: concept.concept_id || concept.id,
+          concept_label: concept.label,
+          misconception_id: concept.active_misconceptions?.[0]?.misconception_id || null,
+          activity_type: 'socratic_nudge',
+          activity_prompt: concept.active_misconceptions?.[0]?.prompt || `Reflect on the foundational difference between ${concept.label} and related concepts. How does this apply to your reasoning?`,
+          activity_guidance: 'Review your earlier claims and ground them in specific course principles.',
+        };
+
+        const res = await fetch('/interventions/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) count++;
+      }
+
+      dispatchSuccessNotice = `Dispatched Socratic challenge to ${count} student${count === 1 ? '' : 's'}.`;
+      await loadCourseDiagnostics(selectedCourseId);
+      setTimeout(() => { dispatchSuccessNotice = ''; }, 4500);
+    } catch (err) {
+      console.error('Error dispatching interventions:', err);
+    } finally {
+      isDispatchingIntervention = false;
+    }
   }
 </script>
 
-<main class="diag-main">
-  <div class="diag-header">
-    <div>
-      <h1 class="diag-title">Cohort Diagnostic Heatmap</h1>
-      <p class="diag-sub">Real-time misconception detection and autonomy diagnostics per Knowledge Component</p>
-    </div>
-    <div class="header-actions">
-      <button class="btn btn-secondary">Export Report</button>
-      <button class="btn btn-primary">⚡ Dispatch Scaffold to Flagged Students</button>
-    </div>
-  </div>
+<main class="full-screen-graph-page" class:light-mode={theme === 'light'} class:dark-mode={theme === 'dark'}>
+  <!-- Streamlined Floating Command Toolbar -->
+  <DiagnosticsFloatingHeader
+    {courses}
+    bind:selectedCourseId
+    {course}
+    bind:selectedModuleId
+    scopedNodesCount={scopedGraph.nodes.length}
+    bind:graphPerspective
+    bind:selectedStudentId
+    {masteryData}
+    bind:showBottlenecksOnly
+    bind:maxNodesLimit
+    bind:theme
+    bind:selectedConceptId
+    bind:cohortOverviewCollapsed
+    hasSelectedConcept={!!selectedConcept}
+    onCourseChange={(id) => loadCourseDiagnostics(id)}
+  />
 
-  <div class="kpi-grid">
-    {#each kpis as kpi}
-      <div class="kpi-card">
-        <div class="kpi-label">{kpi.label}</div>
-        <div class="kpi-value {kpi.small ? 'kpi-small' : ''}" style="color: {kpi.color}">{kpi.value}</div>
-        <div class="kpi-sub">{kpi.sub}</div>
-      </div>
-    {/each}
-  </div>
+  {#if error}
+    <div class="floating-error-notice">{error}</div>
+  {/if}
 
-  <div class="heatmap-panel">
-    <div class="panel-header">
-      <div class="panel-title">🔥 KC Mastery Heatmap — Top 10 Students</div>
-      <div class="legend">
-        <span class="legend-item" style="background: rgba(16,185,129,0.7);">≥85%</span>
-        <span class="legend-item" style="background: rgba(59,130,246,0.6);">70–84%</span>
-        <span class="legend-item" style="background: rgba(245,158,11,0.6);">55–69%</span>
-        <span class="legend-item" style="background: rgba(239,68,68,0.7);">&lt;55%</span>
-      </div>
+  {#if loading}
+    <div class="full-screen-loading">
+      <div class="spinner"></div>
+      <span>Computing Concept Topology &amp; Cohort Mastery...</span>
     </div>
-    <div class="heatmap-grid">
-      <div class="heatmap-row header-row">
-        <div class="kc-col-header">Knowledge Component</div>
-        {#each students as s}
-          <div class="student-col-header">{s}</div>
-        {/each}
-      </div>
-      {#each heatmapData as row}
-        <div class="heatmap-row">
-          <div class="kc-label">
-            <div class="kc-code-sm">{row.kc}</div>
-            <div class="kc-name-sm">{row.label}</div>
-          </div>
-          {#each row.scores as score}
-            <div class="heat-cell" style="background: {heatColor(score)}">{score}%</div>
-          {/each}
+  {:else if !course}
+    <div class="full-screen-empty">
+      <strong>No course is available.</strong>
+      <span>Please select or configure a course in the Course Portfolio.</span>
+    </div>
+  {:else}
+    <!-- Main Interactive Graph Canvas Container -->
+    <div class="full-canvas-container" role="region" aria-label="Cohort Mastery Concept Map">
+      {#if scopedGraph.nodes.length > 0}
+        <CohortMasteryGraphCanvas
+          graph={scopedGraph}
+          {selectedConceptId}
+          onSelect={(id, node) => {
+            selectedConceptId = node ? (node.concept_id || node.id || id) : id;
+            if (node || id) cohortOverviewCollapsed = true;
+          }}
+          bind:theme
+          viewMode={graphPerspective}
+          activeStudent={activeStudentObj}
+          bottlenecksOnly={showBottlenecksOnly}
+          bottlenecks={masteryData?.bottlenecks || []}
+          showHud={false}
+        />
+      {:else}
+        <div class="graph-state-pane">
+          <span>No concepts found matching the selected scope filter.</span>
         </div>
-      {/each}
-    </div>
-  </div>
+      {/if}
 
-  <div class="flagged-panel">
-    <div class="panel-header">
-      <div class="panel-title">⚠️ Flagged Students — Intervention Candidates</div>
+      <!-- Subtle Floating Legend at Bottom-Center of Canvas -->
+      <div class="canvas-bottom-legend">
+        {#if graphPerspective === 'cohort'}
+          <span class="legend-chip"><span class="legend-dot dot-emerald"></span> ≥80% Mastered</span>
+          <span class="legend-chip"><span class="legend-dot dot-amber"></span> 60–79% Developing</span>
+          <span class="legend-chip"><span class="legend-dot dot-rose"></span> &lt;60% Trapped</span>
+        {:else}
+          <span class="legend-chip"><span class="legend-dot dot-emerald"></span> Mastered</span>
+          <span class="legend-chip"><span class="legend-dot dot-blue"></span> Active Frontier</span>
+          <span class="legend-chip"><span class="legend-dot dot-rose"></span> Trapped</span>
+        {/if}
+      </div>
     </div>
-    <div class="flagged-list">
-      {#each [
-        { name: 'S. Mitchell', avg: 49, flags: 3, topMisc: 'MISC_HIST_REV_CAUSE', scaffoldSent: false },
-        { name: 'M. Santos', avg: 59, flags: 2, topMisc: 'MISC_HIST_POPULAR_SOV', scaffoldSent: true },
-        { name: 'T. Rodriguez', avg: 52, flags: 2, topMisc: 'MISC_HIST_DEBT_CAUSE', scaffoldSent: false },
-      ] as s}
-        <div class="flagged-row">
-          <div class="student-info">
-            <div class="student-avatar">{s.name.slice(0,2)}</div>
-            <div>
-              <div class="student-name">{s.name}</div>
-              <div class="student-misc">Top flag: <code>{s.topMisc}</code></div>
-            </div>
-          </div>
-          <div class="avg-score" style="color: var(--color-rose)">{s.avg}% avg</div>
-          <div class="flag-count">{s.flags} misconception flags</div>
-          <div>
-            {#if s.scaffoldSent}
-              <span class="badge-sent">✓ Scaffold Sent</span>
-            {:else}
-              <button class="btn btn-sm btn-primary">Dispatch Scaffold</button>
-            {/if}
-          </div>
-        </div>
-      {/each}
-    </div>
-  </div>
+
+    <!-- Diagnostic Window on the Right -->
+    {#if selectedConcept || !cohortOverviewCollapsed}
+      <aside class="node-popup-drawer" aria-label="Diagnostic Window">
+        {#if selectedConcept}
+          <ConceptDiagnosticDetail
+            {selectedConcept}
+            {masteryData}
+            {prerequisites}
+            {downstreamDependents}
+            {strugglingStudentsForConcept}
+            {linkedProbes}
+            {isDispatchingIntervention}
+            {dispatchSuccessNotice}
+            onClose={() => (selectedConceptId = '')}
+            onInspectStudent={(studentId) => {
+              selectedStudentId = studentId;
+              graphPerspective = 'student';
+            }}
+            onDispatchIntervention={handleBatchDispatchIntervention}
+          />
+        {:else}
+          <CohortOverviewContent
+            {masteryData}
+            onClose={() => (cohortOverviewCollapsed = true)}
+            onSelectConcept={(conceptId) => (selectedConceptId = conceptId)}
+            onInspectStudent={(studentId) => {
+              selectedStudentId = studentId;
+              graphPerspective = 'student';
+            }}
+          />
+        {/if}
+      </aside>
+    {/if}
+  {/if}
 </main>
 
 <style>
-  .diag-main { padding: 32px 40px 80px; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
-  .diag-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--color-graphite-border); padding-bottom: 24px; }
-  .diag-title { font-family: var(--font-brand); font-size: 24px; font-weight: 700; color: var(--color-heading); margin: 0 0 4px; }
-  .diag-sub { font-size: 13px; color: var(--color-slate-muted); margin: 0; }
-  .header-actions { display: flex; gap: 12px; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  .kpi-card { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-md); padding: 20px 22px; }
-  .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--color-slate-muted); margin-bottom: 6px; }
-  .kpi-value { font-family: var(--font-brand); font-size: 26px; font-weight: 700; line-height: 1.1; }
-  .kpi-small { font-size: 13px; font-family: var(--font-mono); }
-  .kpi-sub { font-size: 11px; color: var(--color-slate-muted); margin-top: 4px; }
-  .heatmap-panel, .flagged-panel { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-lg); overflow: hidden; }
-  .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--color-graphite-border); }
-  .panel-title { font-size: 14px; font-weight: 700; color: var(--color-heading); }
-  .legend { display: flex; gap: 8px; }
-  .legend-item { font-size: 10.5px; font-weight: 600; color: #fff; padding: 2px 8px; border-radius: var(--radius-xs); }
-  .heatmap-grid { overflow-x: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 4px; }
-  .heatmap-row { display: flex; align-items: center; gap: 4px; }
-  .header-row { margin-bottom: 4px; }
-  .kc-col-header { width: 240px; flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-muted); }
-  .student-col-header { width: 70px; flex-shrink: 0; font-size: 10.5px; color: var(--color-slate-muted); text-align: center; }
-  .kc-label { width: 240px; flex-shrink: 0; padding-right: 12px; }
-  .kc-code-sm { font-family: var(--font-mono); font-size: 10px; color: var(--color-aurora-bright); }
-  .kc-name-sm { font-size: 11px; color: var(--color-slate-light); margin-top: 2px; }
-  .heat-cell { width: 70px; flex-shrink: 0; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; border-radius: var(--radius-xs); }
-  .flagged-list { display: flex; flex-direction: column; }
-  .flagged-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-top: 1px solid var(--color-graphite-border); }
-  .flagged-row:first-child { border-top: none; }
-  .student-info { display: flex; align-items: center; gap: 12px; min-width: 220px; }
-  .student-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #ef4444, #f59e0b); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
-  .student-name { font-size: 13px; font-weight: 600; color: var(--color-heading); }
-  .student-misc { font-size: 11px; color: var(--color-slate-muted); margin-top: 2px; }
-  .student-misc code { color: var(--color-amber); }
-  .avg-score { font-family: var(--font-brand); font-size: 18px; font-weight: 700; }
-  .flag-count { font-size: 12px; color: var(--color-slate-light); }
-  .badge-sent { font-size: 11.5px; font-weight: 600; color: #34d399; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); padding: 4px 10px; border-radius: var(--radius-xs); }
-  .btn-sm { font-size: 11px; padding: 5px 12px; }
+  .full-screen-graph-page {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 64px);
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+
+  .full-canvas-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  /* Full Screen Loading & Empty */
+  .full-screen-loading,
+  .full-screen-empty {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 10;
+    color: var(--color-slate-light);
+    font-size: 14px;
+    padding: 40px;
+  }
+
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(59, 130, 246, 0.2);
+    border-top-color: var(--color-horizon-bright);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .graph-state-pane {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--color-graphite-card);
+    border: 1px dashed var(--color-graphite-border);
+    padding: 24px 32px;
+    border-radius: var(--radius-md);
+    color: var(--color-slate-muted);
+    font-size: 13.5px;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .floating-error-notice {
+    position: absolute;
+    top: 64px;
+    left: 20px;
+    z-index: 30;
+    background: var(--color-rose-bg);
+    color: var(--color-rose-text);
+    border: 1px solid var(--color-rose);
+    border-radius: var(--radius-sm);
+    padding: 8px 16px;
+    font-size: 12.5px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Diagnostic Window Popup Drawer */
+  .node-popup-drawer {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    bottom: 14px;
+    width: 400px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.dark-mode) .node-popup-drawer {
+    background: rgba(18, 18, 22, 0.94);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Canvas Bottom Legend */
+  .canvas-bottom-legend {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    color: #475569;
+  }
+
+  :global(.dark-mode) .canvas-bottom-legend {
+    background: rgba(20, 20, 24, 0.85);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    color: #94a3b8;
+  }
+
+  .legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .dot-emerald { background: #10b981; }
+  .dot-amber { background: #f59e0b; }
+  .dot-rose { background: #e11d48; }
+  .dot-blue { background: #0284c7; }
+
+  @media (max-width: 900px) {
+    .node-popup-drawer {
+      width: calc(100% - 28px);
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      top: auto;
+      max-height: 60vh;
+    }
+  }
 </style>

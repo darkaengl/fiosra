@@ -152,8 +152,8 @@ class LearningCanvasService:
     ) -> SaveCanvasSectionResponse:
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
         section = self._section(assignment, section_id)
-        if session_info["status"] != "active":
-            raise CanvasConflictError("Submitted or completed sessions cannot be changed.")
+        if session_info["status"] == "submitted":
+            raise CanvasConflictError("Submitted sessions cannot be changed.")
         if len(request.text) > section.max_characters:
             raise CanvasValidationError(
                 f"'{section.label}' is limited to {section.max_characters} characters."
@@ -247,8 +247,8 @@ class LearningCanvasService:
     ) -> CanvasSuggestion:
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
         section = self._section(assignment, request.section_id)
-        if session_info["status"] != "active":
-            raise CanvasConflictError("Submitted or completed sessions cannot receive canvas suggestions.")
+        if session_info["status"] == "submitted":
+            raise CanvasConflictError("Submitted sessions cannot receive canvas suggestions.")
         if request.kind not in section.allowed_suggestion_kinds:
             raise CanvasValidationError("This suggestion type is not permitted for the selected section.")
         revision_sql = text("""
@@ -325,8 +325,8 @@ class LearningCanvasService:
         request: AcceptSuggestionRequest,
     ) -> CanvasActionResponse:
         session_info, assignment = await self._get_authorized_context(session_id, access_token)
-        if session_info["status"] != "active":
-            raise CanvasConflictError("Submitted or completed sessions cannot apply canvas suggestions.")
+        if session_info["status"] == "submitted":
+            raise CanvasConflictError("Submitted sessions cannot apply canvas suggestions.")
         if not request.text.strip():
             raise CanvasValidationError("Write your own section text before applying the suggestion.")
         suggestion_sql = text("""
@@ -426,8 +426,8 @@ class LearningCanvasService:
         request: DismissSuggestionRequest,
     ) -> CanvasActionResponse:
         session_info, _assignment = await self._get_authorized_context(session_id, access_token)
-        if session_info["status"] != "active":
-            raise CanvasConflictError("Submitted or completed sessions cannot dismiss canvas suggestions.")
+        if session_info["status"] == "submitted":
+            raise CanvasConflictError("Submitted sessions cannot dismiss canvas suggestions.")
         update_sql = text("""
             UPDATE canvas_suggestions
             SET status = 'dismissed', acted_at = NOW()

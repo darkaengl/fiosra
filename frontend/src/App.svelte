@@ -1,10 +1,11 @@
 <script>
-  import Router from 'svelte-spa-router';
+  import Router, { router } from 'svelte-spa-router';
   import { wrap } from 'svelte-spa-router/wrap';
   import './css/design-system.css';
   import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
   import AppHeader from './lib/AppHeader.svelte';
 
+  import Home from './routes/Home.svelte';
   import Modules from './routes/Modules.svelte';
   import Courses from './routes/Courses.svelte';
   import CourseStudio from './routes/CourseStudio.svelte';
@@ -15,18 +16,25 @@
   import StudentTimeline from './routes/StudentTimeline.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
   import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
+  import StudioReview from './routes/StudioReview.svelte';
+  import CohortDiagnostics from './routes/CohortDiagnostics.svelte';
 
   let assistantOpen = $state(false);
 
   const routes = {
-    '/': Courses,
+    '/': Home,
     '/portfolio': Courses,
     '/courses': Courses,
     '/modules': Modules,
     '/knowledge-graph': KnowledgeGraph,
     '/concept-graph': KnowledgeGraph,
     '/graph': KnowledgeGraph,
+    '/cohort-diagnostics': CohortDiagnostics,
+    '/cohort-graph': CohortDiagnostics,
+    '/cohort': CohortDiagnostics,
     '/studio/course': CourseStudio,
+    '/studio/review': StudioReview,
+    '/review': StudioReview,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
     '/student/courses': StudentPortal,
@@ -37,6 +45,20 @@
     '/student/trace': StudentTrace,
     '*': Courses,
   };
+
+  let isLanding = $derived(
+    router.location === '/' || router.location === ''
+  );
+
+  let isStudentView = $derived(
+    Boolean(router.location && router.location.startsWith('/student'))
+  );
+
+  $effect(() => {
+    if ((isStudentView || isLanding) && assistantOpen) {
+      assistantOpen = false;
+    }
+  });
 
   let isZenMode = $state(false);
 
@@ -59,15 +81,15 @@
   });
 </script>
 
-<div class="app-root" class:zen-mode={isZenMode}>
-  {#if !isZenMode}
+<div class="app-root" class:zen-mode={isZenMode} class:landing-mode={isLanding}>
+  {#if !isZenMode && !isLanding}
     <AppHeader />
   {/if}
-  <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
-    <div class="route-viewport">
+  <div class:assistant-open={assistantOpen && !isZenMode && !isStudentView && !isLanding} class="app-body">
+    <div class="route-viewport" class:landing-viewport={isLanding}>
       <Router {routes} />
     </div>
-    {#if !isZenMode}
+    {#if !isZenMode && !isStudentView && !isLanding}
       <AIDesignAssistant bind:open={assistantOpen} />
     {/if}
   </div>
@@ -77,8 +99,8 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    background-color: var(--color-obsidian);
-    color: var(--color-slate-bright);
+    background-color: var(--color-bone);
+    color: var(--color-heading);
     font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
   }

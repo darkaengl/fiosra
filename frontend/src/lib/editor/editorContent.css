@@ -1,0 +1,137 @@
+/* -------------------------------------------------------------
+   TipTap / ProseMirror Content Styles & Typography
+   ------------------------------------------------------------- */
+.notion-editor-container {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+}
+
+.notion-editor-container .notion-minimal-prosemirror {
+  color: var(--color-slate-bright);
+  font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: var(--canvas-font-size, 16.5px);
+  line-height: 1.8;
+  flex: 1 0 auto;
+  height: auto;
+  outline: none;
+  transition: font-size 0.2s ease;
+}
+
+.notion-editor-container .notion-minimal-prosemirror p {
+  margin: 0 0 1.25em;
+  color: var(--color-slate-bright);
+}
+
+.notion-editor-container .notion-minimal-prosemirror h1 {
+  color: var(--color-heading);
+  font-size: 1.85em;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  margin: 1.6em 0 0.5em;
+  border-bottom: 1px solid var(--color-graphite-border);
+  padding-bottom: 8px;
+}
+
+.notion-editor-container .notion-minimal-prosemirror h2 {
+  color: var(--color-heading);
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  margin: 1.4em 0 0.4em;
+}
+
+.notion-editor-container .notion-minimal-prosemirror blockquote {
+  border-left: 3px solid var(--color-horizon-blue, #4F6BFF);
+  margin: 1.2em 0;
+  padding: 8px 18px;
+  color: var(--color-slate-light);
+  font-style: italic;
+  background: var(--color-horizon-blue-soft, #EBF0FF);
+  border-radius: 0 6px 6px 0;
+}
+
+.notion-editor-container .notion-minimal-prosemirror p.is-editor-empty:first-child::before {
+  color: var(--color-slate-subtle);
+  content: 'Start writing, or open the Enquirer to plan your next step.';
+  float: left;
+  height: 0;
+  pointer-events: none;
+  font-style: italic;
+}
+
+/* -------------------------------------------------------------
+   Sentence-Level Epistemic Highlighting (Native Inline Spans)
+   ------------------------------------------------------------- */
+.document-page.epistemic-active .epistemic-sentence {
+  transition: all 0.15s ease;
+  border-radius: 2px;
+  padding: 1px 2px;
+  margin: 0 1px;
+  cursor: pointer;
+}
+
+/* 🔵 Claims: Defensible assertions under test */
+.document-page.epistemic-active .epistemic-sentence.claim {
+  border-bottom: 2px solid rgba(79, 107, 255, 0.55);
+}
+.document-page.epistemic-active .epistemic-sentence.claim:hover {
+  background: rgba(79, 107, 255, 0.1);
+  border-bottom-color: var(--color-horizon-blue, #4F6BFF);
+}
+
+/* 🟢 Grounded Evidence: Primary source data / citations */
+.document-page.epistemic-active .epistemic-sentence.evidence {
+  border-bottom: 2px solid rgba(95, 175, 122, 0.65);
+  background: rgba(95, 175, 122, 0.08);
+}
+.document-page.epistemic-active .epistemic-sentence.evidence:hover {
+  background: rgba(95, 175, 122, 0.15);
+  border-bottom-color: var(--color-signal-green, #5FAF7A);
+}
+
+/* 🟣 Causal Reasoning: Warrants & connective mechanisms */
+.document-page.epistemic-active .epistemic-sentence.reasoning {
+  border-bottom: 2px solid rgba(139, 92, 246, 0.6);
+}
+.document-page.epistemic-active .epistemic-sentence.reasoning:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-bottom-color: var(--color-aurora, #8b5cf6);
+}
+
+/* 🟡 Assumptions: Presuppositions taken for granted */
+.document-page.epistemic-active .epistemic-sentence.assumption {
+  border-bottom: 2px solid rgba(216, 154, 58, 0.65);
+  background: rgba(216, 154, 58, 0.08);
+}
+.document-page.epistemic-active .epistemic-sentence.assumption:hover {
+  background: rgba(216, 154, 58, 0.16);
+  border-bottom-color: var(--color-amber, #D89A3A);
+}
+
+/* 🔴 Premature Closures: Unsupported conclusion leaps */
+.document-page.epistemic-active .epistemic-sentence.premature_closure {
+  border-bottom: 2px dashed var(--color-rose, #B74C4C);
+  background: rgba(183, 76, 76, 0.08);
+}
+.document-page.epistemic-active .epistemic-sentence.premature_closure:hover {
+  background: rgba(183, 76, 76, 0.16);
+}
+
+.sentence-pulse-highlight {
+  animation: pulseSentence 1.5s ease-out;
+}
+
+@keyframes pulseSentence {
+  0% { background: rgba(139, 92, 246, 0.35); }
+  100% { background: transparent; }
+}
+
+.epistemic-sentence.is-active-sentence {
+  background: rgba(217, 119, 6, 0.16) !important;
+  outline: 2px solid var(--color-horizon-blue, #2563eb) !important;
+  outline-offset: 2px;
+  border-radius: 3px;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.25);
+}

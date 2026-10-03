@@ -31,6 +31,7 @@ from fiosra.mvp.assignment_designer.schemas import (
 from fiosra.mvp.assignment_designer.vault import answer_vault
 from fiosra.mvp.courses.source_queries import CANONICAL_CHUNKS
 from fiosra.mvp.database import AsyncSessionLocal
+from fiosra.mvp.learning_canvas_schemas import default_canvas_sections
 from fiosra.mvp.llm.orchestrator import llm_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -546,6 +547,8 @@ class AssignmentGenerator:
         safe_spec.pop("generation_metadata", None)
         if not safe_spec.get("published"):
             safe_spec["published"] = cls._legacy_public_contract(safe_spec).model_dump()
+        if not safe_spec.get("canvas_sections"):
+            safe_spec["canvas_sections"] = [s.model_dump() for s in default_canvas_sections()]
         return PublicQuestionSpec.model_validate(safe_spec)
 
     @staticmethod
@@ -607,7 +610,7 @@ class AssignmentGenerator:
             "status": spec.get("status", "draft"),
             "published": spec["published"],
             "evaluation_plan": spec["evaluation_plan"],
-            "canvas_sections": spec.get("canvas_sections", []),
+            "canvas_sections": spec.get("canvas_sections") or [s.model_dump() for s in default_canvas_sections()],
             "readiness": {
                 "is_publishable": not cls._readiness(spec),
                 "items": cls._readiness(spec),

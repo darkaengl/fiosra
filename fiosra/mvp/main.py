@@ -1,9 +1,10 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +21,7 @@ from fiosra.mvp.evidence_dossier.router import router as evidence_router
 from fiosra.mvp.knowledge_router import router as knowledge_router
 from fiosra.mvp.learning_canvas_router import router as learning_canvas_router
 from fiosra.mvp.learning_document_router import router as learning_document_router
+from fiosra.mvp.misconception_scan import router as intervention_router
 from fiosra.mvp.neo4j_client import neo4j_client
 from fiosra.mvp.socratic_probe_router import router as socratic_probe_router
 
@@ -138,6 +140,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(_text(
             "CREATE INDEX IF NOT EXISTS idx_syllabus_chunks_document ON syllabus_chunks (document_id);"
         ))
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_interventions (
+                intervention_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id UUID NOT NULL REFERENCES student_sessions(session_id) ON DELETE CASCADE,
+                student_id VARCHAR(64) NOT NULL,
+                teacher_id VARCHAR(64) NOT NULL DEFAULT 'educator',
+                document_id UUID REFERENCES learning_documents(document_id) ON DELETE SET NULL,
+                block_id UUID REFERENCES learning_document_blocks(block_id) ON DELETE SET NULL,
+                concept_id VARCHAR(96),
+                concept_label VARCHAR(160),
+                misconception_id VARCHAR(96),
+                evidence_quote TEXT NOT NULL,
+                activity_type VARCHAR(40) NOT NULL DEFAULT 'socratic_nudge',
+                activity_prompt TEXT NOT NULL,
+                activity_guidance TEXT,
+                student_response TEXT,
+                status VARCHAR(20) NOT NULL DEFAULT 'dispatched',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                responded_at TIMESTAMP WITH TIME ZONE,
+                acknowledged_at TIMESTAMP WITH TIME ZONE
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_interventions_session ON assignment_interventions (session_id, created_at DESC);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_interventions_student ON assignment_interventions (student_id, status);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_interventions_block ON assignment_interventions (block_id) WHERE block_id IS NOT NULL;"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()
@@ -183,6 +218,7 @@ for router_instance in [
     events_router,
     learning_canvas_router,
     learning_document_router,
+    intervention_router,
     socratic_probe_router,
     dialogue_router,
     evidence_router,
@@ -197,7 +233,16 @@ for router_instance in [
 # Mount Static UI Frontend (Svelte production build)
 DIST_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if DIST_DIR.exists():
-    app.mount("/ui", StaticFiles(directory=str(DIST_DIR), html=True), name="ui")
+    class NoCacheStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: Any) -> Response:
+            response = await super().get_response(path, scope)
+            if path.endswith(".html") or path == "" or path == "index.html":
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+            return response
+
+    app.mount("/ui", NoCacheStaticFiles(directory=str(DIST_DIR), html=True), name="ui")
 
 
 @app.get("/", include_in_schema=False)

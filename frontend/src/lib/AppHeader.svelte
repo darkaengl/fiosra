@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { push } from 'svelte-spa-router';
+  import { COHORT_STUDENTS, getStudentId, setStudentId } from './session.js';
 
   let {
     courseTitle = 'Course Workspace',
@@ -9,6 +10,33 @@
   let currentHash = $state(typeof window !== 'undefined' ? window.location.hash || '#/' : '#/');
   let courses = $state([]);
   let currentTheme = $state('light');
+  let activeStudentId = $state(typeof window !== 'undefined' ? getStudentId() : 'julian_hayes');
+
+  let currentStudent = $derived(
+    COHORT_STUDENTS.find((s) => s.id === activeStudentId) || COHORT_STUDENTS[0]
+  );
+
+  function syncStudentId() {
+    activeStudentId = getStudentId();
+  }
+
+  function handleStudentSelect(e) {
+    const newId = e.target.value;
+    activeStudentId = newId;
+    setStudentId(newId);
+
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    const path = qIndex >= 0 ? hash.slice(0, qIndex) : hash;
+    const search = qIndex >= 0 ? hash.slice(qIndex + 1) : '';
+    const sp = new URLSearchParams(search);
+    sp.set('student_id', newId);
+    const newHash = `${path}?${sp.toString()}`;
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
+    }
+    window.dispatchEvent(new CustomEvent('fiosra:student-changed', { detail: { studentId: newId } }));
+  }
 
   function handleHashChange() {
     currentHash = window.location.hash || '#/';
@@ -43,13 +71,13 @@
 
   onMount(async () => {
     window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', syncStudentId);
+    window.addEventListener('fiosra:student-changed', syncStudentId);
 
-    // Initialize theme from storage or system preference
+    // Initialize theme from storage (default: academic light parchment)
     const saved = localStorage.getItem('fiosra_theme');
     if (saved === 'dark' || saved === 'light') {
       applyTheme(saved);
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      applyTheme('dark');
     } else {
       applyTheme('light');
     }
@@ -68,6 +96,8 @@
   onDestroy(() => {
     if (typeof window !== 'undefined') {
       window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', syncStudentId);
+      window.removeEventListener('fiosra:student-changed', syncStudentId);
     }
   });
 
@@ -116,8 +146,8 @@
       activeTab = 'modules';
     }
 
-    const logoHref = isStudentView ? '#/student/portal' : '#/courses';
-    const logoTitle = isStudentView ? 'Return to Student Courses' : 'Return to Course Portfolio';
+    const logoHref = '#/';
+    const logoTitle = 'Return to Fiosra Home';
     const isGlobalView = !isStudentView && activeTab === 'courses';
 
     return { path, courseId, courseQuery, activeTab, isStudentView, isStudentGlobal, isGlobalView, logoHref, logoTitle };
@@ -138,19 +168,17 @@
     <a
       href={parsed.logoHref}
       title={parsed.logoTitle}
-      class="brand-logo"
+      class="brand-logo-link"
       onclick={(e) => { e.preventDefault(); navigateTo(parsed.logoHref); }}
     >
-      FIOSRA
+      <img src="./fiosra-lockup.png" alt="Fiosra · Learning in Motion" class="brand-logo-img" />
     </a>
 
     <div class="context-indicator">
-      <span class="context-separator">/</span>
-      {#if parsed.isStudentView}
-        <span class="context-badge student">STUDENT</span>
-      {:else}
-        <span class="context-badge">EDUCATOR</span>
-      {/if}
+      <span class="space-badge">
+        <span class="space-dot"></span>
+        Your {parsed.isStudentView ? 'Learning Space' : 'Teaching Space'}
+      </span>
 
       {#if activeCourseLabel && !parsed.isGlobalView && !parsed.isStudentGlobal}
         <span class="context-separator">/</span>
@@ -263,31 +291,52 @@
       <span class="theme-icon dark-icon" class:active={currentTheme === 'dark'}>🌙</span>
     </button>
 
-    {#if parsed.isStudentView}
-      <a
-        href="#/courses"
-        class="role-switch-btn"
-        title="Switch to Educator View (Portfolio)"
-        onclick={(e) => { e.preventDefault(); navigateTo('/courses'); }}
+    <!-- Perspective Switcher (Student / Educator) -->
+    <div role="radiogroup" aria-label="Switch perspective" class="role-radiogroup">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={parsed.isStudentView ? "true" : "false"}
+        onclick={() => navigateTo(parsed.courseId && !parsed.isStudentGlobal ? `/student${parsed.courseQuery}` : '/student/portal')}
+        class="role-radio-btn"
+        class:active={parsed.isStudentView}
+        title="Switch to Student Learning Workspace"
       >
-        <span>Educator View</span>
-        <span class="switch-icon">↗</span>
-      </a>
-      <div class="user-chip" title="Active Student Session: Julian Hayes">
-        <div class="user-avatar student-avatar">JH</div>
-        <span class="user-name">Julian Hayes</span>
+        Student
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={!parsed.isStudentView ? "true" : "false"}
+        onclick={() => navigateTo(parsed.courseId ? `/modules${parsed.courseQuery}` : '/courses')}
+        class="role-radio-btn"
+        class:active={!parsed.isStudentView}
+        title="Switch to Educator Teaching Workspace"
+      >
+        Educator
+      </button>
+    </div>
+
+    {#if parsed.isStudentView}
+      <div class="student-switcher-chip" title="Active Student Session: {currentStudent.name} ({currentStudent.trap})">
+        <div class="user-avatar student-avatar">{currentStudent.initials}</div>
+        <div class="student-select-wrap">
+          <label for="student-header-select" class="sr-only">Switch Student</label>
+          <select
+            id="student-header-select"
+            class="student-header-select"
+            value={activeStudentId}
+            onchange={handleStudentSelect}
+            title="Choose a student in cohort to view their reasoning workspace"
+          >
+            {#each COHORT_STUDENTS as st}
+              <option value={st.id} title="{st.name} — {st.trap}">{st.name}</option>
+            {/each}
+          </select>
+          <span class="student-select-arrow">▾</span>
+        </div>
       </div>
     {:else}
-      <a
-        href="#/student/portal"
-        class="role-switch-btn"
-        title="Preview as Student"
-        onclick={(e) => { e.preventDefault(); navigateTo('/student/portal'); }}
-      >
-        <span>Student View</span>
-        <span class="switch-icon">↗</span>
-      </a>
-
       <div class="user-chip" title="Active Educator Session: Dr. Vance">
         <div class="user-avatar">DV</div>
         <span class="user-name">Dr. Vance</span>
@@ -324,22 +373,29 @@
     overflow: hidden;
   }
 
-  .brand-logo {
-    font-family: var(--font-brand);
-    font-weight: 800;
-    font-size: 18px;
-    letter-spacing: -0.3px;
-    color: var(--color-heading);
+  .brand-logo-link {
+    display: inline-flex;
+    align-items: center;
     text-decoration: none;
-    background: linear-gradient(135deg, var(--color-heading) 45%, var(--color-horizon-bright));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
     cursor: pointer;
     transition: opacity 0.15s ease;
   }
 
-  .brand-logo:hover {
+  .brand-logo-link:hover {
     opacity: 0.88;
+  }
+
+  .brand-logo-img {
+    height: 30px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+    display: block;
+  }
+
+  :global([data-theme="dark"]) .brand-logo-img {
+    filter: brightness(0) invert(1);
+    opacity: 0.95;
   }
 
   .context-indicator {
@@ -352,6 +408,27 @@
     color: var(--color-slate-subtle);
     font-size: 13px;
     font-weight: 400;
+  }
+
+  .space-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-slate);
+    background: var(--color-cloud-subtle);
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+  }
+
+  .space-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-signal-green);
+    box-shadow: 0 0 5px rgba(95, 175, 122, 0.6);
   }
 
   .context-badge {
@@ -458,20 +535,26 @@
 
   .assistant-launch {
     align-items: center;
-    background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(124,58,237,.15));
-    border: 1px solid rgba(96,165,250,.36);
+    background: var(--color-horizon-blue-soft, #EBF0FF);
+    border: 1px solid rgba(79, 107, 255, 0.3);
     border-radius: var(--radius-full);
-    color: var(--color-heading);
+    color: var(--color-horizon-blue, #4F6BFF);
     cursor: pointer;
     display: inline-flex;
     font-size: 11px;
     font-weight: 700;
     gap: 5px;
-    padding: 6px 10px;
+    padding: 6px 12px;
     white-space: nowrap;
+    transition: all 0.15s ease;
   }
-  .assistant-launch:hover { border-color: var(--color-horizon-bright); color: var(--color-horizon-bright); }
-  .assistant-spark { color: var(--color-horizon-bright); font-size: 13px; }
+  .assistant-launch:hover {
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
+    border-color: var(--color-horizon-bright, #3D5AFE);
+    box-shadow: 0 2px 6px var(--color-horizon-glow, rgba(79, 107, 255, 0.25));
+  }
+  .assistant-spark { font-size: 13px; }
 
   /* Theme Toggle */
   .theme-toggle-btn {
@@ -510,6 +593,41 @@
 
 
 
+  .role-radiogroup {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-cloud);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .role-radio-btn {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    border: none;
+    background: transparent;
+    color: var(--color-slate);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.2;
+    font-family: inherit;
+  }
+
+  .role-radio-btn:hover {
+    color: var(--color-heading);
+  }
+
+  .role-radio-btn.active {
+    background: var(--surface);
+    color: var(--color-heading);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
   .role-switch-btn {
     display: inline-flex;
     align-items: center;
@@ -547,22 +665,91 @@
     cursor: default;
   }
 
+  .student-switcher-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 8px 2px 3px;
+    background: var(--user-chip-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .student-switcher-chip:hover {
+    border-color: var(--color-horizon-blue);
+    background: var(--color-horizon-blue-soft);
+  }
+
+  .student-select-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+  }
+
+  .student-header-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--color-heading);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding-right: 14px;
+    outline: none;
+    max-width: 170px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .student-header-select option {
+    background: var(--surface, #ffffff);
+    color: var(--color-heading, #111315);
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .student-select-arrow {
+    position: absolute;
+    right: 0;
+    pointer-events: none;
+    font-size: 9px;
+    color: var(--color-slate-light);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
   .user-avatar {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #e5a93c, #c68a25);
+    background: var(--color-amber, #D89A3A);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 9.5px;
     font-weight: 700;
-    color: #121418;
+    color: #ffffff;
   }
 
   .user-avatar.student-avatar {
-    background: linear-gradient(135deg, #4eaa7a, #38bdf8);
-    color: #121418;
+    background: var(--color-horizon-blue, #4F6BFF);
+    color: #ffffff;
   }
 
   .user-name {

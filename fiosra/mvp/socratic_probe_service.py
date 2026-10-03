@@ -118,8 +118,8 @@ class SocraticProbeService:
         session_info = await event_store.get_session_details(session_id)
         if not session_info:
             raise SocraticProbeValidationError("The requested learning session no longer exists.")
-        if session_info["status"] != "active":
-            raise SocraticProbeConflictError("Submitted or completed sessions cannot receive new questions.")
+        if session_info["status"] == "submitted":
+            raise SocraticProbeConflictError("Submitted sessions cannot receive new questions.")
         assignment_id = session_info.get("assignment_id")
         assignment = await assignment_generator.get_public_assignment(assignment_id) if assignment_id else None
         if not assignment or assignment.status != "published":

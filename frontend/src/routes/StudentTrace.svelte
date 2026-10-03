@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import ThinkingTimeline from '../lib/ThinkingTimeline.svelte';
   import {
     formatDate,
@@ -61,8 +61,23 @@
 
     // If session_id is not in URL, try restoring persisted session for the assignment
     if (!sessionId && assignmentId) {
-      const persisted = localStorage.getItem(sessionStorageKey(assignmentId, getStudentId()));
-      if (persisted) sessionId = persisted;
+      const currentStudent = getStudentId();
+      const persisted = localStorage.getItem(sessionStorageKey(assignmentId, currentStudent));
+      if (persisted) {
+        sessionId = persisted;
+      } else {
+        try {
+          const sRes = await fetch(`/events/sessions?student_id=${encodeURIComponent(currentStudent)}&assignment_id=${encodeURIComponent(assignmentId)}`);
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            if (sData.sessions?.length > 0) {
+              sessionId = sData.sessions[sData.sessions.length - 1].session_id;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not auto-resolve session for student:', e);
+        }
+      }
     }
 
     if (!sessionId) return;
@@ -123,12 +138,21 @@
   }
 
   onMount(async () => {
+    window.addEventListener('hashchange', loadTrace);
+    window.addEventListener('fiosra:student-changed', loadTrace);
     try {
       await loadTrace();
     } catch (err) {
       error = err.message || 'The reasoning trace could not be initialized.';
     } finally {
       isLoading = false;
+    }
+  });
+
+  onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('hashchange', loadTrace);
+      window.removeEventListener('fiosra:student-changed', loadTrace);
     }
   });
 </script>

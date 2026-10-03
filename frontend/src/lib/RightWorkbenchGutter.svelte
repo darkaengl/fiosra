@@ -6,11 +6,13 @@
 
   let {
     probes = [],
+    interventions = [],
     documentBlocks = [],
     activeProbeId = '',
     focusedBlockId = '',
     focusedBlockOffsetTop = 0,
     onRespond = async () => null,
+    onRespondIntervention = async () => null,
     onDismiss = async () => null,
     onDefer = async () => null,
     onSelectBlock = () => null,
@@ -153,7 +155,7 @@
           <span class="tab-icon">🤖</span>
           <span class="tab-label">Agent</span>
           {#if currentRung > 0}
-            <span class="tab-pill-rung">Rung {currentRung}</span>
+            <span class="tab-pill-rung">Level {currentRung}</span>
           {/if}
         </button>
 
@@ -197,11 +199,13 @@
       {#if activeTab === 'marginalia'}
         <SocraticMarginaliaGutter
           {probes}
+          {interventions}
           {documentBlocks}
           {activeProbeId}
           {focusedBlockId}
           {focusedBlockOffsetTop}
           {onRespond}
+          {onRespondIntervention}
           {onDismiss}
           {onDefer}
           {onSelectBlock}

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.dialogue_engine import dialogue_engine
 from fiosra.mvp.event_store import event_store
+from fiosra.mvp.learning_canvas_schemas import default_canvas_sections
 
 router = APIRouter(prefix="/dialogue", tags=["Socratic Dialogue"])
 SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
@@ -58,17 +59,12 @@ async def handle_dialogue_turn(
     session_info = await event_store.get_session_details(request.session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail=f"Session '{request.session_id}' not found")
-    if session_info["status"] != "active":
-        raise HTTPException(status_code=409, detail="This session is no longer accepting student responses.")
+    if session_info["status"] == "submitted":
+        raise HTTPException(status_code=409, detail="This session has been submitted for educator review and is no longer accepting student responses.")
     if request.student_id != session_info["student_id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student identity does not match this session.")
     
     authoritative_question_id = session_info.get("current_question_id") or "q1"
-    if request.question_id and request.question_id not in (authoritative_question_id, "q1"):
-        if request.question_id.lower() != authoritative_question_id.lower():
-            raise HTTPException(status_code=409, detail="Question context does not match the active session.")
-    active_question_id = authoritative_question_id
-
     authoritative_assignment_id = session_info.get("assignment_id")
     assignment_context = None
     active_section_context = None
@@ -76,19 +72,34 @@ async def handle_dialogue_turn(
         assignment_context = await assignment_generator.get_public_assignment(authoritative_assignment_id)
         if not assignment_context:
             raise HTTPException(status_code=409, detail="The session's published assignment is no longer available.")
-        if request.assignment_id and str(request.assignment_id) != authoritative_assignment_id:
+        if request.assignment_id and str(request.assignment_id) != str(authoritative_assignment_id):
             raise HTTPException(status_code=409, detail="The request assignment does not match this student session.")
-        section_id = request.active_section_id or assignment_context.canvas_sections[0].section_id
+        canvas_sections = assignment_context.canvas_sections or default_canvas_sections()
+        section_id = request.active_section_id or (canvas_sections[0].section_id if canvas_sections else None)
         active_section = next(
-            (section for section in assignment_context.canvas_sections if section.section_id == section_id),
+            (section for section in canvas_sections if section.section_id == section_id),
             None,
-        )
-        if not active_section:
+        ) if section_id else None
+        if request.active_section_id and not active_section:
             raise HTTPException(status_code=409, detail="The requested canvas section is not declared by this assignment.")
-        active_section_context = (
-            f"{active_section.label}: {active_section.purpose} "
-            f"Guidance: {active_section.completion_guidance}"
-        )
+        if active_section:
+            active_section_context = (
+                f"{active_section.label}: {active_section.purpose} "
+                f"Guidance: {active_section.completion_guidance}"
+            )
+
+    valid_question_ids = {
+        str(authoritative_question_id).lower(),
+        "q1",
+    }
+    if authoritative_assignment_id:
+        valid_question_ids.add(str(authoritative_assignment_id).lower())
+    if assignment_context and getattr(assignment_context, "question_id", None):
+        valid_question_ids.add(str(assignment_context.question_id).lower())
+
+    if request.question_id and request.question_id.lower() not in valid_question_ids:
+        raise HTTPException(status_code=409, detail="Question context does not match the active session.")
+    active_question_id = authoritative_question_id
 
     active_prompt = assignment_context.prompt if assignment_context else request.question_prompt
     active_domain = assignment_context.domain if assignment_context else request.domain

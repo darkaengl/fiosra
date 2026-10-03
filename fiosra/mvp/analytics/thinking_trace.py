@@ -66,6 +66,8 @@ _ACTIVITY_MAP: dict[str, tuple[str, str, str, str]] = {
     "socratic_probe_deferred":        ("⏸️", "Deferred probe", "Reflection", "PROBE DEFERRED"),
     "socratic_probe_dismissed":       ("🙈", "Dismissed probe", "Reflection", "PROBE DISMISSED"),
     "student_submitted_for_review":   ("🏁", "Submitted for review", "Submission", "FINAL SUBMISSION"),
+    "session_completed":              ("✅", "Draft completed & verified", "Completion", "COMPLETED DRAFT"),
+    "draft_finalized":                ("✅", "Draft completed & verified", "Completion", "COMPLETED DRAFT"),
     "grade_finalised_by_educator":    ("🎓", "Educator finalized grade", "Evaluation", "SEALED GRADE"),
     "misconception_flagged":          ("⚠️", "Misconception flagged", "Friction", "MISCONCEPTION"),
     "adversarial_probe_defended":     ("🛡️", "Integrity check passed", "Reflection", "INTEGRITY CHECK"),
@@ -109,6 +111,8 @@ def _event_to_activity_node(event: dict[str, Any]) -> ActivityNode:
     elif event_type == "student_submitted_for_review":
         rev = payload.get("document_revision", "")
         content = f"Document revision {rev}" if rev else None
+    elif event_type in ("session_completed", "draft_finalized"):
+        content = payload.get("summary") or "Final reasoning draft completed and verified"
 
     return ActivityNode(
         timestamp=timestamp,
@@ -215,13 +219,15 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event_type in ("tutor_turn_completed", "hint_delivered"):
             response = payload.get("response_text", "")
             if "?" in response:
+                label = payload.get("probe_label") or payload.get("label") or "Socratic friction introduced"
+                eyebrow = payload.get("eyebrow") or "CRITICAL CHALLENGE"
                 nodes.append(ReasoningNode(
                     timestamp=timestamp,
                     kind="challenge",
                     icon="⚠️",
-                    label="Socratic friction introduced",
+                    label=label,
                     stage="Exploration",
-                    eyebrow="EXPLORATION",
+                    eyebrow=eyebrow,
                     content=response[:500] if len(response) > 500 else response,
                 ))
                 challenge_pending = True
@@ -230,13 +236,21 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event_type == "socratic_probe_offered":
             question = payload.get("question", "")
             if question:
+                label = payload.get("probe_label") or payload.get("label") or (
+                    "Orienting question offered" if payload.get("inquiry_level") == 1
+                    else "Marginalia probe prompted reconsideration"
+                )
+                eyebrow = payload.get("eyebrow") or (
+                    "ORIENTING INQUIRY" if payload.get("inquiry_level") == 1
+                    else "CRITICAL CHALLENGE"
+                )
                 nodes.append(ReasoningNode(
                     timestamp=timestamp,
                     kind="challenge",
                     icon="⚠️",
-                    label="Marginalia probe prompted reconsideration",
+                    label=label,
                     stage="Exploration",
-                    eyebrow="EXPLORATION",
+                    eyebrow=eyebrow,
                     content=question[:500] if len(question) > 500 else question,
                 ))
                 challenge_pending = True
@@ -368,6 +382,25 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                             "after": text[:300],
                         },
                     ))
+            continue
+
+        # --- COMPLETED ---
+        if event_type in ("session_completed", "draft_finalized", "assignment_completed"):
+            rev = payload.get("document_revision", "")
+            word_count = payload.get("word_count")
+            summary_text = payload.get("summary") or (
+                f"Final reasoning draft completed ({word_count} words across all 4Ps)."
+                if word_count else "Final reasoning draft completed and verified against learning criteria."
+            )
+            nodes.append(ReasoningNode(
+                timestamp=timestamp,
+                kind="completed",
+                icon="✅",
+                label=payload.get("label") or "Reasoning draft completed & verified",
+                stage="Completion",
+                eyebrow="COMPLETED DRAFT",
+                content=summary_text,
+            ))
             continue
 
         # --- SUBMITTED ---

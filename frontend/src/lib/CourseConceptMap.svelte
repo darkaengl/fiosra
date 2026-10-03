@@ -334,7 +334,7 @@
             <div class="inspector-heading">
               <div>
                 <span class="eyebrow" style="color: #c084fc;">✦ Socratic Diagnostic Probe</span>
-                <h3>Rung {selectedConcept.rung ?? 0} Probe</h3>
+                <h3>{selectedConcept.rung === 0 ? 'Orienting Inquiry' : selectedConcept.rung === 1 ? 'Critical Challenge' : selectedConcept.rung === 2 ? 'Strategic Framework' : `Inquiry Level ${(selectedConcept.rung ?? 0) + 1}`} Probe</h3>
               </div>
               <span class="level-pill" style="background: rgba(192,132,252,0.18); color: #d8b4fe; border-color: rgba(192,132,252,0.4);">Diagnostic Probe</span>
             </div>
