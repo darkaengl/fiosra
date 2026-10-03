@@ -156,3 +156,110 @@ export function persistChatSessions(sessions: ChatSession[], aid?: string, sid?:
     }
   }
 }
+
+export function createNewChatSession(existingCount: number): ChatSession {
+  const nextNum = existingCount + 1;
+  return {
+    id: `chat_${crypto.randomUUID().slice(0, 8)}`,
+    title: `Consultation ${nextNum}`,
+    startedAt: new Date().toISOString(),
+    turns: [
+      {
+        role: 'tutor',
+        text: `Welcome to Consultation ${nextNum}. How can I assist your critical inquiry today?`,
+        thoughts: { pedagogical_goal: 'Fresh session initialization' },
+        hint_rung: 1,
+        is_adversarial: false,
+        action_capsules: [],
+        radar: null,
+        prompt_launchers: [
+          { title: "Evaluate evidence", prompt: "Help me evaluate my evidence", text: "Help me evaluate my evidence", category: "evidence" },
+          { title: "Check arguments", prompt: "Check my argument structure", text: "Check my argument structure", category: "reasoning" }
+        ]
+      }
+    ]
+  };
+}
+
+export interface SocraticMessageParams {
+  sessionId: string;
+  studentId: string;
+  assignmentId?: string;
+  assignment: any;
+  learningDocument: any;
+  studentInput: string;
+  hintRequested?: boolean;
+  sessionHeaders: () => Record<string, string>;
+}
+
+export interface SocraticMessageResult {
+  tutorTurn: any;
+  hintRung?: number;
+  success: boolean;
+}
+
+export async function sendSocraticMessage({
+  sessionId,
+  studentId,
+  assignmentId,
+  assignment,
+  learningDocument,
+  studentInput,
+  hintRequested = false,
+  sessionHeaders,
+}: SocraticMessageParams): Promise<SocraticMessageResult> {
+  const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
+  const qId = learningDocument?.question_id || assignment?.question_id || 'q1';
+  try {
+    const res = await fetch('/dialogue/message', {
+      method: 'POST',
+      headers: sessionHeaders(),
+      body: JSON.stringify({
+        session_id: sessionId,
+        student_id: studentId,
+        question_id: qId,
+        student_input: studentInput,
+        question_prompt: prompt,
+        domain: assignment?.domain || 'history',
+        hint_requested: hintRequested,
+        assignment_id: assignmentId || null,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || 'Dialogue service unavailable');
+    }
+    const data = await res.json();
+    const tutorTurn = {
+      role: 'tutor',
+      text: data.response_text,
+      thoughts: data.thoughts_of_tutorbot,
+      hint_rung: data.hint_rung,
+      is_adversarial: data.is_adversarial,
+      action_capsules: data.action_capsules || [],
+      radar: data.learner_radar || null,
+      prompt_launchers: data.prompt_launchers || [],
+    };
+    return {
+      tutorTurn,
+      hintRung: data.hint_rung,
+      success: true,
+    };
+  } catch (err: any) {
+    console.error('Macro dialogue error:', err);
+    const errorTurn = {
+      role: 'tutor',
+      text: `⚠️ Socratic Tutor is currently unavailable: ${err.message || 'LLM service connection required'}. Please ensure your LLM provider is configured and running.`,
+      is_adversarial: false,
+      hint_rung: 0,
+      action_capsules: [],
+      radar: null,
+    };
+    return {
+      tutorTurn: errorTurn,
+      hintRung: 0,
+      success: false,
+    };
+  }
+}
+

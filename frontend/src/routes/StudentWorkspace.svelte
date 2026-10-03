@@ -4,19 +4,33 @@
   import RightWorkbenchGutter from '../lib/RightWorkbenchGutter.svelte';
   import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
   import WorkspaceFlyoutPanel from '../lib/workspace/WorkspaceFlyoutPanel.svelte';
+  import WorkspaceCanvasGrid from '../lib/workspace/WorkspaceCanvasGrid.svelte';
+  import WorkspaceEmptyView from '../lib/workspace/WorkspaceEmptyView.svelte';
   import { fiosraContext } from '../lib/contextStore.svelte.js';
   import {
     getStudentId,
     responseError,
     routeParams,
     sessionAccessTokenStorageKey,
-    sessionStorageKey,
   } from '../lib/session.js';
+  import { discoverAndInitializeSession } from '../lib/workspace/workspaceSessionLoader';
+  import {
+    enterZenMode,
+    exitZenMode,
+    isTypingTarget,
+  } from '../lib/workspace/workspaceZenManager';
+  import {
+    logActionCapsuleCommit,
+    logSocraticMove,
+    submitMilestoneSession,
+  } from '../lib/workspace/workspaceActions';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
   import {
     buildDefaultChatForStudent,
+    createNewChatSession,
     loadStoredChatSessions,
     persistChatSessions,
+    sendSocraticMessage,
   } from '../lib/workspace/workspaceConsultations';
   import {
     canonicalBlockAnalysis,
@@ -32,67 +46,13 @@
   let isZenFullscreen = $state(false);
   let savedLayoutState = $state(null);
 
-  // Draggable sidebar widths (Margin Sliders)
+  // Sidebar widths
   let sourcesWidth = $state(
     (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_sources_width'))) || 480
   );
   let gutterWidth = $state(
     (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_gutter_width'))) || 440
   );
-  let isResizingLeft = $state(false);
-  let isResizingRight = $state(false);
-
-  function startResizeLeft(e) {
-    e.preventDefault();
-    isResizingLeft = true;
-    const startX = e.clientX;
-    const startWidth = sourcesWidth;
-
-    function onPointerMove(moveEvent) {
-      const deltaX = moveEvent.clientX - startX;
-      const maxAllowed = Math.max(300, window.innerWidth - 450);
-      const newWidth = Math.min(maxAllowed, Math.max(260, startWidth + deltaX));
-      sourcesWidth = Math.round(newWidth);
-    }
-
-    function onPointerUp() {
-      isResizingLeft = false;
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      try {
-        localStorage.setItem('fiosra_sources_width', String(sourcesWidth));
-      } catch {}
-    }
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }
-
-  function startResizeRight(e) {
-    e.preventDefault();
-    isResizingRight = true;
-    const startX = e.clientX;
-    const startWidth = gutterWidth;
-
-    function onPointerMove(moveEvent) {
-      const deltaX = startX - moveEvent.clientX;
-      const maxAllowed = Math.max(300, window.innerWidth - 450);
-      const newWidth = Math.min(maxAllowed, Math.max(260, startWidth + deltaX));
-      gutterWidth = Math.round(newWidth);
-    }
-
-    function onPointerUp() {
-      isResizingRight = false;
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      try {
-        localStorage.setItem('fiosra_gutter_width', String(gutterWidth));
-      } catch {}
-    }
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }
 
   function saveCurrentChatSessions() {
     persistChatSessions(chatSessions, assignmentId, studentId);
@@ -114,27 +74,7 @@
   let macroTurns = $derived(currentChatSession?.turns || []);
 
   function handleStartNewChatSession() {
-    const nextNum = chatSessions.length + 1;
-    const newSession = {
-      id: `chat_${crypto.randomUUID().slice(0, 8)}`,
-      title: `Consultation ${nextNum}`,
-      startedAt: new Date().toISOString(),
-      turns: [
-        {
-          role: 'tutor',
-          text: `Welcome to Consultation ${nextNum}. How can I assist your critical inquiry today?`,
-          thoughts: 'Fresh session initialization',
-          hint_rung: 1,
-          is_adversarial: false,
-          action_capsules: [],
-          radar: null,
-          prompt_launchers: [
-            { text: "Help me evaluate my evidence", category: "evidence" },
-            { text: "Check my argument structure", category: "reasoning" }
-          ]
-        }
-      ]
-    };
+    const newSession = createNewChatSession(chatSessions.length);
     chatSessions = [...chatSessions, newSession];
     activeChatSessionId = newSession.id;
     saveCurrentChatSessions();
@@ -320,164 +260,37 @@
 
   async function loadAssignment() {
     const params = routeParams();
-    courseId = params.get('course_id') || '';
-    assignmentId = params.get('assignment_id') || '';
+    const routeCourseId = params.get('course_id') || '';
+    const routeAssignmentId = params.get('assignment_id') || '';
 
     // If navigating to student workspace without a course, redirect to Courses & Enrollment portal
-    if (!courseId && !assignmentId) {
+    if (!routeCourseId && !routeAssignmentId) {
       window.location.hash = '#/student/portal';
       return;
     }
 
-    if (assignmentId) {
-      const response = await fetch(`/assignments/${assignmentId}`);
-      if (!response.ok) throw new Error(await responseError(response, 'The requested assignment could not be loaded.'));
-      const found = await response.json();
-      if (found.status === 'published') {
-        assignment = found;
-      } else {
-        assignment = null;
-      }
-    } else if (courseId) {
-      const response = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
-      if (response.ok) {
-        const assignments = await response.json();
-        const pub = assignments.filter((a) => a.status === 'published');
-        assignment = pub[0] || null;
-        assignmentId = assignment?.assignment_id || '';
-      }
-    }
-
-    if (!assignment && !courseId) {
-      try {
-        const coursesRes = await fetch('/courses');
-        if (coursesRes.ok) {
-          const coursesList = await coursesRes.json();
-          const courses = Array.isArray(coursesList) ? coursesList : coursesList.courses || [];
-          for (const c of courses) {
-            const cid = c.course_id || c.id;
-            if (!cid) continue;
-            const res = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
-            if (res.ok) {
-              const list = await res.json();
-              const pubList = list.filter((a) => a.status === 'published');
-              if (pubList.length > 0) {
-                assignment = pubList[0];
-                assignmentId = assignment.assignment_id;
-                courseId = cid;
-                break;
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Auto-discovering published assignment:', err);
-      }
-    }
-
-    if (!assignment && !courseId) {
-      try {
-        const directRes = await fetch('/assignments');
-        if (directRes.ok) {
-          const allList = await directRes.json();
-          const pubList = allList.filter((a) => a.status === 'published');
-          if (pubList.length > 0) {
-            assignment = pubList[0];
-            assignmentId = assignment.assignment_id;
-          }
-        }
-      } catch (err) {
-        console.warn('Direct assignment fallback fetch:', err);
-      }
-    }
-
-    if (!assignment) return;
-
     studentId = getStudentId();
+    const sessionData = await discoverAndInitializeSession({
+      routeCourseId,
+      routeAssignmentId,
+      studentId,
+    });
+
+    if (!sessionData) return;
+
+    courseId = sessionData.courseId;
+    assignmentId = sessionData.assignmentId;
+    assignment = sessionData.assignment;
+    sessionId = sessionData.sessionId;
+    sessionAccessToken = sessionData.sessionAccessToken;
+    sessionStatus = sessionData.sessionStatus;
+    submittedRevision = sessionData.submittedRevision;
+    submittedAt = sessionData.submittedAt;
+
     loadChatSessionsForStudent(assignmentId, studentId);
-    sessionId = '';
-    sessionAccessToken = '';
-    sessionStatus = '';
-    submittedRevision = null;
-    submittedAt = '';
     learningDocument = null;
     probes = [];
     sessionEvents = [];
-
-    const key = sessionStorageKey(assignmentId, studentId);
-    const persistedSessionId = localStorage.getItem(key);
-    const persistedAccessToken = persistedSessionId
-      ? localStorage.getItem(sessionAccessTokenStorageKey(persistedSessionId))
-      : '';
-
-    if (persistedSessionId && persistedAccessToken) {
-      const existing = await fetch(`/events/session/${persistedSessionId}`, {
-        headers: { 'X-Fiosra-Session-Token': persistedAccessToken },
-      });
-      if (existing.ok) {
-        const session = (await existing.json()).session;
-        if (['active', 'submitted', 'completed'].includes(session.status) && session.assignment_id === assignmentId) {
-          sessionId = persistedSessionId;
-          sessionAccessToken = persistedAccessToken;
-          sessionStatus = session.status;
-          submittedRevision = session.submitted_document_revision ?? null;
-          submittedAt = session.submitted_at || '';
-        } else {
-          localStorage.removeItem(key);
-        }
-      } else {
-        localStorage.removeItem(key);
-      }
-    }
-
-    if (!sessionId) {
-      try {
-        const listRes = await fetch(`/events/sessions?student_id=${encodeURIComponent(studentId)}&assignment_id=${encodeURIComponent(assignmentId)}`);
-        if (listRes.ok) {
-          const sData = await listRes.json();
-          const existingList = sData.sessions || [];
-          if (existingList.length > 0) {
-            const targetSess = existingList[existingList.length - 1];
-            const recRes = await fetch(`/events/session/${targetSess.session_id}/reconnect`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ student_id: studentId }),
-            });
-            if (recRes.ok) {
-              const recData = await recRes.json();
-              sessionId = recData.session_id;
-              sessionAccessToken = recData.access_token;
-              sessionStatus = recData.status;
-              submittedRevision = targetSess.submitted_document_revision ?? null;
-              submittedAt = targetSess.submitted_at || '';
-              localStorage.setItem(key, sessionId);
-              localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Could not reconnect to existing student session:', e);
-      }
-    }
-
-    if (!sessionId) {
-      const response = await fetch('/events/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: studentId,
-          assignment_id: assignmentId,
-          current_question_id: assignment.question_id,
-        }),
-      });
-      if (!response.ok) throw new Error(await responseError(response, 'A reasoning session could not be started.'));
-      const created = await response.json();
-      sessionId = created.session_id;
-      sessionAccessToken = created.access_token;
-      sessionStatus = created.status;
-      localStorage.setItem(key, sessionId);
-      localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
-    }
 
     fiosraContext.setCourse(courseId, assignment?.course_title || '');
     fiosraContext.setAssignment(
@@ -722,54 +535,22 @@
       saveCurrentChatSessions();
     }
     try {
-      const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
-      const qId = learningDocument?.question_id || assignment?.question_id || 'q1';
-      const res = await fetch('/dialogue/message', {
-        method: 'POST',
-        headers: sessionHeaders(),
-        body: JSON.stringify({
-          session_id: sessionId,
-          student_id: studentId,
-          question_id: qId,
-          student_input: studentInput,
-          question_prompt: prompt,
-          domain: assignment?.domain || 'history',
-          hint_requested: hintRequested,
-          assignment_id: assignmentId || null,
-        }),
+      const result = await sendSocraticMessage({
+        sessionId,
+        studentId,
+        assignmentId,
+        assignment,
+        learningDocument,
+        studentInput,
+        hintRequested,
+        sessionHeaders,
       });
-      if (!res.ok) throw new Error(await responseError(res, 'Dialogue service unavailable'));
-      const data = await res.json();
-      const tutorTurn = {
-        role: 'tutor',
-        text: data.response_text,
-        thoughts: data.thoughts_of_tutorbot,
-        hint_rung: data.hint_rung,
-        is_adversarial: data.is_adversarial,
-        action_capsules: data.action_capsules || [],
-        radar: data.learner_radar || null,
-        prompt_launchers: data.prompt_launchers || [],
-      };
       if (sessionIdx >= 0) {
-        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, tutorTurn];
+        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, result.tutorTurn];
       }
-      fiosraContext.setEpistemicState(null, data.hint_rung);
-      await loadSessionEvents();
-    } catch (err) {
-      console.error('Macro dialogue error:', err);
-      if (sessionIdx >= 0) {
-        const errorTurn = {
-          role: 'tutor',
-          text: `⚠️ Socratic Tutor is currently unavailable: ${err.message || 'LLM service connection required'}. Please ensure your LLM provider is configured and running.`,
-          is_adversarial: false,
-          hint_rung: 0,
-          action_capsules: [],
-          radar: null,
-        };
-        chatSessions[sessionIdx].turns = [
-          ...chatSessions[sessionIdx].turns,
-          errorTurn
-        ];
+      if (result.success && typeof result.hintRung === 'number') {
+        fiosraContext.setEpistemicState(null, result.hintRung);
+        await loadSessionEvents();
       }
     } finally {
       saveCurrentChatSessions();
@@ -782,69 +563,37 @@
   }
 
   async function handleChallengeIdea(blockId, text, moveType = 'challenge') {
-    if (!sessionId) return;
-    try {
-      await fetch(`/events/session/${sessionId}`, {
-        method: 'POST',
-        headers: sessionHeaders(),
-        body: JSON.stringify({
-          event_type: 'socratic_move_triggered',
-          payload: { block_id: blockId, move_type: moveType, text: text.slice(0, 200), pressure: oraclePressure },
-        }),
-      });
-      await loadSessionEvents();
-    } catch (e) {
-      console.warn('Logging Socratic move:', e);
-    }
+    await logSocraticMove({
+      sessionId,
+      blockId,
+      text,
+      moveType,
+      pressure: oraclePressure,
+      sessionHeaders,
+    });
+    await loadSessionEvents();
   }
 
   async function submitSession() {
     if (!sessionId || sessionStatus !== 'active' || isSubmitting) return;
-    const documentRevision = learningDocument?.document_revision;
-    if (typeof documentRevision !== 'number') {
-      submissionError = {
-        code: 'SUBMISSION_BLOCKED',
-        message: 'Your document must finish loading before it can be submitted.',
-        retryable: false,
-      };
-      return;
-    }
-    if (!pendingSubmissionKey) pendingSubmissionKey = crypto.randomUUID();
     isSubmitting = true;
     submissionError = null;
     submissionNotice = 'Submitting your saved revision…';
-    try {
-      const res = await fetch(`/events/session/${sessionId}/submit`, {
-        method: 'POST',
-        headers: {
-          ...sessionHeaders(),
-          'Idempotency-Key': pendingSubmissionKey,
-        },
-        body: JSON.stringify({ document_revision: documentRevision }),
-      });
-      if (!res.ok) {
-        submissionError = await responseErrorDetails(res, 'Your milestone could not be submitted.');
-        submissionNotice = learnerErrorSummary(submissionError, { draftPreserved: true });
-        return;
-      }
-      const submitted = await res.json();
-      sessionStatus = 'submitted';
-      submittedRevision = submitted.document_revision;
-      submittedAt = submitted.submitted_at;
-      submissionNotice = submitted.idempotent_replay
-        ? `This revision was already submitted ${new Date(submitted.submitted_at).toLocaleString()}.`
-        : `Submitted ${new Date(submitted.submitted_at).toLocaleString()}.`;
-      pendingSubmissionKey = '';
+    const res = await submitMilestoneSession({
+      sessionId,
+      learningDocument,
+      pendingSubmissionKey,
+      sessionHeaders,
+    });
+    isSubmitting = false;
+    submissionNotice = res.submissionNotice;
+    submissionError = res.submissionError;
+    pendingSubmissionKey = res.pendingSubmissionKey;
+    if (res.success) {
+      sessionStatus = res.sessionStatus || 'submitted';
+      submittedRevision = res.submittedRevision ?? null;
+      submittedAt = res.submittedAt || '';
       await loadSessionEvents();
-    } catch (e) {
-      submissionError = {
-        code: 'NETWORK_UNAVAILABLE',
-        message: 'The submission service is temporarily unavailable.',
-        retryable: true,
-      };
-      submissionNotice = learnerErrorSummary(submissionError, { draftPreserved: true });
-    } finally {
-      isSubmitting = false;
     }
   }
 
@@ -865,30 +614,14 @@
     } else if (editorRef?.insertWritingFrame) {
       editorRef.insertWritingFrame(capsule.role || 'claim');
     }
-    try {
-      await fetch('/events/log', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...sessionHeaders(),
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          student_id: studentId,
-          question_id: assignment?.question_id || 'q1',
-          event_type: 'action_capsule_committed',
-          payload: {
-            capsule_id: capsule.capsule_id,
-            target_block_id: capsule.target_block_id,
-            text: textToInsert,
-            provenance: 'action_capsule',
-            role: capsule.role || 'claim',
-          }
-        })
-      });
-    } catch (err) {
-      console.warn('Failed to log action capsule commit event:', err);
-    }
+    await logActionCapsuleCommit({
+      sessionId,
+      studentId,
+      questionId: assignment?.question_id || 'q1',
+      capsule,
+      textToInsert,
+      sessionHeaders,
+    });
   }
 
   function handleEscalateToAgent(probe) {
@@ -902,41 +635,21 @@
   function enterZenFullscreen() {
     if (isZenFullscreen) return;
     isZenFullscreen = true;
-    savedLayoutState = {
+    const res = enterZenMode({
       isSourcesCollapsed,
       isSourcesExpanded,
       isGutterCollapsed,
-    };
+    });
+    savedLayoutState = res.savedLayout;
     isSourcesCollapsed = true;
     isSourcesExpanded = false;
     isGutterCollapsed = true;
-
-    if (typeof document !== 'undefined') {
-      document.body.classList.add('fiosra-zen-mode');
-      const elem = document.documentElement;
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen().catch(() => {});
-      } else if (elem.webkitRequestFullscreen) {
-        elem.webkitRequestFullscreen();
-      }
-      window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: true } }));
-    }
   }
 
   function exitZenFullscreen() {
     if (!isZenFullscreen) return;
     isZenFullscreen = false;
-
-    if (typeof document !== 'undefined') {
-      document.body.classList.remove('fiosra-zen-mode');
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      } else if (document.webkitFullscreenElement) {
-        document.webkitExitFullscreen();
-      }
-      window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: false } }));
-    }
-
+    exitZenMode();
     if (savedLayoutState) {
       isSourcesCollapsed = savedLayoutState.isSourcesCollapsed;
       isSourcesExpanded = savedLayoutState.isSourcesExpanded;
@@ -951,19 +664,6 @@
     } else {
       enterZenFullscreen();
     }
-  }
-
-  function isTypingTarget(target) {
-    if (!target) return false;
-    const tagName = target.tagName ? target.tagName.toUpperCase() : '';
-    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
-    if (target.isContentEditable) return true;
-    if (typeof target.closest === 'function') {
-      if (target.closest('[contenteditable="true"], .prose-mirror, .cm-editor, input, textarea, [role="textbox"]')) {
-        return true;
-      }
-    }
-    return false;
   }
 
   function handleWorkspaceKeyDown(e) {
@@ -1047,60 +747,21 @@
 
 <svelte:window onkeydown={handleWorkspaceKeyDown} />
 
-{#if isLoading}
-  <main class="loading-view">
-    <div class="spinner"></div>
-    <p>Opening your reasoning canvas…</p>
-  </main>
-{:else if error && !assignment}
-  <main class="empty-view">
-    <h1>Workspace unavailable</h1>
-    <p>{error}</p>
-    <div style="display: flex; gap: 12px; margin-top: 14px;">
-      {#if courseId}
-        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
-      {/if}
-      <a class="btn btn-primary" href="#/student/portal">Return to Courses</a>
-    </div>
-  </main>
-{:else if !assignment}
-  <main class="empty-view">
-    <h1>{courseId ? 'No published assignment in this course yet' : 'No active assignment selected'}</h1>
-    <p>
-      {courseId 
-        ? 'Your instructor has not published an active reasoning assignment for this course yet.' 
-        : 'Open an active milestone from your enrolled courses to start a protected reasoning session.'}
-    </p>
-    <div style="display: flex; gap: 12px; margin-top: 14px;">
-      {#if courseId}
-        <a class="btn btn-secondary" href={`#/student/home?course_id=${encodeURIComponent(courseId)}`}>View Course Map</a>
-      {/if}
-      <a class="btn btn-primary" href="#/student/portal">Browse Available Courses</a>
-    </div>
-  </main>
+{#if isLoading || !assignment || error}
+  <WorkspaceEmptyView {isLoading} {error} {assignment} {courseId} />
 {:else}
   <div class="workspace-viewport" class:zen-mode={isZenFullscreen}>
     <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- Zone 1, 2, 3 Grid -->
       <div class="canvas-tab-wrapper">
-        <div
-          class="in-situ-workbench-grid"
-          class:sources-collapsed={isSourcesCollapsed}
-          class:sources-expanded={!isSourcesCollapsed}
-          class:gutter-collapsed={isGutterCollapsed}
-          class:gutter-open={!isGutterCollapsed}
-          class:is-resizing={isResizingLeft || isResizingRight}
-          style="--sources-width: {isSourcesCollapsed ? '48px' : `${sourcesWidth}px`}; --gutter-width: {isGutterCollapsed ? '44px' : `${gutterWidth}px`};"
+        <WorkspaceCanvasGrid
+          bind:sourcesWidth
+          bind:gutterWidth
+          {isSourcesCollapsed}
+          {isGutterCollapsed}
         >
-          <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
-          <div
-            class="workbench-col-sources"
-            class:collapsed={isSourcesCollapsed}
-            class:expanded={!isSourcesCollapsed}
-            class:no-transition={isResizingLeft}
-            style="width: var(--sources-width);"
-          >
+          {#snippet sources()}
             <PrimarySourcesSidebar
               sources={assignmentSources}
               assignment={published || assignment}
@@ -1112,26 +773,9 @@
               onToggleExpand={handleToggleSourcesExpand}
               onQuoteEvidence={handleQuoteEvidenceFromSidebar}
             />
-          </div>
+          {/snippet}
 
-          <!-- Left Margin Slider (Draggable Split-Resizer) -->
-          {#if !isSourcesCollapsed}
-            <div
-              class="workbench-resizer-handle resizer-left"
-              class:is-dragging={isResizingLeft}
-              onpointerdown={startResizeLeft}
-              ondblclick={() => sourcesWidth = 480}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize left sources sidebar"
-              title="Drag to resize sources sidebar (Double-click to reset to 480px)"
-            >
-              <div class="resizer-knob"></div>
-            </div>
-          {/if}
-
-          <!-- Zone 2: Structured Reasoning Canvas -->
-          <main class="workbench-col-canvas">
+          {#snippet canvas()}
             {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
             {#if sourceActionNotice}
               <p class:source-action-error={Boolean(sourceActionError)} class="source-action-notice" role="status">
@@ -1172,31 +816,9 @@
                 onToggleZen={toggleZenFullscreen}
               />
             {/if}
-          </main>
+          {/snippet}
 
-          <!-- Right Margin Slider (Draggable Split-Resizer) -->
-          {#if !isGutterCollapsed}
-            <div
-              class="workbench-resizer-handle resizer-right"
-              class:is-dragging={isResizingRight}
-              onpointerdown={startResizeRight}
-              ondblclick={() => gutterWidth = 440}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize right AI tutor sidebar"
-              title="Drag to resize AI tutor sidebar (Double-click to reset to 440px)"
-            >
-              <div class="resizer-knob"></div>
-            </div>
-          {/if}
-
-          <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Reasoning + Activity) -->
-          <div
-            class="workbench-col-gutter"
-            class:collapsed={isGutterCollapsed}
-            class:no-transition={isResizingRight}
-            style="width: var(--gutter-width);"
-          >
+          {#snippet gutter()}
             <RightWorkbenchGutter
               {probes}
               documentBlocks={canonicalBlocks}
@@ -1239,8 +861,8 @@
               submissionError={submissionError}
               submissionNotice={submissionNotice}
             />
-          </div>
-        </div>
+          {/snippet}
+        </WorkspaceCanvasGrid>
       </div>
 
       <!-- Optional Flyout Support Panel (Toggleable from Top Bar) -->
@@ -1302,11 +924,6 @@
     flex: 1 1 100%;
   }
 
-  .workspace-viewport.zen-mode .in-situ-workbench-grid {
-    height: 100% !important;
-    max-height: 100% !important;
-    flex: 1 1 100%;
-  }
 
   .workspace-content-body {
     flex: 1;
@@ -1325,148 +942,6 @@
     display: flex;
     flex-direction: column;
     position: relative;
-  }
-
-  .in-situ-workbench-grid {
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .in-situ-workbench-grid.is-resizing {
-    user-select: none !important;
-    cursor: col-resize !important;
-  }
-
-  .in-situ-workbench-grid.is-resizing :global(*) {
-    user-select: none !important;
-    pointer-events: none !important;
-  }
-
-  .in-situ-workbench-grid.is-resizing .workbench-resizer-handle {
-    pointer-events: auto !important;
-  }
-
-  .workbench-col-sources {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    flex-shrink: 0;
-    flex-grow: 0;
-    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .workbench-col-sources.no-transition {
-    transition: none !important;
-  }
-
-  .workbench-col-sources.collapsed {
-    width: 48px;
-  }
-
-  .workbench-col-canvas {
-    flex: 1 1 0;
-    min-width: 320px;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    background: var(--color-obsidian, #f8f8f5);
-  }
-
-  .workbench-col-gutter {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    flex-shrink: 0;
-    flex-grow: 0;
-    position: relative;
-    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .workbench-col-gutter.no-transition {
-    transition: none !important;
-  }
-
-  .workbench-col-gutter.collapsed {
-    width: 44px;
-  }
-
-  /* Resizer Handles (Margin Sliders) */
-  .workbench-resizer-handle {
-    width: 10px;
-    margin: 0 -5px;
-    height: 100%;
-    cursor: col-resize;
-    position: relative;
-    z-index: 30;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    user-select: none;
-    touch-action: none;
-  }
-
-  .workbench-resizer-handle::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 4px;
-    width: 2px;
-    background: var(--color-graphite-border, #e2e4dc);
-    transition: all 0.15s ease;
-  }
-
-  .workbench-resizer-handle:hover::before,
-  .workbench-resizer-handle.is-dragging::before {
-    background: #2563eb;
-    width: 3px;
-    left: 3.5px;
-    box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
-  }
-
-  .resizer-knob {
-    width: 4px;
-    height: 36px;
-    border-radius: 4px;
-    background: var(--color-slate-muted, #94a3b8);
-    opacity: 0;
-    transition: opacity 0.15s ease, background 0.15s ease, height 0.15s ease;
-    z-index: 2;
-  }
-
-  .workbench-resizer-handle:hover .resizer-knob,
-  .workbench-resizer-handle.is-dragging .resizer-knob {
-    opacity: 1;
-    background: #2563eb;
-    height: 52px;
-  }
-
-  @media (max-width: 1200px) {
-    .workbench-col-sources {
-      display: none;
-    }
-    .resizer-left {
-      display: none !important;
-    }
-  }
-
-  @media (max-width: 860px) {
-    .workbench-col-gutter {
-      display: none;
-    }
-    .resizer-right {
-      display: none !important;
-    }
   }
 
   .error-banner {
@@ -1513,78 +988,5 @@
     color: var(--color-slate-muted);
     font-family: var(--font-mono, monospace);
     font-size: 10px;
-  }
-
-  .loading-view, .empty-view {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: calc(100vh - 56px);
-    background: var(--color-obsidian);
-    color: var(--color-slate-light);
-    padding: 24px;
-    text-align: center;
-  }
-
-  .empty-view h1 {
-    font-family: var(--font-brand);
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 0 0 8px;
-  }
-
-  .empty-view p {
-    font-size: 13px;
-    color: var(--color-slate-muted);
-    max-width: 480px;
-    margin: 0 0 16px;
-    line-height: 1.5;
-  }
-
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid rgba(217, 119, 6, 0.2);
-    border-top-color: var(--color-horizon-blue);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.15s ease;
-    cursor: pointer;
-  }
-
-  .btn-primary {
-    background: var(--color-horizon-blue);
-    color: #fff;
-    border: 1px solid var(--color-horizon-blue);
-  }
-
-  .btn-primary:hover {
-    filter: brightness(1.1);
-  }
-
-  .btn-secondary {
-    background: var(--color-graphite);
-    color: var(--color-slate-light);
-    border: 1px solid var(--color-graphite-border);
-  }
-
-  .btn-secondary:hover {
-    background: var(--color-graphite-hover);
-    color: var(--color-heading);
   }
 </style>

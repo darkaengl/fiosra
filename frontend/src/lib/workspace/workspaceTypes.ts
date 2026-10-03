@@ -1,12 +1,14 @@
 export interface ChatTurn {
   role: 'student' | 'tutor';
   text: string;
-  thoughts?: {
+  thoughts?: string | {
     pedagogical_goal?: string;
     identified_misconception?: string;
+    [key: string]: any;
   };
   hint_rung?: number;
   is_adversarial?: boolean;
+  radar?: any;
   action_capsules?: Array<{
     title?: string;
     suggested_student_text?: string;
@@ -14,8 +16,11 @@ export interface ChatTurn {
     [key: string]: any;
   }>;
   prompt_launchers?: Array<{
-    title: string;
-    prompt: string;
+    title?: string;
+    prompt?: string;
+    text?: string;
+    category?: string;
+    [key: string]: any;
   }>;
 }
 
