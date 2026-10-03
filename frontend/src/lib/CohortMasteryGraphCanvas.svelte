@@ -10,6 +10,8 @@
   import { PALETTES, getNodeColor, getNodeRadius, neighbourhoodIds } from './graph/graphCanvasTheme';
   import GraphSettingsHud from './graph/GraphSettingsHud.svelte';
   import GraphNodeTooltip from './graph/GraphNodeTooltip.svelte';
+  import { computeSugiyamaRankLayout } from './graph/masterySugiyamaLayout';
+  import { renderMasteryCanvas } from './graph/masteryCanvasRenderer';
 
   let {
     graph = { nodes: [], edges: [], probes: [] },
@@ -161,141 +163,18 @@
     }
 
     if (layoutMode === 'rank') {
-      // Deterministic Hierarchical Rank (Sugiyama) Layout
-      const rankMap = new Map();
-      for (const n of activeNodes) {
-        let r = n.rank ?? n.raw?.rank;
-        if (r == null) {
-          const type = n.concept_type || n.level || n.raw?.concept_type || n.raw?.level;
-          if (type === 'strand' || type === 'course_theme' || type === 'module') r = 0;
-          else if (type === 'topic' || type === 'domain') r = 1;
-          else if (type === 'atomic_concept' || type === 'subtopic' || type === 'leaf') r = 2;
-          else if (type === 'misconception') r = 3;
-          else r = 2;
-        }
-        rankMap.set(n.concept_id, r);
-      }
-
-      // Build childToParent map
-      const childToParent = new Map();
-      for (const e of activeEdges) {
-        if (e.relation === 'CONTAINS' || e.relation === 'ASSOCIATED_WITH') {
-          childToParent.set(e.target, e.source);
-        }
-      }
-      for (const n of activeNodes) {
-        const pid = n.parent_id || n.raw?.parent_id;
-        if (pid && !childToParent.has(n.concept_id)) {
-          childToParent.set(n.concept_id, pid);
-        }
-      }
-
-      const rank0 = activeNodes.filter(n => rankMap.get(n.concept_id) === 0);
-      const rank1 = activeNodes.filter(n => rankMap.get(n.concept_id) === 1);
-      const rank2 = activeNodes.filter(n => rankMap.get(n.concept_id) === 2);
-      const rank3 = activeNodes.filter(n => rankMap.get(n.concept_id) === 3);
-
-      const colWidth = 350;
-      const startX = 140;
-
-      columnHeaders = [
-        { rank: 0, label: 'UNIT / STRAND', x: startX },
-        { rank: 1, label: 'CORE TOPICS', x: startX + colWidth },
-        { rank: 2, label: 'KNOWLEDGE COMPONENTS', x: startX + 2 * colWidth },
-        { rank: 3, label: 'COGNITIVE TRAPS', x: startX + 3 * colWidth },
-      ];
-
-      // Vertical tree-based placement
-      const nodeYMap = new Map();
-      let currentY = 130;
-      const rowHeightKC = 48;
-      const rowHeightTopic = 64;
-      const rowHeightStrand = 94;
-
-      const roots = rank0.length > 0 ? rank0 : (rank1.length > 0 ? rank1 : activeNodes);
-
-      for (const root of roots) {
-        const rootId = root.concept_id;
-        const rootTopics = rank1.filter(t => childToParent.get(t.concept_id) === rootId || !childToParent.has(t.concept_id));
-        const topicsToProcess = rootTopics.length > 0 ? rootTopics : (rankMap.get(rootId) === 1 ? [root] : []);
-
-        const rootStartY = currentY;
-
-        if (topicsToProcess.length === 0) {
-          nodeYMap.set(rootId, currentY);
-          currentY += rowHeightStrand;
-        } else {
-          for (const topic of topicsToProcess) {
-            const topicId = topic.concept_id;
-            const topicKCs = rank2.filter(k => childToParent.get(k.concept_id) === topicId);
-            const topicStartY = currentY;
-
-            if (topicKCs.length === 0) {
-              nodeYMap.set(topicId, currentY);
-              currentY += rowHeightTopic;
-            } else {
-              for (const kc of topicKCs) {
-                const kcId = kc.concept_id;
-                const kcMiscs = rank3.filter(m => childToParent.get(m.concept_id) === kcId);
-                nodeYMap.set(kcId, currentY);
-
-                for (const misc of kcMiscs) {
-                  nodeYMap.set(misc.concept_id, currentY);
-                  currentY += rowHeightKC;
-                }
-                if (kcMiscs.length === 0) {
-                  currentY += rowHeightKC;
-                }
-              }
-              const topicEndY = currentY - rowHeightKC;
-              nodeYMap.set(topicId, (topicStartY + topicEndY) / 2);
-              currentY += 16;
-            }
-          }
-          const rootEndY = currentY - 16;
-          nodeYMap.set(rootId, (rootStartY + rootEndY) / 2);
-          currentY += 36;
-        }
-      }
-
-      // Any remaining nodes not captured in tree traversal
-      for (const n of activeNodes) {
-        if (!nodeYMap.has(n.concept_id)) {
-          nodeYMap.set(n.concept_id, currentY);
-          currentY += rowHeightKC;
-        }
-      }
-
-      simNodes = activeNodes.map((node) => {
-        const degree = degreeMap.get(node.concept_id) || node.degree || 0;
-        const type = node.raw?.concept_type || node.concept_type || node.raw?.level || node.level;
-        const r = rankMap.get(node.concept_id) ?? 2;
-        const radius = getNodeRadius(degree, type, r, nodeSizeMultiplier);
-        const x = startX + r * colWidth;
-        const y = nodeYMap.get(node.concept_id) ?? 150;
-
-        return {
-          id: node.concept_id,
-          raw: node,
-          degree,
-          radius,
-          rank: r,
-          color: getNodeColor({ ...node, degree }, theme, viewMode, activeStudent),
-          x,
-          y,
-          fx: x,
-          fy: y,
-          vx: 0,
-          vy: 0
-        };
-      });
-
-      simLinks = activeEdges.map(edge => ({
-        source: edge.source,
-        target: edge.target,
-        relation: edge.relation
-      }));
-
+      const res = computeSugiyamaRankLayout(
+        activeNodes,
+        activeEdges,
+        degreeMap,
+        theme,
+        viewMode,
+        activeStudent,
+        nodeSizeMultiplier
+      );
+      columnHeaders = res.columnHeaders;
+      simNodes = res.simNodes;
+      simLinks = res.simLinks;
       nodeCount = simNodes.length;
       linkCount = simLinks.length;
 
@@ -369,296 +248,39 @@
     requestRender();
   }
 
-  function drawArrowhead(ctx, sourceX, sourceY, targetX, targetY, targetRadius, color, alpha) {
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
-    const dist = Math.hypot(dx, dy);
-    const arrowLen = Math.max(6, Math.min(10, 8 * Math.min(1.2, scale)));
-    const arrowWidth = Math.max(5, Math.min(8, 6 * Math.min(1.2, scale)));
-
-    if (dist <= targetRadius + arrowLen) return;
-
-    const ux = dx / dist;
-    const uy = dy / dist;
-
-    // The tip of the arrowhead sits right on the outer boundary of the target circle
-    const tipX = targetX - ux * (targetRadius + 1);
-    const tipY = targetY - uy * (targetRadius + 1);
-
-    const baseX = tipX - ux * arrowLen;
-    const baseY = tipY - uy * arrowLen;
-
-    const nx = -uy;
-    const ny = ux;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(baseX + nx * (arrowWidth / 2), baseY + ny * (arrowWidth / 2));
-    ctx.lineTo(baseX - nx * (arrowWidth / 2), baseY - ny * (arrowWidth / 2));
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
   function render() {
     if (isDestroyed || !canvasRef) return;
     const ctx = canvasRef.getContext('2d');
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const pw = canvasRef.width;
-    const ph = canvasRef.height;
-    const width = pw / dpr;
-    const height = ph / dpr;
-
     const palette = PALETTES[theme] || PALETTES.light;
 
-    // Clear canvas
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, pw, ph);
-
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // 1. Clean Canvas Background
-    ctx.fillStyle = palette.bg;
-    ctx.fillRect(0, 0, width, height);
-
-    // Subtle faint micro-grid dots
-    ctx.fillStyle = palette.gridDot;
-    const gridSize = 40 * scale;
-    const gridOffX = ((panX % gridSize) + gridSize) % gridSize;
-    const gridOffY = ((panY % gridSize) + gridSize) % gridSize;
-    for (let gx = gridOffX; gx < width; gx += gridSize) {
-      for (let gy = gridOffY; gy < height; gy += gridSize) {
-        ctx.fillRect(gx, gy, 1.2, 1.2);
-      }
-    }
-
-    // Apply viewport transform (pan & zoom)
-    ctx.translate(panX, panY);
-    ctx.scale(scale, scale);
-
-    // 1b. Draw Hierarchical Column Headers
-    if (layoutMode === 'rank') {
-      for (const col of columnHeaders) {
-        if (!simNodes.some(n => n.rank === col.rank)) continue;
-        ctx.save();
-        const badgeW = 200;
-        const badgeH = 26;
-        const bx = col.x - 20;
-        const by = 40;
-
-        ctx.fillStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.05)';
-        ctx.strokeStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.14)' : 'rgba(15, 23, 42, 0.12)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(bx, by, badgeW, badgeH, 6);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = theme === 'dark' ? '#cbd5e1' : '#475569';
-        ctx.font = '700 10.5px Inter, -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(col.label, bx + badgeW / 2, by + badgeH / 2);
-        ctx.restore();
-      }
-    }
-
-    // Neighborhood spotlight set
-    const spotlightIds = hoveredNode ? getNeighborIds(hoveredNode.id) : null;
-    const searchLower = searchQuery.trim().toLowerCase();
-
-    // 2. Draw Links & Arrowheads (Bezier Curves with high-contrast visible strokes)
-    for (const link of simLinks) {
-      const source = typeof link.source === 'object' ? link.source : simNodes.find(n => n.id === link.source);
-      const target = typeof link.target === 'object' ? link.target : simNodes.find(n => n.id === link.target);
-      if (!source || !target) continue;
-
-      const isConnectedToHover = hoveredNode && (source.id === hoveredNode.id || target.id === hoveredNode.id);
-      const isConnectedToSelected = selectedConceptId && (source.id === selectedConceptId || target.id === selectedConceptId);
-
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const cp1x = source.x + dx * 0.45;
-      const cp1y = source.y;
-      const cp2x = target.x - dx * 0.45;
-      const cp2y = target.y;
-
-      let strokeColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(71, 85, 105, 0.45)';
-      let width = Math.max(1.8, linkThickness * 1.6);
-      let alpha = 0.75;
-      let isDashed = false;
-
-      if (link.relation === 'ASSOCIATED_WITH') {
-        strokeColor = '#e11d48'; // Rose alert for misconception trap
-        width = Math.max(2.0, linkThickness * 1.8);
-        isDashed = true;
-      } else if (link.relation === 'PREREQUISITE_OF' || link.relation === 'REQUIRES') {
-        strokeColor = '#2563eb'; // Electric blue for learning progression
-        width = Math.max(2.2, linkThickness * 2.0);
-      }
-
-      if (hoveredNode) {
-        if (isConnectedToHover) {
-          alpha = 1.0;
-          strokeColor = palette.linkHighlight;
-          width *= 1.8;
-          isDashed = false;
-        } else {
-          alpha = 0.08;
-        }
-      } else if (isConnectedToSelected) {
-        alpha = 1.0;
-        strokeColor = palette.linkHighlight;
-        width *= 1.5;
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, target.x, target.y);
-
-      if (isDashed) {
-        ctx.setLineDash([5, 4]);
-      }
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = width;
-      ctx.stroke();
-      ctx.restore();
-
-      if (showArrows) {
-        drawArrowhead(ctx, cp2x, cp2y, target.x, target.y, target.radius, strokeColor, alpha);
-      }
-    }
-
-    // 3. Draw Nodes and Labels
-    for (const node of simNodes) {
-      const isSelected = node.id === selectedConceptId;
-      const isHovered = hoveredNode && node.id === hoveredNode.id;
-      const isNeighbor = spotlightIds ? spotlightIds.has(node.id) : false;
-      const matchesSearch = searchLower && (node.raw.label?.toLowerCase().includes(searchLower) || node.raw.definition?.toLowerCase().includes(searchLower));
-
-      let alpha = 1.0;
-      if (hoveredNode) {
-        alpha = isHovered || isNeighbor ? 1.0 : 0.15;
-      } else if (searchLower && !matchesSearch) {
-        alpha = 0.15;
-      } else if (bottlenecksOnly && bottlenecks.length > 0 && !bottlenecks.includes(node.id)) {
-        alpha = 0.18;
-      }
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      // Draw Node Circle
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
-      ctx.fill();
-
-      // Border ring
-      ctx.strokeStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.25)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      // Selection ring
-      if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius + 4.5, 0, Math.PI * 2);
-        ctx.strokeStyle = palette.selectRing;
-        ctx.lineWidth = 2.4;
-        ctx.stroke();
-      } else if (isHovered) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius + 3.5, 0, Math.PI * 2);
-        ctx.strokeStyle = palette.hoverRing;
-        ctx.lineWidth = 2.0;
-        ctx.stroke();
-      }
-
-      // Student Mode indicators
-      if (viewMode === 'student' && activeStudent) {
-        const cState = activeStudent.concept_states?.[node.id];
-        if (cState === 'frontier') {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, node.radius + 3.5, 0, Math.PI * 2);
-          ctx.strokeStyle = '#2563eb';
-          ctx.lineWidth = 2.0;
-          ctx.stroke();
-        } else if (cState === 'trapped') {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, node.radius + 4.5, 0, Math.PI * 2);
-          ctx.strokeStyle = '#e11d48';
-          ctx.lineWidth = 2.4;
-          ctx.stroke();
-        }
-      }
-
-      // Cohort Mode: struggle count badge
-      if (viewMode === 'cohort') {
-        const struggling = node.raw?.struggling_count || 0;
-        if (struggling > 0) {
-          ctx.save();
-          ctx.fillStyle = '#e11d48';
-          const badgeX = node.x + node.radius - 2;
-          const badgeY = node.y - node.radius + 2;
-          ctx.beginPath();
-          ctx.arc(badgeX, badgeY, 6.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 8.5px Inter, -apple-system, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(`${struggling}`, badgeX, badgeY);
-          ctx.restore();
-        }
-      }
-
-      // Draw Node Label to the right of the node
-      const rawText = node.raw?.label || node.id;
-      const isRank0 = node.rank === 0;
-      const isRank1 = node.rank === 1;
-      const isMisc = node.rank === 3;
-
-      let fontSize = isRank0 ? 12.5 : isRank1 ? 11.5 : 10.5;
-      let fontWeight = isRank0 ? '700' : isRank1 ? '600' : isSelected || isHovered ? '600' : '400';
-      ctx.font = `${fontWeight} ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-
-      const maxChars = isRank0 ? 38 : isRank1 ? 34 : 28;
-      const displayText = rawText.length > maxChars ? rawText.slice(0, maxChars) + '…' : rawText;
-
-      const labelX = node.x + node.radius + 7;
-      const labelY = node.y + 0.5;
-
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-
-      // Text halo for contrast
-      ctx.strokeStyle = palette.textHalo;
-      ctx.lineWidth = 3.5;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(displayText, labelX, labelY);
-
-      // Text fill
-      ctx.fillStyle = isMisc
-        ? '#e11d48'
-        : isHovered || isSelected
-        ? palette.textHighlight
-        : isNeighbor
-        ? palette.textHighlight
-        : palette.text;
-      ctx.fillText(displayText, labelX, labelY);
-
-      ctx.restore();
-    }
-
-    ctx.restore();
+    renderMasteryCanvas({
+      ctx,
+      canvasWidth: canvasRef.width,
+      canvasHeight: canvasRef.height,
+      dpr,
+      palette,
+      panX,
+      panY,
+      scale,
+      layoutMode,
+      columnHeaders,
+      simNodes,
+      simLinks,
+      theme,
+      viewMode,
+      activeStudent,
+      hoveredNode,
+      selectedConceptId,
+      showArrows,
+      linkThickness,
+      searchQuery,
+      bottlenecksOnly,
+      bottlenecks,
+      getNeighborIds,
+    });
   }
 
   let renderQueued = false;
